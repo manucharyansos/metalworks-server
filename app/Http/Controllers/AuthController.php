@@ -12,17 +12,19 @@ class AuthController extends Controller
 {
     public function register(Request $request): JsonResponse
     {
-        $validated = $request->validate([
+        $validatedData = $request->validate([
+            'name' => 'required|min:3|max:255',
             'email' => 'required|email|unique:users',
-            'password' => 'required|min:6',
+            'password' => 'required|min:6|confirmed',
         ]);
 
-        $user = User::create([
-            'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
-        ]);
+        $validatedData['password'] = bcrypt($validatedData['password']);
 
-        return response()->json($user, 201);
+        $user = User::create($validatedData);
+
+        $accessToken = $user->createToken('authToken')->plainTextToken;
+
+        return response()->json(['user' => $user, 'access_token' => $accessToken]);
     }
 
     public function login(Request $request): JsonResponse
