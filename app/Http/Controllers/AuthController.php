@@ -2,26 +2,22 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Validator;
-use Laravel\Sanctum\HasApiTokens;
+use App\Models\User;
+use Illuminate\Support\Facades\Auth;
+use Laravel\Sanctum\PersonalAccessToken;
 
 class AuthController extends Controller
 {
     public function register(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
+        $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
-            'password' => 'required|string|min:8',
+            'password' => 'required|string|confirmed',
         ]);
-
-        if ($validator->fails()) {
-            return response()->json($validator->errors(), 422);
-        }
 
         $user = User::create([
             'name' => $request->name,
@@ -29,37 +25,22 @@ class AuthController extends Controller
             'password' => Hash::make($request->password),
         ]);
 
-        return response()->json(['token' => $user->createToken('Personal Access Token')->plainTextToken]);
+        return response()->json($user, 201);
     }
 
     public function login(Request $request)
     {
-        $validator = Validator::make($request->all(), [
+        $request->validate([
             'email' => 'required|string|email',
             'password' => 'required|string',
         ]);
 
-        if ($validator->fails()) {
-            return response()->json($validator->errors(), 422);
+        if (Auth::attempt(['email' => $request->email, 'password' => $request->password])) {
+            $user = Auth::user();
+            $token = $user->createToken('Personal Access Token')->plainTextToken;
+            return response()->json(['token' => $token]);
         }
 
-        $user = User::where('email', $request->email)->first();
-
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-
-        return response()->json(['token' => $user->createToken('Personal Access Token')->plainTextToken]);
-    }
-
-    public function logout(Request $request)
-    {
-        $request->user()->tokens()->delete();
-        return response()->json(['message' => 'Logged out successfully']);
-    }
-
-    public function user(Request $request)
-    {
-        return response()->json($request->user());
+        return response()->json(['error' => 'Unauthorized'], 401);
     }
 }
