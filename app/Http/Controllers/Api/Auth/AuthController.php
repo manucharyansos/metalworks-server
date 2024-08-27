@@ -52,7 +52,10 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         if (auth()->user()){
-            return response()->json(auth()->user());
+            $user = Auth::user();
+            $user->load('role');
+
+            return response()->json($user);
         }else{
             return response()->json('asd');
         }

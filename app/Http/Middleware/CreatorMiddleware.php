@@ -5,7 +5,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Support\Facades\Auth;
 
-class AdminMiddleware
+class CreatorMiddleware
 {
     /**
      * Handle an incoming request.
@@ -14,12 +14,12 @@ class AdminMiddleware
      * @param  \Closure  $next
      * @return mixed
      */
-    public function handle($request, Closure $next): mixed
+    public function handle($request, Closure $next)
     {
-        if (!Auth::check() && Auth::user()->role !== 'admin') {
-            return response()->json(['error' => 'Forbidden'], 403);
+        if (Auth::check() && Auth::user()->role('creator')) {
+            return $next($request);
         }
 
-        return $next($request);
+        return response()->json(['error' => 'Forbidden'], 403);
     }
 }
