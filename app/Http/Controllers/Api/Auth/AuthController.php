@@ -12,36 +12,51 @@ class AuthController extends Controller
 {
     public function register(Request $request): JsonResponse
     {
-        $validatedData = $request->validate([
-            'name' => 'required|min:3|max:255',
-            'email' => 'required|email|unique:users',
-            'password' => 'required|min:6|confirmed',
-        ]);
+        try {
+            $validatedData = $request->validate([
+                'name' => 'required|min:3|max:255',
+                'email' => 'required|email|unique:users',
+                'password' => 'required|min:6|confirmed',
+            ]);
 
-        $validatedData['password'] = bcrypt($validatedData['password']);
+            $validatedData['role_id'] = 3;
+            $validatedData['password'] = bcrypt($validatedData['password']);
 
-        $user = User::create($validatedData);
+            $user = User::create($validatedData);
 
-        $accessToken = $user->createToken('authToken')->plainTextToken;
+            $accessToken = $user->createToken('authToken')->plainTextToken;
 
-        return response()->json(['user' => $user, 'access_token' => $accessToken]);
+            return response()->json(['user' => $user, 'access_token' => $accessToken]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'error' => 'Registration failed. Please try again later.',
+                'message' => $e->getMessage(),  
+            ], 500);
+        }
     }
+
 
     public function login(Request $request): JsonResponse
     {
-        $credentials = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required',
-        ]);
+        try {
+            $credentials = $request->validate([
+                'email' => 'required|email',
+                'password' => 'required',
+            ]);
 
-        if (Auth::attempt($credentials)) {
-            $user = User::where('email', $credentials['email'])->first();
-            $accessToken = $user->createToken('authToken')->plainTextToken;
-            return response()->json(['user' => $user, 'access_token' => $accessToken]);
+            if (Auth::attempt($credentials)) {
+                $user = User::where('email', $credentials['email'])->first();
+                $accessToken = $user->createToken('authToken')->plainTextToken;
+
+                return response()->json(['user' => $user, 'access_token' => $accessToken]);
+            }
+
+            return response()->json(['error' => 'Invalid credentials'], 401);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Login failed. Please try again later.'], 500);
         }
-
-        return response()->json(['error' => 'Invalid credentials'], 401);
     }
+
 
     public function logout(): JsonResponse
     {
@@ -51,13 +66,14 @@ class AuthController extends Controller
 
     public function me(Request $request): JsonResponse
     {
-        if (auth()->user()){
-            $user = Auth::user();
+        if (auth()->check()) {
+            $user = auth()->user();
             $user->load('role');
 
-            return response()->json($user);
-        }else{
-            return response()->json('asd');
+            return response()->json($user, 200);
+        } else {
+            return response()->json(['error' => 'Unauthorized'], 401);
         }
     }
+
 }
