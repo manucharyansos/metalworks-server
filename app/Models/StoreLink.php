@@ -6,14 +6,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Role extends Model
+class StoreLink extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name'];
+    protected $fillable = ['url'];
 
-    public function users(): HasMany
+    public function orders(): HasMany
     {
-        return $this->hasMany(User::class, 'role_id');
+        return $this->hasMany(Order::class);
     }
 }

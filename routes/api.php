@@ -2,8 +2,12 @@
 
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Auth\AuthController;
+use App\Http\Controllers\Api\BendingForming\BendingFormingController;
+use App\Http\Controllers\Api\LaserCutting\LaserCuttingController;
 use App\Http\Controllers\Api\Materials\MaterialsController;
 use App\Http\Controllers\Api\Nav\ServiceController;
+use App\Http\Controllers\Api\Order\OrderController;
+use App\Http\Controllers\Api\PowderCutting\PowderCuttingController;
 use App\Http\Controllers\Api\Tasks\TaskController;
 use App\Http\Controllers\RoleController;
 use Illuminate\Support\Facades\Route;
@@ -19,10 +23,13 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::group(['prefix'=>'admin', 'middleware' => 'admin'],function (){
             Route::resource('/', AdminController::class);
         });
-        Route::group(['prefix'=>'creator', 'middleware' => 'creator'],function (){
-            Route::resource('role', RoleController::class);
-            Route::apiResource('tasks', TaskController::class);
+
+
+        Route::group(['prefix'=>'orders', 'middleware' => 'check.order'], function () {
+            Route::resource('order', OrderController::class);
         });
+
+
     });
     Route::group(['prefix'=>'nav'],function (){
         Route::resource('services', ServiceController::class);

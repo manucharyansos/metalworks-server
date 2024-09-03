@@ -12,7 +12,7 @@ class TaskController extends Controller
     // Get all tasks
     public function index(): JsonResponse
     {
-        return response()->json(Task::with('role')->get());
+        return response()->json(Task::with('roles')->get());
     }
 
     public function store(Request $request): JsonResponse

@@ -11,7 +11,6 @@ class UserSeeder extends Seeder
 {
     public function run(): void
     {
-        // Retrieve roles
         $adminRole = Role::where('name', 'admin')->first();
         $guestUserRole = Role::where('name', 'guestUser')->first();
         $authenticatedUserRole = Role::where('name', 'authenticatedUser')->first();
@@ -20,7 +19,6 @@ class UserSeeder extends Seeder
         $bendRole = Role::where('name', 'bend')->first();
         $cattingRole = Role::where('name', 'powder_catting')->first();
 
-        // Create users with roles
         User::create([
             'name' => 'Admin User',
             'email' => 'admin@example.com',
