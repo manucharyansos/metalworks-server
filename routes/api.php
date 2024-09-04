@@ -29,7 +29,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::resource('order', OrderController::class);
         });
 
-
+        Route::resource('/roles', RoleController::class);
     });
     Route::group(['prefix'=>'nav'],function (){
         Route::resource('services', ServiceController::class);

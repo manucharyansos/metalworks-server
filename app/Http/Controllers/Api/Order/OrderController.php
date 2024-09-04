@@ -3,9 +3,14 @@
 namespace App\Http\Controllers\Api\Order;
 
 use App\Http\Controllers\Controller;
+use App\Models\Creator;
+use App\Models\Description;
 use App\Models\Order;
+use App\Models\PrefixCode;
+use App\Models\StoreLink;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class OrderController extends Controller
 {
@@ -31,17 +36,45 @@ class OrderController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'required|string|max:255',
+        $validatedData = $request->validate([
+            'description' => 'required|array',
+            'description.name' => 'required|string',
+            'description.type' => 'required|string',
+            'description.description' => 'nullable|string',
+            'prefix_code' => 'required|array',
+            'prefix_code.code' => 'required|string',
+            'store_link' => 'required|array',
+            'store_link.url' => 'required|url',
+            'status_id' => 'nullable|exists:statuses,id',
+            'roles' => 'array',
+            'roles.*' => 'exists:roles,id',
         ]);
 
-        $task = Order::create($request->only('name', 'description'));
+        $creatorId = Auth::id();
+        $orderNumber = '24.10';
+        $description = Description::create($validatedData['description']);
+        $prefixCode = PrefixCode::create($validatedData['prefix_code']);
+        $storeLink = StoreLink::create($validatedData['store_link']);
 
-        $task->roles()->attach($request->role_ids);
+        $order = Order::create([
+            'order_number' => $orderNumber,
+            'description_id' => $description->id,
+            'creator_id' => $creatorId,
+            'prefix_code_id' => $prefixCode->id,
+            'store_link_id' => $storeLink->id,
+            'status_id' => $validatedData['status_id'] ?? 1,
+        ]);
 
-        return response()->json($task->load('roles'), 201);
+        if (isset($validatedData['roles'])) {
+            $order->roles()->attach($validatedData['roles']);
+        }
+
+        return response()->json($order->load('roles'), 201);
     }
+
+
+
+
 
     /**
      * Display the specified resource.

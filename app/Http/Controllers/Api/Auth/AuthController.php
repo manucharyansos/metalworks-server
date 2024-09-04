@@ -24,13 +24,13 @@ class AuthController extends Controller
 
             $user = User::create($validatedData);
 
-            $accessToken = $user->createToken('authToken')->plainTextToken;
+            $accessToken = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json(['user' => $user, 'access_token' => $accessToken]);
         } catch (\Exception $e) {
             return response()->json([
                 'error' => 'Registration failed. Please try again later.',
-                'message' => $e->getMessage(),  
+                'message' => $e->getMessage(),
             ], 500);
         }
     }
@@ -46,7 +46,7 @@ class AuthController extends Controller
 
             if (Auth::attempt($credentials)) {
                 $user = User::where('email', $credentials['email'])->first();
-                $accessToken = $user->createToken('authToken')->plainTextToken;
+                $accessToken = $user->createToken('auth_token')->plainTextToken;
 
                 return response()->json(['user' => $user, 'access_token' => $accessToken]);
             }
