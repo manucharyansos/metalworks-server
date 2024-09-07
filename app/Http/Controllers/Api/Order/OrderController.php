@@ -3,14 +3,13 @@
 namespace App\Http\Controllers\Api\Order;
 
 use App\Http\Controllers\Controller;
-use App\Models\Creator;
-use App\Models\Description;
 use App\Models\Order;
 use App\Models\PrefixCode;
 use App\Models\StoreLink;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class OrderController extends Controller
 {
@@ -19,92 +18,114 @@ class OrderController extends Controller
      */
     public function index(): JsonResponse
     {
-        $orders = Order::with('description', 'creator', 'prefixCode', 'storeLink', 'status')->get();
-        return response()->json(['orders' => $orders]);
+        $orders = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink')->get();
+        return response()->json($orders);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request): JsonResponse
     {
         $validatedData = $request->validate([
-            'description' => 'required|array',
-            'description.name' => 'required|string',
-            'description.type' => 'required|string',
-            'description.description' => 'nullable|string',
-            'prefix_code' => 'required|array',
-            'prefix_code.code' => 'required|string',
-            'store_link' => 'required|array',
-            'store_link.url' => 'required|url',
-            'status_id' => 'nullable|exists:statuses,id',
-            'roles' => 'array',
-            'roles.*' => 'exists:roles,id',
+            'user_id' => 'required|exists:users,id',
+            'details' => 'required|array',
+            'details.*.description' => 'required|string',
+            'details.*.quantity' => 'required|integer|min:1',
+            'details.*.type' => 'required|string',
+            'status' => 'nullable|string',
+            'store_link.url' => 'nullable|url',
         ]);
-
-        $creatorId = Auth::id();
-        $orderNumber = '24.10';
-        $description = Description::create($validatedData['description']);
-        $prefixCode = PrefixCode::create($validatedData['prefix_code']);
-        $storeLink = StoreLink::create($validatedData['store_link']);
 
         $order = Order::create([
-            'order_number' => $orderNumber,
-            'description_id' => $description->id,
-            'creator_id' => $creatorId,
-            'prefix_code_id' => $prefixCode->id,
-            'store_link_id' => $storeLink->id,
-            'status_id' => $validatedData['status_id'] ?? 1,
+            'user_id' => $validatedData['user_id'],
         ]);
 
-        if (isset($validatedData['roles'])) {
-            $order->roles()->attach($validatedData['roles']);
+        $order->orderNumber()->create([
+            'number' => $this->generateOrderNumber()
+        ]);
+
+        $order->details()->createMany($validatedData['details']);
+        $order->status()->create([
+            'status' => $validatedData['status'] ?? 'waiting',
+        ]);
+        $order->prefixCode()->create([
+            'code' => $this->generateUniquePrefixCode()
+        ]);
+        if (!empty($validatedData['store_link']['url'])) {
+            $order->storeLink()->create([
+                'url' => $validatedData['store_link']['url']
+            ]);
         }
 
-        return response()->json($order->load('roles'), 201);
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink'), 201);
     }
 
 
-
-
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
+    public function show($id): JsonResponse
     {
-        //
+        $order = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink')->findOrFail($id);
+        return response()->json($order);
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
+    public function update(Request $request, $id): JsonResponse
     {
-        //
+        $validatedData = $request->validate([
+            'details' => 'required|array',
+            'details.*.description' => 'required|string',
+            'details.*.quantity' => 'required|integer|min:1',
+            'details.*.type' => 'required|string',
+            'status' => 'nullable|string',
+            'store_link.url' => 'nullable|url',
+        ]);
+
+        $order = Order::findOrFail($id);
+
+        $order->details()->delete(); // Remove old details
+        $order->details()->createMany($validatedData['details']); // Add new details
+
+        if ($order->status) {
+            $order->status->update(['status' => $validatedData['status'] ?? 'waiting']);
+        } else {
+            $order->status()->create(['status' => $validatedData['status'] ?? 'waiting']);
+        }
+
+        if (!empty($validatedData['store_link']['url'])) {
+            $order->storeLink()->updateOrCreate(
+                ['order_id' => $order->id],
+                ['url' => $validatedData['store_link']['url']]
+            );
+        }
+
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink'), 200);
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
+
+    // Remove the specified order
+    public function destroy($id): JsonResponse
     {
-        //
+        $order = Order::findOrFail($id);
+        $order->delete();
+
+        return response()->json(null, 204);
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
+    private function generateOrderNumber(): string
     {
-        //
+        $currentMonth = date('m');
+        $currentYear = date('Y');
+        $sequenceNumber = Order::whereYear('created_at', $currentYear)
+                ->whereMonth('created_at', $currentMonth)
+                ->count() + 1;
+
+        return sprintf('%s-%s-%04d', $currentYear, $currentMonth, $sequenceNumber);
+    }
+
+    private function generateUniquePrefixCode(): string
+    {
+        $prefixCode = strtoupper(bin2hex(random_bytes(3)));
+
+        while (PrefixCode::where('code', $prefixCode)->exists()) {
+            $prefixCode = strtoupper(bin2hex(random_bytes(3)));
+        }
+
+        return $prefixCode;
     }
 }

@@ -5,16 +5,15 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Role extends Model
+class StoreLink extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id'];
+    protected $fillable = ['order_id', 'url'];
 
-    public function users(): HasMany
+    public function order(): BelongsTo
     {
-        return $this->hasMany(User::class, 'role_id');
+        return $this->belongsTo(Order::class);
     }
 }

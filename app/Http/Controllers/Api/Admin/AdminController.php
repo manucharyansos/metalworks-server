@@ -3,11 +3,19 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Order;
 use App\Models\Service;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AdminController extends Controller
 {
+    public function getOrders(): JsonResponse
+    {
+        $orders = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink')->get();
+        return response()->json($orders);
+    }
+
     public function index()
     {
         return response()->json(Service::all());
