@@ -25,7 +25,7 @@ class OrderController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validatedData = $request->validate([
-            'user_id' => 'required|exists:users,id',
+            'client_id' => 'required|exists:clients,id',
             'details' => 'required|array',
             'details.*.description' => 'required|string',
             'details.*.quantity' => 'required|integer|min:1',
@@ -35,7 +35,7 @@ class OrderController extends Controller
         ]);
 
         $order = Order::create([
-            'user_id' => $validatedData['user_id'],
+            'client_id' => $validatedData['client_id'],
         ]);
 
         $order->orderNumber()->create([
