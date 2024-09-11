@@ -30,7 +30,7 @@ class ClientSeeder extends Seeder
             'type_of_ID_card' => 'Passport',
             'passport_number' => 'P123456',
             'email_address' => 'client1@example.com',
-            'user_id' => $user1->id, // Associated user
+//            'user_id' => $user1->id, // Associated user
             'contract' => 'Contract 001',
             'contract_date' => now(),
             'sales_discount_percentage' => '10%',
@@ -52,7 +52,7 @@ class ClientSeeder extends Seeder
             'type_of_ID_card' => 'National ID',
             'passport_number' => 'P654321',
             'email_address' => 'client2@example.com',
-            'user_id' => $user2->id, // Associated user
+//            'user_id' => $user2->id, // Associated user
             'contract' => 'Contract 002',
             'contract_date' => now(),
             'sales_discount_percentage' => '15%',
@@ -75,7 +75,7 @@ class ClientSeeder extends Seeder
             'type_of_ID_card' => 'Passport',
             'passport_number' => 'P987654',
             'email_address' => 'client3@example.com',
-            'user_id' => null, // No associated user
+//            'user_id' => null, // No associated user
             'contract' => 'Contract 003',
             'contract_date' => now(),
             'sales_discount_percentage' => '20%',

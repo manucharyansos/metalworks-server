@@ -30,14 +30,13 @@ class Client extends Model
         'contract',
         'contract_date',
         'sales_discount_percentage',
-        'email_address',
-        'user_id'
+//        'user_id'
     ];
 
-    public function user(): BelongsTo
-    {
-        return $this->belongsTo(User::class);
-    }
+//    public function user(): BelongsTo
+//    {
+//        return $this->belongsTo(User::class);
+//    }
 
     public function orders(): HasMany
     {

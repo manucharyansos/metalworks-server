@@ -2,13 +2,10 @@
 
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Auth\AuthController;
-use App\Http\Controllers\Api\BendingForming\BendingFormingController;
-use App\Http\Controllers\Api\LaserCutting\LaserCuttingController;
+use App\Http\Controllers\Api\Client\ClientController;
 use App\Http\Controllers\Api\Materials\MaterialsController;
 use App\Http\Controllers\Api\Nav\ServiceController;
 use App\Http\Controllers\Api\Order\OrderController;
-use App\Http\Controllers\Api\PowderCutting\PowderCuttingController;
-use App\Http\Controllers\Api\Tasks\TaskController;
 use App\Http\Controllers\RoleController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
@@ -29,6 +26,9 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
         Route::group(['prefix'=>'orders', 'middleware' => 'check.order'], function () {
             Route::resource('order', OrderController::class);
+        });
+        Route::group(['prefix'=>'clients'], function () {
+            Route::resource('client', ClientController::class);
         });
 
         Route::resource('/roles', RoleController::class);
