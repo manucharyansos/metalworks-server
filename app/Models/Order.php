@@ -42,6 +42,11 @@ class Order extends Model
         return $this->hasOne(StoreLink::class);
     }
 
+    public function factories(): HasOne
+    {
+        return $this->hasOne(Factories::class);
+    }
+
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);

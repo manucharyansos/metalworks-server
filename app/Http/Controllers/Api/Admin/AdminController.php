@@ -16,12 +16,12 @@ class AdminController extends Controller
         return response()->json($orders);
     }
 
-    public function index()
+    public function index(): JsonResponse
     {
         return response()->json(Service::all());
     }
 
-    public function show($id)
+    public function show($id): JsonResponse
     {
         return response()->json([
             'message' => 'Admin details',
@@ -29,7 +29,7 @@ class AdminController extends Controller
         ]);
     }
 
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
         return response()->json([
             'message' => 'Admin created successfully',
@@ -37,7 +37,7 @@ class AdminController extends Controller
         ], 201);
     }
 
-    public function update(Request $request, $id)
+    public function update(Request $request, $id): JsonResponse
     {
         return response()->json([
             'message' => 'Admin updated successfully',
@@ -45,7 +45,7 @@ class AdminController extends Controller
         ]);
     }
 
-    public function destroy($id)
+    public function destroy($id): JsonResponse
     {
         return response()->json([
             'message' => 'Admin deleted successfully'

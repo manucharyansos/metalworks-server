@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Client\ClientController;
+use App\Http\Controllers\Api\Factory\FactoryController;
 use App\Http\Controllers\Api\Materials\MaterialsController;
 use App\Http\Controllers\Api\Nav\ServiceController;
 use App\Http\Controllers\Api\Order\OrderController;
@@ -32,6 +33,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         });
 
         Route::resource('/roles', RoleController::class);
+        Route::apiResource('factory', FactoryController::class);
     });
     Route::group(['prefix'=>'nav'],function (){
         Route::resource('services', ServiceController::class);

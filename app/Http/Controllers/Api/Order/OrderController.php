@@ -5,11 +5,8 @@ namespace App\Http\Controllers\Api\Order;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\PrefixCode;
-use App\Models\StoreLink;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 
 class OrderController extends Controller
 {
@@ -18,7 +15,7 @@ class OrderController extends Controller
      */
     public function index(): JsonResponse
     {
-        $orders = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink')->get();
+        $orders = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories')->get();
         return response()->json($orders);
     }
 
@@ -32,6 +29,8 @@ class OrderController extends Controller
             'details.*.type' => 'required|string',
             'status' => 'nullable|string',
             'store_link.url' => 'nullable|url',
+            'factories' => 'nullable|array',
+            'factories.*.name' => 'nullable|string',
         ]);
 
         $order = Order::create([
@@ -74,12 +73,14 @@ class OrderController extends Controller
             'details.*.type' => 'required|string',
             'status' => 'nullable|string',
             'store_link.url' => 'nullable|url',
+            'factories' => 'required|array',
+            'factories.*.name' => 'required|string',
         ]);
 
         $order = Order::findOrFail($id);
 
-        $order->details()->delete(); // Remove old details
-        $order->details()->createMany($validatedData['details']); // Add new details
+        $order->details()->delete();
+        $order->details()->createMany($validatedData['details']);
 
         if ($order->status) {
             $order->status->update(['status' => $validatedData['status'] ?? 'waiting']);
@@ -93,12 +94,13 @@ class OrderController extends Controller
                 ['url' => $validatedData['store_link']['url']]
             );
         }
+        if (!empty($validatedData['factories'])) {
+            $order->factories()->sync($validatedData['factories']); // Adjust based on your relationship (many-to-many or one-to-many)
+        }
 
         return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink'), 200);
     }
 
-
-    // Remove the specified order
     public function destroy($id): JsonResponse
     {
         $order = Order::findOrFail($id);
