@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Factory;
 
 use App\Http\Controllers\Controller;
 use App\Models\Factories;
+use App\Models\Order;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -101,4 +102,20 @@ class FactoryController extends Controller
 
         return response()->json(null, 204);
     }
+
+    public function getOrdersByFactories(Request $request): JsonResponse
+    {
+        $factoryIds = $request->input('factory_ids');
+        $factoryIdsArray = explode(',', $factoryIds);
+        if (empty($factoryIdsArray)) {
+            return response()->json(['message' => 'Invalid factory IDs'], 400);
+        }
+        $orders = Order::whereHas('factories', function($query) use ($factoryIdsArray) {
+            $query->whereIn('factories.id', $factoryIdsArray);
+        })->with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories')->get();
+
+        return response()->json($orders);
+    }
+
+
 }

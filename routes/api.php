@@ -31,9 +31,12 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::group(['prefix'=>'clients'], function () {
             Route::resource('client', ClientController::class);
         });
+        Route::group(['prefix'=>'factories'], function () {
+            Route::apiResource('factory', FactoryController::class);
+            Route::get('/getOrdersByFactories', [FactoryController::class, 'getOrdersByFactories']);
+        });
 
         Route::resource('/roles', RoleController::class);
-        Route::apiResource('factory', FactoryController::class);
     });
     Route::group(['prefix'=>'nav'],function (){
         Route::resource('services', ServiceController::class);
