@@ -30,7 +30,7 @@ class OrderController extends Controller
             'status' => 'nullable|string',
             'store_link.url' => 'nullable|url',
             'factories' => 'nullable|array',
-            'factories.*.name' => 'nullable|string',
+            'factories.*.id' => 'required|exists:factories,id',
         ]);
 
         $order = Order::create([
@@ -38,7 +38,7 @@ class OrderController extends Controller
         ]);
 
         $order->orderNumber()->create([
-            'number' => $this->generateOrderNumber()
+            'number' => $this->generateOrderNumber(),
         ]);
 
         $order->details()->createMany($validatedData['details']);
@@ -46,21 +46,26 @@ class OrderController extends Controller
             'status' => $validatedData['status'] ?? 'waiting',
         ]);
         $order->prefixCode()->create([
-            'code' => $this->generateUniquePrefixCode()
+            'code' => $this->generateUniquePrefixCode(),
         ]);
+
         if (!empty($validatedData['store_link']['url'])) {
             $order->storeLink()->create([
-                'url' => $validatedData['store_link']['url']
+                'url' => $validatedData['store_link']['url'],
             ]);
         }
 
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink'), 201);
-    }
+        if (!empty($validatedData['factories'])) {
+            $factoryIds = array_column($validatedData['factories'], 'id');
+            $order->factories()->attach($factoryIds);
+        }
 
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories'), 201);
+    }
 
     public function show($id): JsonResponse
     {
-        $order = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink')->findOrFail($id);
+        $order = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories')->findOrFail($id);
         return response()->json($order);
     }
 
@@ -74,7 +79,7 @@ class OrderController extends Controller
             'status' => 'nullable|string',
             'store_link.url' => 'nullable|url',
             'factories' => 'required|array',
-            'factories.*.name' => 'required|string',
+            'factories.*.id' => 'required|exists:factories,id',
         ]);
 
         $order = Order::findOrFail($id);
@@ -94,11 +99,13 @@ class OrderController extends Controller
                 ['url' => $validatedData['store_link']['url']]
             );
         }
+
         if (!empty($validatedData['factories'])) {
-            $order->factories()->sync($validatedData['factories']); // Adjust based on your relationship (many-to-many or one-to-many)
+            $factoryIds = array_column($validatedData['factories'], 'id');
+            $order->factories()->sync($factoryIds);
         }
 
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink'), 200);
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories'), 200);
     }
 
     public function destroy($id): JsonResponse
