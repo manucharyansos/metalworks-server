@@ -15,7 +15,7 @@ class OrderController extends Controller
      */
     public function index(): JsonResponse
     {
-        $orders = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories')->get();
+        $orders = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates')->get();
         return response()->json($orders);
     }
 
@@ -26,11 +26,12 @@ class OrderController extends Controller
             'details' => 'required|array',
             'details.*.description' => 'required|string',
             'details.*.quantity' => 'required|integer|min:1',
-            'details.*.type' => 'required|string',
+            'details.*.name' => 'required|string',
             'status' => 'nullable|string',
             'store_link.url' => 'nullable|url',
             'factories' => 'nullable|array',
             'factories.*.id' => 'required|exists:factories,id',
+            'finish_date' => 'nullable|string',
         ]);
 
         $order = Order::create([
@@ -60,12 +61,16 @@ class OrderController extends Controller
             $order->factories()->attach($factoryIds);
         }
 
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories'), 201);
+        $order->dates()->create([
+            'finish_date' => $validatedData['finish_date'] ?? null,
+        ]);
+
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates'), 201);
     }
 
     public function show($id): JsonResponse
     {
-        $order = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories')->findOrFail($id);
+        $order = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates')->findOrFail($id);
         return response()->json($order);
     }
 
@@ -75,11 +80,12 @@ class OrderController extends Controller
             'details' => 'required|array',
             'details.*.description' => 'required|string',
             'details.*.quantity' => 'required|integer|min:1',
-            'details.*.type' => 'required|string',
+            'details.*.name' => 'required|string',
             'status' => 'nullable|string',
             'store_link.url' => 'nullable|url',
             'factories' => 'required|array',
             'factories.*.id' => 'required|exists:factories,id',
+            'finish_date' => 'nullable|string',
         ]);
 
         $order = Order::findOrFail($id);
@@ -105,7 +111,9 @@ class OrderController extends Controller
             $order->factories()->sync($factoryIds);
         }
 
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories'), 200);
+        $order->dates()->update(['finish_date' => $validatedData['finish_date'] ?? null]);
+
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates'), 200);
     }
 
     public function destroy($id): JsonResponse

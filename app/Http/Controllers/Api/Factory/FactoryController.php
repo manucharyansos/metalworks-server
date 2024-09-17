@@ -112,7 +112,7 @@ class FactoryController extends Controller
         }
         $orders = Order::whereHas('factories', function($query) use ($factoryIdsArray) {
             $query->whereIn('factories.id', $factoryIdsArray);
-        })->with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories')->get();
+        })->with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates')->get();
 
         return response()->json($orders);
     }

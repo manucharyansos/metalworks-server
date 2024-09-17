@@ -40,6 +40,10 @@ class Order extends Model
     {
         return $this->hasOne(StoreLink::class);
     }
+    public function dates(): HasOne
+    {
+        return $this->hasOne(Date::class);
+    }
 
     public function factories(): BelongsToMany
     {
