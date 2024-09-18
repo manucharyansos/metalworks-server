@@ -87,6 +87,57 @@ class FactoryController extends Controller
         return response()->json($factory, 200);
     }
 
+    public function updateOrder(Request $request, $id): JsonResponse
+    {
+        $validatedData = $request->validate([
+            'details' => 'nullable|array',
+            'details.*.description' => 'nullable|string',
+            'details.*.quantity' => 'nullable|integer|min:1',
+            'details.*.name' => 'nullable|string',
+            'status' => 'nullable|string',
+            'store_link.url' => 'nullable|url',
+            'factories' => 'nullable|array',
+            'factories.*.id' => 'nullable|exists:factories,id',
+            'finish_date' => 'nullable|date',
+        ]);
+
+        $order = Order::find($id);
+
+        if (!$order) {
+            return response()->json(['error' => 'Order not found'], 404);
+        }
+
+        if (isset($validatedData['details'])) {
+            $order->details()->delete();
+            $order->details()->createMany($validatedData['details']);
+        }
+
+        $status = $validatedData['status'] ?? 'waiting';
+        if ($order->status) {
+            $order->status->update(['status' => $status]);
+        } else {
+            $order->status()->create(['status' => $status]);
+        }
+
+        if (isset($validatedData['store_link']['url'])) {
+            $order->storeLink()->updateOrCreate(
+                ['order_id' => $order->id],
+                ['url' => $validatedData['store_link']['url']]
+            );
+        }
+
+        if (isset($validatedData['factories'])) {
+            $factoryIds = array_column($validatedData['factories'], 'id');
+            $order->factories()->sync($factoryIds);
+        }
+
+        if (isset($validatedData['finish_date'])) {
+            $order->dates()->update(['finish_date' => $validatedData['finish_date']]);
+        }
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates'), 200);
+    }
+
+
     /**
      * Remove the specified resource from storage.
      */
