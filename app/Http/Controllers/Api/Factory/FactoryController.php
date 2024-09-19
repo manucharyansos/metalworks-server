@@ -90,13 +90,19 @@ class FactoryController extends Controller
     public function updateOrder(Request $request, $id): JsonResponse
     {
         $validatedData = $request->validate([
-            'status' => 'nullable|string'
+            'status' => 'nullable|string',
+            'details' => 'nullable|array',
+            'details.*.description' => 'required|string',
         ]);
 
         $order = Order::find($id);
 
         if (!$order) {
             return response()->json(['error' => 'Order not found'], 404);
+        }
+        if (isset($validatedData['details'])) {
+            $order->details()->delete();
+            $order->details()->createMany($validatedData['details']);
         }
 
         $status = $validatedData['status'] ?? 'waiting';
@@ -105,6 +111,11 @@ class FactoryController extends Controller
         } else {
             $order->status()->create(['status' => $status]);
         }
+
+//        if (isset($validatedData['status']) && $request->user()->role_id === 5) {
+//            $order->status()->update(['status' => $validatedData['status']]);
+//        }
+
         return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates'), 200);
     }
 
