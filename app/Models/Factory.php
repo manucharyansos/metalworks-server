@@ -5,15 +5,16 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Factories extends Model
+class Factory extends Model
 {
     use HasFactory;
 
     protected $fillable = ['name'];
 
-    public function orders(): BelongsToMany
+    public function orderStatuses(): HasMany
     {
-        return $this->belongsToMany(Order::class, 'factory_order', 'factory_id', 'order_id');
+        return $this->hasMany(FactoryOrderStatus::class);
     }
 }

@@ -2,7 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\Factories;
+use App\Models\Factory;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -13,9 +13,9 @@ class FactorySeeder extends Seeder
      */
     public function run(): void
     {
-        Factories::create(['name' => 'SolidWorks']);
-        Factories::create(['name' => 'Bend']);
-        Factories::create(['name' => 'Laser cutting']);
-        Factories::create(['name' => 'Powder Catting']);
+        Factory::create(['name' => 'SolidWorks']);
+        Factory::create(['name' => 'Bend']);
+        Factory::create(['name' => 'Laser cutting']);
+        Factory::create(['name' => 'Powder Catting']);
     }
 }

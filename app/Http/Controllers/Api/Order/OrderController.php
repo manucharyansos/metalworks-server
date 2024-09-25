@@ -15,7 +15,7 @@ class OrderController extends Controller
      */
     public function index(): JsonResponse
     {
-        $orders = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates')->get();
+        $orders = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory')->get();
         return response()->json($orders);
     }
 
@@ -28,20 +28,18 @@ class OrderController extends Controller
             'details.*.quantity' => 'required|integer|min:1',
             'details.*.name' => 'required|string',
             'status' => 'nullable|string',
-            'store_link.url' => 'nullable|url',
             'factories' => 'nullable|array',
             'factories.*.id' => 'required|exists:factories,id',
+            'factories.*.status' => 'nullable|string',
+            'store_link.url' => 'nullable|url',
             'finish_date' => 'nullable|string',
         ]);
-
         $order = Order::create([
             'client_id' => $validatedData['client_id'],
         ]);
-
         $order->orderNumber()->create([
             'number' => $this->generateOrderNumber(),
         ]);
-
         $order->details()->createMany($validatedData['details']);
         $order->status()->create([
             'status' => $validatedData['status'] ?? 'waiting',
@@ -49,7 +47,6 @@ class OrderController extends Controller
         $order->prefixCode()->create([
             'code' => $this->generateUniquePrefixCode(),
         ]);
-
         if (!empty($validatedData['store_link']['url'])) {
             $order->storeLink()->create([
                 'url' => $validatedData['store_link']['url'],
@@ -57,20 +54,25 @@ class OrderController extends Controller
         }
 
         if (!empty($validatedData['factories'])) {
-            $factoryIds = array_column($validatedData['factories'], 'id');
-            $order->factories()->attach($factoryIds);
+            foreach ($validatedData['factories'] as $factory) {
+                $order->factories()->attach($factory['id']);
+                $order->factoryOrderStatuses()->create([
+                    'factory_id' => $factory['id'],
+                    'status' => $factory['status'] ?? 'waiting',
+                ]);
+            }
         }
-
         $order->dates()->create([
             'finish_date' => $validatedData['finish_date'] ?? null,
         ]);
 
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates'), 201);
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses'), 201);
     }
+
 
     public function show($id): JsonResponse
     {
-        $order = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates')->findOrFail($id);
+        $order = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'factoryOrderStatuses', 'dates')->findOrFail($id);
         return response()->json($order);
     }
 
@@ -82,9 +84,10 @@ class OrderController extends Controller
             'details.*.quantity' => 'required|integer|min:1',
             'details.*.name' => 'required|string',
             'status' => 'nullable|string',
-            'store_link.url' => 'nullable|url',
             'factories' => 'required|array',
             'factories.*.id' => 'required|exists:factories,id',
+            'factories.*.status' => 'nullable|string',
+            'store_link.url' => 'nullable|url',
             'finish_date' => 'nullable|string',
         ]);
 
@@ -109,12 +112,20 @@ class OrderController extends Controller
         if (!empty($validatedData['factories'])) {
             $factoryIds = array_column($validatedData['factories'], 'id');
             $order->factories()->sync($factoryIds);
+
+            foreach ($validatedData['factories'] as $factory) {
+                $order->factoryOrderStatuses()->updateOrCreate(
+                    ['factory_id' => $factory['id'], 'order_id' => $order->id],
+                    ['status' => $factory['status'] ?? 'waiting']
+                );
+            }
         }
 
         $order->dates()->update(['finish_date' => $validatedData['finish_date'] ?? null]);
 
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates'), 200);
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses'), 200);
     }
+
 
     public function destroy($id): JsonResponse
     {

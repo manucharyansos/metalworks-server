@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Api\Factory;
 
 use App\Http\Controllers\Controller;
-use App\Models\Factories;
+use App\Models\Factory;
+use App\Models\FactoryOrderStatus;
 use App\Models\Order;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,7 @@ class FactoryController extends Controller
      */
     public function index(): JsonResponse
     {
-        $factory = Factories::all();
+        $factory = Factory::all();
         return response()->json($factory, 200);
     }
 
@@ -36,7 +37,7 @@ class FactoryController extends Controller
             'name' => 'required|unique:roles|max:255',
         ]);
 
-        $factory = Factories::create([
+        $factory = Factory::create([
             'name' => $request->name,
         ]);
 
@@ -48,7 +49,7 @@ class FactoryController extends Controller
      */
     public function show(string $id): JsonResponse
     {
-        $factory = Factories::find($id);
+        $factory = Factory::find($id);
 
         if (!$factory) {
             return response()->json(['message' => 'Factory not found'], 404);
@@ -74,7 +75,7 @@ class FactoryController extends Controller
             'name' => 'required|unique:roles,name,' . $id . '|max:255',
         ]);
 
-        $factory = Factories::find($id);
+        $factory = Factory::find($id);
 
         if (!$factory) {
             return response()->json(['message' => 'Factory not found'], 404);
@@ -90,9 +91,11 @@ class FactoryController extends Controller
     public function updateOrder(Request $request, $id): JsonResponse
     {
         $validatedData = $request->validate([
-            'status' => 'nullable|string',
             'details' => 'nullable|array',
             'details.*.description' => 'required|string',
+            'details.*.quantity' => 'nullable|integer',
+            'details.*.name' => 'nullable|string',
+            'factory_id' => 'required|exists:factories,id',
         ]);
 
         $order = Order::find($id);
@@ -105,18 +108,19 @@ class FactoryController extends Controller
             $order->details()->createMany($validatedData['details']);
         }
 
-        $status = $validatedData['status'] ?? 'waiting';
-        if ($order->status) {
-            $order->status->update(['status' => $status]);
-        } else {
-            $order->status()->create(['status' => $status]);
+        if (isset($validatedData['factory_id'])) {
+            FactoryOrderStatus::updateOrCreate(
+                [
+                    'order_id' => $order->id,
+                    'factory_id' => $validatedData['factory_id'],
+                ],
+                [
+                    'status' => $request->input('factory_order_statuses'),
+                ]
+            );
         }
 
-//        if (isset($validatedData['status']) && $request->user()->role_id === 5) {
-//            $order->status()->update(['status' => $validatedData['status']]);
-//        }
-
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates'), 200);
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses'), 200);
     }
 
 
@@ -125,7 +129,7 @@ class FactoryController extends Controller
      */
     public function destroy(string $id): JsonResponse
     {
-        $factory = Factories::find($id);
+        $factory = Factory::find($id);
 
         if (!$factory) {
             return response()->json(['message' => 'Factory not found'], 404);
@@ -139,16 +143,26 @@ class FactoryController extends Controller
     public function getOrdersByFactories(Request $request): JsonResponse
     {
         $factoryIds = $request->input('factory_ids');
+
+        if (!$factoryIds) {
+            return response()->json(['message' => 'Factory IDs are required'], 400);
+        }
+
         $factoryIdsArray = explode(',', $factoryIds);
+
         if (empty($factoryIdsArray)) {
             return response()->json(['message' => 'Invalid factory IDs'], 400);
         }
-        $orders = Order::whereHas('factories', function($query) use ($factoryIdsArray) {
+
+        $orders = Order::whereHas('factories', function ($query) use ($factoryIdsArray) {
             $query->whereIn('factories.id', $factoryIdsArray);
-        })->with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates')->get();
+        })
+            ->with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses') // ՈՒՇԱԴՐՈՒԹՅՈՒՆ
+            ->get();
 
         return response()->json($orders);
     }
+
 
 
 }

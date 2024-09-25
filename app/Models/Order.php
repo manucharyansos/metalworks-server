@@ -47,12 +47,17 @@ class Order extends Model
 
     public function factories(): BelongsToMany
     {
-        return $this->belongsToMany(Factories::class, 'factory_order', 'order_id', 'factory_id');
+        return $this->belongsToMany(Factory::class, 'factory_order', 'order_id', 'factory_id');
     }
 
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    public function factoryOrderStatuses(): HasMany
+    {
+        return $this->hasMany(FactoryOrderStatus::class, 'order_id');
     }
 
     /**
