@@ -18,6 +18,7 @@ class CreateFactoryOrderStatusesTable extends Migration
             $table->foreignId('order_id')->constrained()->onDelete('cascade');
             $table->foreignId('factory_id')->constrained('factories')->onDelete('cascade');
             $table->string('status')->default('waiting');
+            $table->text('description')->nullable();
             $table->timestamps();
         });
     }
