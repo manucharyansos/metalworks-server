@@ -91,10 +91,6 @@ class FactoryController extends Controller
     public function updateOrder(Request $request, $id): JsonResponse
     {
         $validatedData = $request->validate([
-            'details' => 'nullable|array',
-            'details.*.description' => 'required|string',
-            'details.*.quantity' => 'nullable|integer',
-            'details.*.name' => 'nullable|string',
             'factory_id' => 'required|exists:factories,id',
         ]);
 
@@ -103,26 +99,26 @@ class FactoryController extends Controller
         if (!$order) {
             return response()->json(['error' => 'Order not found'], 404);
         }
-        if (isset($validatedData['details'])) {
-            $order->details()->delete();
-            $order->details()->createMany($validatedData['details']);
-        }
 
         if (isset($validatedData['factory_id'])) {
+            $factoryOrderStatuses = $request->input('factory_order_statuses', []);
             FactoryOrderStatus::updateOrCreate(
                 [
                     'order_id' => $order->id,
                     'factory_id' => $validatedData['factory_id'],
                 ],
                 [
-                    'status' => $request->input('factory_order_statuses'),
+                    'status' => $factoryOrderStatuses['status'] ?? null,
+                    'description' => $factoryOrderStatuses['description'] ?? null,
                 ]
             );
         }
 
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses'), 200);
+        return response()->json(
+            $order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses'),
+            200
+        );
     }
-
 
     /**
      * Remove the specified resource from storage.
