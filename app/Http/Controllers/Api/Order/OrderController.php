@@ -65,7 +65,7 @@ class OrderController extends Controller
 
         $order->dates()->create(['finish_date' => $validatedData['finish_date'] ?? null]);
 
-        $email = $order->client->email ?? 'sosmanucharyan89@gmail.com';
+        $email = $order->client->email_address;
         $orderUrl = route('orders.show', ['id' => $order->id]);
         Mail::to($email)->send(new OrderCreated($order, $orderUrl));
 
