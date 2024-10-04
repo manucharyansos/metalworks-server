@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Factory\FactoryController;
 use App\Http\Controllers\Api\Materials\MaterialsController;
 use App\Http\Controllers\Api\Nav\ServiceController;
 use App\Http\Controllers\Api\Order\OrderController;
+use App\Http\Controllers\Mail\MailController;
 use App\Http\Controllers\RoleController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
@@ -37,7 +38,13 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::get('/getStatus', [FactoryController::class, 'getStatus']);
         });
 
+        Route::group(['prefix'=>'mails'], function () {
+            Route::get('send', [MailController::class, 'send']);
+        });
+
         Route::resource('/roles', RoleController::class);
+
+        Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
     });
     Route::group(['prefix'=>'nav'],function (){
         Route::resource('services', ServiceController::class);

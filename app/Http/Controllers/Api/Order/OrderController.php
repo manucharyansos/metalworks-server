@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api\Order;
 
 use App\Http\Controllers\Controller;
+use App\Mail\OrderCreated;
 use App\Models\Order;
 use App\Models\PrefixCode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 
 class OrderController extends Controller
 {
@@ -34,23 +36,21 @@ class OrderController extends Controller
             'store_link.url' => 'nullable|url',
             'finish_date' => 'nullable|string',
         ]);
-        $order = Order::create([
+
+        $order = Order::with('client')->create([
             'client_id' => $validatedData['client_id'],
         ]);
+
         $order->orderNumber()->create([
             'number' => $this->generateOrderNumber(),
         ]);
+
         $order->details()->createMany($validatedData['details']);
-        $order->status()->create([
-            'status' => $validatedData['status'] ?? 'waiting',
-        ]);
-        $order->prefixCode()->create([
-            'code' => $this->generateUniquePrefixCode(),
-        ]);
+        $order->status()->create(['status' => $validatedData['status'] ?? 'waiting']);
+        $order->prefixCode()->create(['code' => $this->generateUniquePrefixCode()]);
+
         if (!empty($validatedData['store_link']['url'])) {
-            $order->storeLink()->create([
-                'url' => $validatedData['store_link']['url'],
-            ]);
+            $order->storeLink()->create(['url' => $validatedData['store_link']['url']]);
         }
 
         if (!empty($validatedData['factories'])) {
@@ -62,12 +62,16 @@ class OrderController extends Controller
                 ]);
             }
         }
-        $order->dates()->create([
-            'finish_date' => $validatedData['finish_date'] ?? null,
-        ]);
+
+        $order->dates()->create(['finish_date' => $validatedData['finish_date'] ?? null]);
+
+        $email = $order->client->email ?? 'sosmanucharyan89@gmail.com';
+        $orderUrl = route('orders.show', ['id' => $order->id]);
+        Mail::to($email)->send(new OrderCreated($order, $orderUrl));
 
         return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses'), 201);
     }
+
 
 
     public function show($id): JsonResponse
