@@ -7,6 +7,11 @@ use Illuminate\Http\Request;
 
 class ServiceController extends Controller
 {
+//    public function index()
+//    {
+//        $order = Order::all();
+//        return view('emails.orders.created')->with('orders', $order);
+//    }
     public function index()
     {
         return response()->json(Service::all());
