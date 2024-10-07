@@ -6,7 +6,7 @@
     <title>Order Created</title>
 </head>
 <body style="margin: 0; padding: 0">
-<table style="margin: auto; border: 2px solid #4b5563; border-radius: 20px; width: 100%; max-width: 600px;">
+<table style="margin: auto; border-radius: 20px; width: 100%; max-width: 600px;">
     <tr>
         <td style="background: #9cc8e3; border-top-left-radius: 20px; border-top-right-radius: 20px; padding: 10px; text-align: center; margin: auto;">
             <h1 style="text-align: center; font-family: SansSerif,serif; font-style: italic; font-weight: bold; margin: 0;">Metalwork's New Order Created</h1>

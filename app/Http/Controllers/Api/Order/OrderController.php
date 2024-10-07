@@ -69,14 +69,14 @@ class OrderController extends Controller
         $orderUrl = route('orders.show', ['id' => $order->id]);
         Mail::to($email)->send(new OrderCreated($order, $orderUrl));
 
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses'), 201);
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory'), 201);
     }
 
 
 
     public function show($id): JsonResponse
     {
-        $order = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'factoryOrderStatuses', 'dates')->findOrFail($id);
+        $order = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'factoryOrderStatuses.factory', 'dates')->findOrFail($id);
         return response()->json($order);
     }
 
@@ -127,7 +127,7 @@ class OrderController extends Controller
 
         $order->dates()->update(['finish_date' => $validatedData['finish_date'] ?? null]);
 
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses'), 200);
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory'), 200);
     }
 
 
