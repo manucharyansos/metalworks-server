@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Factory\FactoryController;
 use App\Http\Controllers\Api\Materials\MaterialsController;
 use App\Http\Controllers\Api\Nav\ServiceController;
 use App\Http\Controllers\Api\Order\OrderController;
+use App\Http\Controllers\ContactController;
 use App\Http\Controllers\Mail\MailController;
 use App\Http\Controllers\RoleController;
 use Illuminate\Support\Facades\Route;
@@ -52,5 +53,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
     Route::group(['prefix'=>'materials'],function (){
         Route::resource('/', MaterialsController::class);
     });
+
+    Route::post('/contact', [ContactController::class, 'store']);
 });
 
