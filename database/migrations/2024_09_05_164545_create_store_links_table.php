@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('store_links', function (Blueprint $table) {
             $table->id();
             $table->foreignId('order_id')->nullable()->constrained()->onDelete('cascade');
-            $table->string('url');
+            $table->string('url')->nullable();
             $table->timestamps();
         });
     }

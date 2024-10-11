@@ -35,6 +35,8 @@ class OrderController extends Controller
             'factories.*.status' => 'nullable|string',
             'store_link.url' => 'nullable|url',
             'finish_date' => 'nullable|string',
+            'files' => 'nullable|array',
+            'files.*' => 'file|mimes:step,dxf,png,jpg,eps|max:2048',
         ]);
 
         $order = Order::with('client')->create([
@@ -65,11 +67,18 @@ class OrderController extends Controller
 
         $order->dates()->create(['finish_date' => $validatedData['finish_date'] ?? null]);
 
+        if (!empty($validatedData['files'])) {
+            foreach ($validatedData['files'] as $file) {
+                $path = $file->store("uploads/orders/{$order->id}", 'public');
+                $order->files()->create(['path' => $path]);
+            }
+        }
+
         $email = $order->client->email_address;
         $orderUrl = route('orders.show', ['id' => $order->id]);
         Mail::to($email)->send(new OrderCreated($order, $orderUrl));
 
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory'), 201);
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 201);
     }
 
 
