@@ -14,21 +14,11 @@ class Order extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['client_id'];
+    protected $fillable = ['client_id', 'name', 'quantity', 'description', 'status'];
 
     public function orderNumber(): HasOne
     {
         return $this->hasOne(OrderNumber::class);
-    }
-
-    public function details(): HasMany
-    {
-        return $this->hasMany(Detail::class);
-    }
-
-    public function status(): HasOne
-    {
-        return $this->hasOne(Status::class);
     }
 
     public function prefixCode(): HasOne

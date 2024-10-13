@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Materials;
 
 use App\Http\Controllers\Controller;
 use App\Models\Materials;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class MaterialsController extends Controller
@@ -11,7 +12,7 @@ class MaterialsController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index()
+    public function index(): JsonResponse
     {
         $materials = Materials::all();
         return response()->json(['materials' => $materials]);
@@ -28,7 +29,7 @@ class MaterialsController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
 //        $request->validate([
 //            'name' => 'required|string',
@@ -91,7 +92,7 @@ class MaterialsController extends Controller
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(string $id)
+    public function edit(string $id): JsonResponse
     {
         $material = Materials::find($id);
         if (!$material) {

@@ -24,7 +24,7 @@
                 </tr>
                 <tr>
                     <th style="text-align: left; padding: 8px;">Order Status</th>
-                    <td style="padding: 8px;">{{ $order->status->status }}</td>
+                    <td style="padding: 8px;">{{ $order->status }}</td>
                 </tr>
                 <tr>
                     <th style="text-align: left; padding: 8px;">Order Code</th>
@@ -35,20 +35,19 @@
                     <td style="padding: 8px;">{{ $order->orderNumber?->number }}</td>
                 </tr>
 
-                @foreach($order->details as $detail)
-                    <tr>
-                        <th style="text-align: left; padding: 8px;">Name</th>
-                        <td style="padding: 8px;">{{ $detail->name }}</td>
-                    </tr>
-                    <tr>
-                        <th style="text-align: left; padding: 8px;">Quantity</th>
-                        <td style="padding: 8px;">{{ $detail->quantity }}</td>
-                    </tr>
-                    <tr>
-                        <th style="text-align: left; padding: 8px;">Description</th>
-                        <td style="padding: 8px;">{{ $detail->description }}</td>
-                    </tr>
-                @endforeach
+
+                <tr>
+                    <th style="text-align: left; padding: 8px;">Name</th>
+                    <td style="padding: 8px;">{{ $order->name }}</td>
+                </tr>
+                <tr>
+                    <th style="text-align: left; padding: 8px;">Quantity</th>
+                    <td style="padding: 8px;">{{ $order->quantity }}</td>
+                </tr>
+                <tr>
+                    <th style="text-align: left; padding: 8px;">Description</th>
+                    <td style="padding: 8px;">{{ $order->description }}</td>
+                </tr>
             </table>
 
             <p style="margin: 20px 0;">You can view the order details <a href="{{ $order->storeLink?->url }}">here</a>.</p>
@@ -58,7 +57,7 @@
     <tr>
         <td style="display: grid; grid-column: 2; background: #9cc8e3; padding: 10px; text-align: center; border-bottom-left-radius: 20px; border-bottom-right-radius: 20px">
             <div>Metalwork's</div>
-            <div>Contact +374 91 123456</div>
+            <div>Contact +374 98 025 044</div>
         </td>
     </tr>
 </table>

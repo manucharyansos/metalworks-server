@@ -22,12 +22,10 @@ class CheckOrder
             return response()->json(['error' => 'Unauthorized'], 403);
         }
         $user = Auth::user();
-        Log::info($user);
 
-        // Change this line to fetch the user's role correctly
-        $role = $user->role; // Now this will return a single Role instance
+        $role = $user->role;
 
-        if ($role && $role->name !== 'creator') { // Assuming 'name' is a property on the Role model
+        if ($role && $role->name !== 'creator') {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
         return $next($request);

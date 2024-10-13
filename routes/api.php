@@ -8,7 +8,6 @@ use App\Http\Controllers\Api\Materials\MaterialsController;
 use App\Http\Controllers\Api\Nav\ServiceController;
 use App\Http\Controllers\Api\Order\OrderController;
 use App\Http\Controllers\ContactController;
-use App\Http\Controllers\Mail\MailController;
 use App\Http\Controllers\RoleController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
@@ -28,6 +27,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
         Route::group(['prefix'=>'orders', 'middleware' => 'check.order'], function () {
             Route::resource('order', OrderController::class);
+            Route::resource('materials', MaterialsController::class);
         });
         Route::group(['prefix'=>'clients'], function () {
             Route::resource('client', ClientController::class);
@@ -39,9 +39,9 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::get('/getStatus', [FactoryController::class, 'getStatus']);
         });
 
-        Route::group(['prefix'=>'mails'], function () {
-            Route::get('send', [MailController::class, 'send']);
-        });
+//        Route::group(['prefix'=>'mails'], function () {
+//            Route::get('send', [MailController::class, 'send']);
+//        });
 
         Route::resource('/roles', RoleController::class);
 

@@ -8,6 +8,7 @@ use App\Models\Order;
 use App\Models\PrefixCode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class OrderController extends Controller
@@ -17,7 +18,7 @@ class OrderController extends Controller
      */
     public function index(): JsonResponse
     {
-        $orders = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory')->get();
+        $orders = Order::with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files')->get();
         return response()->json($orders);
     }
 
@@ -25,10 +26,9 @@ class OrderController extends Controller
     {
         $validatedData = $request->validate([
             'client_id' => 'required|exists:clients,id',
-            'details' => 'required|array',
-            'details.*.description' => 'required|string',
-            'details.*.quantity' => 'required|integer|min:1',
-            'details.*.name' => 'required|string',
+            'description' => 'required|string',
+            'quantity' => 'required|integer|min:1',
+            'name' => 'required|string',
             'status' => 'nullable|string',
             'factories' => 'nullable|array',
             'factories.*.id' => 'required|exists:factories,id',
@@ -39,16 +39,18 @@ class OrderController extends Controller
             'files.*' => 'file|mimes:step,dxf,png,jpg,eps|max:2048',
         ]);
 
-        $order = Order::with('client')->create([
+        $order = Order::create([
             'client_id' => $validatedData['client_id'],
+            'name' => $validatedData['name'],
+            'quantity' => $validatedData['quantity'],
+            'description' => $validatedData['description'],
+            'status' => $validatedData['status'] ?? 'pending',
         ]);
 
         $order->orderNumber()->create([
             'number' => $this->generateOrderNumber(),
         ]);
 
-        $order->details()->createMany($validatedData['details']);
-        $order->status()->create(['status' => $validatedData['status'] ?? 'waiting']);
         $order->prefixCode()->create(['code' => $this->generateUniquePrefixCode()]);
 
         if (!empty($validatedData['store_link']['url'])) {
@@ -78,14 +80,15 @@ class OrderController extends Controller
         $orderUrl = route('orders.show', ['id' => $order->id]);
         Mail::to($email)->send(new OrderCreated($order, $orderUrl));
 
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 201);
+        return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 201);
     }
+
 
 
 
     public function show($id): JsonResponse
     {
-        $order = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'factoryOrderStatuses.factory', 'dates')->findOrFail($id);
+        $order = Order::with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'factoryOrderStatuses.factory', 'dates', 'files')->findOrFail($id);
         return response()->json($order);
     }
 
@@ -93,18 +96,27 @@ class OrderController extends Controller
     {
         $validatedData = $request->validate([
             'details' => 'required|array',
-            'details.*.description' => 'required|string',
-            'details.*.quantity' => 'required|integer|min:1',
-            'details.*.name' => 'required|string',
+            'description' => 'required|string',
+            'quantity' => 'required|integer|min:1',
+            'name' => 'required|string',
             'status' => 'nullable|string',
             'factories' => 'required|array',
             'factories.*.id' => 'required|exists:factories,id',
             'factories.*.status' => 'nullable|string',
             'store_link.url' => 'nullable|url',
             'finish_date' => 'nullable|string',
+            'files' => 'nullable|array',
+            'files.*' => 'file|mimes:step,dxf,png,jpg,eps|max:2048',
         ]);
 
         $order = Order::findOrFail($id);
+
+        $order->update([
+            'description' => $validatedData['description'],
+            'quantity' => $validatedData['quantity'],
+            'name' => $validatedData['name'],
+            'status' => $validatedData['status'] ?? $order->status,
+        ]);
 
         $order->details()->delete();
         $order->details()->createMany($validatedData['details']);
@@ -134,10 +146,23 @@ class OrderController extends Controller
             }
         }
 
-        $order->dates()->update(['finish_date' => $validatedData['finish_date'] ?? null]);
+        if (isset($validatedData['finish_date'])) {
+            $order->dates()->update(['finish_date' => $validatedData['finish_date']]);
+        }
 
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory'), 200);
+        if (!empty($validatedData['files'])) {
+            foreach ($order->files as $existingFile) {
+                $existingFile->delete();
+            }
+            foreach ($validatedData['files'] as $file) {
+                $path = $file->store("uploads/orders/{$order->id}", 'public');
+                $order->files()->create(['path' => $path]);
+            }
+        }
+
+        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 200);
     }
+
 
 
     public function destroy($id): JsonResponse
