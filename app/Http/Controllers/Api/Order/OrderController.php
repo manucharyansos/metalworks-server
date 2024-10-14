@@ -24,6 +24,7 @@ class OrderController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        Log::info($request->file('files'));
         $validatedData = $request->validate([
             'client_id' => 'required|exists:clients,id',
             'description' => 'required|string',
@@ -36,7 +37,7 @@ class OrderController extends Controller
             'store_link.url' => 'nullable|url',
             'finish_date' => 'nullable|string',
             'files' => 'nullable|array',
-            'files.*' => 'file|mimes:step,dxf,png,jpg,eps|max:2048',
+            'files.*' => 'file|mimes:step,dxf,png,jpg,eps,pdf|max:2048',
         ]);
 
         $order = Order::create([
