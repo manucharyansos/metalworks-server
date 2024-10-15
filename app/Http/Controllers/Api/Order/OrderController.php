@@ -96,7 +96,6 @@ class OrderController extends Controller
     public function update(Request $request, $id): JsonResponse
     {
         $validatedData = $request->validate([
-            'details' => 'required|array',
             'description' => 'required|string',
             'quantity' => 'required|integer|min:1',
             'name' => 'required|string',
@@ -107,7 +106,7 @@ class OrderController extends Controller
             'store_link.url' => 'nullable|url',
             'finish_date' => 'nullable|string',
             'files' => 'nullable|array',
-            'files.*' => 'file|mimes:step,dxf,png,jpg,eps|max:2048',
+            'files.*' => 'file|mimes:step,dxf,png,jpg,eps,pdf|max:2048',
         ]);
 
         $order = Order::findOrFail($id);
