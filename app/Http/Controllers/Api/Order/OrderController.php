@@ -24,7 +24,6 @@ class OrderController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        Log::info($request->file('files'));
         $validatedData = $request->validate([
             'client_id' => 'required|exists:clients,id',
             'description' => 'required|string',
@@ -95,6 +94,7 @@ class OrderController extends Controller
 
     public function update(Request $request, $id): JsonResponse
     {
+        \Log::info($request->all());
         $validatedData = $request->validate([
             'description' => 'required|string',
             'quantity' => 'required|integer|min:1',
@@ -118,15 +118,6 @@ class OrderController extends Controller
             'status' => $validatedData['status'] ?? $order->status,
         ]);
 
-        $order->details()->delete();
-        $order->details()->createMany($validatedData['details']);
-
-        if ($order->status) {
-            $order->status->update(['status' => $validatedData['status'] ?? 'waiting']);
-        } else {
-            $order->status()->create(['status' => $validatedData['status'] ?? 'waiting']);
-        }
-
         if (!empty($validatedData['store_link']['url'])) {
             $order->storeLink()->updateOrCreate(
                 ['order_id' => $order->id],
@@ -147,7 +138,10 @@ class OrderController extends Controller
         }
 
         if (isset($validatedData['finish_date'])) {
-            $order->dates()->update(['finish_date' => $validatedData['finish_date']]);
+            $order->dates()->updateOrCreate(
+                ['order_id' => $order->id],
+                ['finish_date' => $validatedData['finish_date']]
+            );
         }
 
         if (!empty($validatedData['files'])) {
@@ -160,7 +154,7 @@ class OrderController extends Controller
             }
         }
 
-        return response()->json($order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 200);
+        return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 200);
     }
 
 
