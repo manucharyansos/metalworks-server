@@ -8,7 +8,6 @@ use App\Models\Order;
 use App\Models\PrefixCode;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 class OrderController extends Controller
@@ -94,13 +93,12 @@ class OrderController extends Controller
 
     public function update(Request $request, $id): JsonResponse
     {
-        \Log::info($request->all());
         $validatedData = $request->validate([
             'description' => 'required|string',
             'quantity' => 'required|integer|min:1',
             'name' => 'required|string',
             'status' => 'nullable|string',
-            'factories' => 'required|array',
+            'factories' => 'nullable|array',
             'factories.*.id' => 'required|exists:factories,id',
             'factories.*.status' => 'nullable|string',
             'store_link.url' => 'nullable|url',
@@ -110,14 +108,12 @@ class OrderController extends Controller
         ]);
 
         $order = Order::findOrFail($id);
-
         $order->update([
             'description' => $validatedData['description'],
             'quantity' => $validatedData['quantity'],
             'name' => $validatedData['name'],
             'status' => $validatedData['status'] ?? $order->status,
         ]);
-
         if (!empty($validatedData['store_link']['url'])) {
             $order->storeLink()->updateOrCreate(
                 ['order_id' => $order->id],
@@ -156,6 +152,7 @@ class OrderController extends Controller
 
         return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 200);
     }
+
 
 
 

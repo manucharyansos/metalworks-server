@@ -22,6 +22,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::group(['prefix'=>'admin', 'middleware' => 'admin'],function (){
             Route::resource('/', AdminController::class);
             Route::resource('order', OrderController::class);
+            Route::post('update/{order}', [OrderController::class, 'update']);
         });
 
 

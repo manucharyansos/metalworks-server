@@ -40,7 +40,6 @@ class Order extends Model
         return $this->hasMany(File::class);
     }
 
-
     public function factories(): BelongsToMany
     {
         return $this->belongsToMany(Factory::class, 'factory_order', 'order_id', 'factory_id');
