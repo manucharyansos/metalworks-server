@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Auth\AuthController;
+use App\Http\Controllers\Api\Categories\CategoryController;
 use App\Http\Controllers\Api\Client\ClientController;
 use App\Http\Controllers\Api\Factory\FactoryController;
 use App\Http\Controllers\Api\Materials\MaterialsController;
@@ -48,8 +49,8 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
         Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
     });
-    Route::group(['prefix'=>'nav'],function (){
-        Route::resource('services', ServiceController::class);
+    Route::group(['prefix'=>'categories'],function (){
+        Route::resource('/category', CategoryController::class);
     });
     Route::group(['prefix'=>'materials'],function (){
         Route::resource('/', MaterialsController::class);

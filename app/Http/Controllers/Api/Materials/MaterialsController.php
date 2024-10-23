@@ -58,9 +58,11 @@ class MaterialsController extends Controller
 
         $validatedData = $request->validate([
             'name' => 'required|string|max:255',
-            'title' => 'required|string',
+            'description' => 'required|string',
             'size' => 'required|string',
+            'price' => 'required|numeric',
             'image' => 'required|image|mimes:jpg,png,jpeg,gif,svg|max:2048',
+            'category_id' => 'required|exists:categories,id'
         ]);
 
         $imageName = time() . '-' . $request->file('image')->getClientOriginalName();
@@ -68,15 +70,14 @@ class MaterialsController extends Controller
 
         $materials = Materials::create([
             'name' => $validatedData['name'],
-            'title' => $validatedData['title'],
+            'description' => $validatedData['description'],
             'size' => $validatedData['size'],
+            'price' => $validatedData['price'],
             'image' => 'materials-images/' . $imageName,
+            'category_id' => $validatedData['category_id'],
         ]);
-
-        $materials->save();
-
         return response()->json([
-            'message' => 'Materials created successfully',
+            'message' => 'Material created successfully',
             'materials' => $materials,
         ], 201);
     }
