@@ -31,37 +31,12 @@ class MaterialsController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-//        $request->validate([
-//            'name' => 'required|string',
-//            'title' => 'required|string',
-//            'size' => 'required|string',
-//            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
-//        ]);
-//
-//        $materials = new Materials();
-//        $materials->name = $request->name;
-//        $materials->title = $request->title;
-//        $materials->size = $request->size;
-//
-//        if ($request->hasFile('image')) {
-//            $image = $request->file('image');
-//            $imageName = time() . '.' . $image->getClientOriginalExtension();
-//            $image->move(public_path('materials-images'), $imageName);
-//            $materials->image = $imageName;
-//        }
-//        $materials->save();
-//
-//        return response()->json([
-//            'message' => 'Materials created successfully',
-//            'materials' => $materials,
-//        ], 201);
-
         $validatedData = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'required|string',
             'size' => 'required|string',
             'price' => 'required|numeric',
-            'image' => 'required|image|mimes:jpg,png,jpeg,gif,svg|max:2048',
+            'image' => 'required|file|mimes:jpg,jpeg,png,webp,gif,svg|max:2048',
             'category_id' => 'required|exists:categories,id'
         ]);
 
