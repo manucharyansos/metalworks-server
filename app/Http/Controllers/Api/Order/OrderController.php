@@ -35,7 +35,7 @@ class OrderController extends Controller
             'store_link.url' => 'nullable|url',
             'finish_date' => 'nullable|string',
             'files' => 'nullable|array',
-            'files.*' => 'file|mimes:step,dxf, DXF, png,jpg,eps,pdf|max:2048',
+            'files.*' => 'file|mimes:step,dxf,DXF,png,jpg,jpeg,eps,pdf|max:2048',
         ]);
 
         $order = Order::create([

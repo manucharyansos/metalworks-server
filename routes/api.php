@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\Factory\FactoryController;
 use App\Http\Controllers\Api\Materials\MaterialsController;
 use App\Http\Controllers\Api\Nav\ServiceController;
 use App\Http\Controllers\Api\Order\OrderController;
+use App\Http\Controllers\Api\Users\UserController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\RoleController;
 use Illuminate\Support\Facades\Route;
@@ -26,14 +27,19 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::post('update/{order}', [OrderController::class, 'update']);
         });
 
-
         Route::group(['prefix'=>'orders', 'middleware' => 'check.order'], function () {
             Route::resource('order', OrderController::class);
             Route::resource('materials', MaterialsController::class);
         });
+
+        Route::group(['prefix'=>'users'], function () {
+            Route::resource('/', UserController::class);
+        });
+
         Route::group(['prefix'=>'clients'], function () {
             Route::resource('client', ClientController::class);
         });
+
         Route::group(['prefix'=>'factories'], function () {
             Route::apiResource('factory', FactoryController::class);
             Route::get('/getOrdersByFactories', [FactoryController::class, 'getOrdersByFactories']);
