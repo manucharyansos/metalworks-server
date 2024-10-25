@@ -98,7 +98,7 @@ class OrderController extends Controller
             'quantity' => 'required|integer|min:1',
             'name' => 'required|string',
             'status' => 'nullable|string',
-            'factories' => 'nullable|array',
+            'factories' => 'required|array',
             'factories.*.id' => 'required|exists:factories,id',
             'factories.*.status' => 'nullable|string',
             'store_link.url' => 'nullable|url',
@@ -106,6 +106,7 @@ class OrderController extends Controller
             'files' => 'nullable|array',
             'files.*' => 'file|mimes:step,dxf,png,jpg,eps,pdf|max:2048',
         ]);
+        Log::info($validatedData['factories']);
 
         $order = Order::findOrFail($id);
         $order->update([
@@ -114,6 +115,7 @@ class OrderController extends Controller
             'name' => $validatedData['name'],
             'status' => $validatedData['status'] ?? $order->status,
         ]);
+
         if (!empty($validatedData['store_link']['url'])) {
             $order->storeLink()->updateOrCreate(
                 ['order_id' => $order->id],
@@ -152,6 +154,7 @@ class OrderController extends Controller
 
         return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 200);
     }
+
 
 
 
