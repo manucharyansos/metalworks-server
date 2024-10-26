@@ -115,7 +115,7 @@ class FactoryController extends Controller
         }
 
         return response()->json(
-            $order->load('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses'),
+            $order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses'),
             200
         );
     }
@@ -153,7 +153,7 @@ class FactoryController extends Controller
         $orders = Order::whereHas('factories', function ($query) use ($factoryIdsArray) {
             $query->whereIn('factories.id', $factoryIdsArray);
         })
-            ->with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses') // ՈՒՇԱԴՐՈՒԹՅՈՒՆ
+            ->with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses') // ՈՒՇԱԴՐՈՒԹՅՈՒՆ
             ->get();
 
         return response()->json($orders);

@@ -12,7 +12,7 @@ class AdminController extends Controller
 {
     public function getOrders(): JsonResponse
     {
-        $orders = Order::with('orderNumber', 'details', 'status', 'prefixCode', 'storeLink')->get();
+        $orders = Order::with('orderNumber', 'prefixCode', 'storeLink')->get();
         return response()->json($orders);
     }
 

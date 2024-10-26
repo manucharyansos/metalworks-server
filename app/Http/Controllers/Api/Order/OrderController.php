@@ -61,7 +61,7 @@ class OrderController extends Controller
                 $order->factories()->attach($factory['id']);
                 $order->factoryOrderStatuses()->create([
                     'factory_id' => $factory['id'],
-                    'status' => $factory['status'] ?? 'waiting',
+                    'status' => $factory['status'],
                 ]);
             }
         }
@@ -106,7 +106,6 @@ class OrderController extends Controller
             'files' => 'nullable|array',
             'files.*' => 'file|mimes:step,dxf,png,jpg,eps,pdf|max:2048',
         ]);
-        Log::info($validatedData['factories']);
 
         $order = Order::findOrFail($id);
         $order->update([
@@ -130,7 +129,7 @@ class OrderController extends Controller
             foreach ($validatedData['factories'] as $factory) {
                 $order->factoryOrderStatuses()->updateOrCreate(
                     ['factory_id' => $factory['id'], 'order_id' => $order->id],
-                    ['status' => $factory['status'] ?? 'waiting']
+                    ['status' => $factory['status'] ?? 'pending']
                 );
             }
         }
