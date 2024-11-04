@@ -12,27 +12,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('clients', function (Blueprint $table) {
-            $table->engine = 'InnoDB';
             $table->id();
-            $table->string('name')->nullable();
-            $table->string('number')->nullable();
-            $table->string('AVC')->nullable();
-            $table->string('group')->nullable();
-            $table->boolean('VAT_payer')->nullable()->default(false);
-            $table->string('legal_address')->nullable();
-            $table->string('valid_address')->nullable();
-            $table->string('VAT_of_the_manager')->nullable();
-            $table->string('leadership_position')->nullable();
-            $table->string('accountants_VAT')->nullable();
-            $table->string('accountant_position')->nullable();
-            $table->string('registration_of_the_individual')->nullable();
-            $table->string('type_of_ID_card')->nullable();
-            $table->string('passport_number')->nullable();
-            $table->string('email_address')->nullable();
-//            $table->foreignId('user_id')->nullable()->constrained()->onDelete('cascade');
-            $table->string('contract')->nullable();
-            $table->date('contract_date')->nullable();
-            $table->string('sales_discount_percentage')->nullable();
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->enum('type', ['physPerson', 'legalEntity']);
+            $table->string('name');
+            $table->string('last_name')->nullable();
+            $table->string('phone');
+            $table->string('second_phone')->nullable();
+            $table->string('address')->nullable();
+            $table->string('company_name')->nullable();
             $table->timestamps();
         });
 

@@ -25,26 +25,30 @@ class ClientController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'number' => 'required|string|max:255',
-            'AVC' => 'required|string|max:255',
-            'group' => 'required|string|max:255',
-            'VAT_payer' => 'required|boolean',
-            'legal_address' => 'required|string|max:255',
-            'valid_address' => 'required|string|max:255',
-            'VAT_of_the_manager' => 'required|string|max:255',
-            'leadership_position' => 'required|string|max:255',
-            'accountants_VAT' => 'required|string|max:255',
-            'accountant_position' => 'required|string|max:255',
-            'registration_of_the_individual' => 'required|string|max:255',
-            'type_of_ID_card' => 'required|string|max:255',
-            'passport_number' => 'required|string|max:255',
-            'contract' => 'required|string|max:255',
-            'contract_date' => 'required|string|max:255',
-            'sales_discount_percentage' => 'required|string|max:255',
-            'email_address' => 'required|email|unique:clients,email_address',
-//            'user_id' => 'required|exists:users,id',
+            'user_id' => 'required|exists:users,id',
+            'email' => 'required|email|unique:users,email',
+            'type' => 'required|in:physPerson,legalEntity',
         ]);
+
+        if ($validatedData['type'] === 'physPerson') {
+            $validatedData = array_merge($validatedData, $request->validate([
+                'name' => 'required|string',
+                'last_name' => 'nullable|string',
+                'phone' => 'required|string',
+                'second_phone' => 'nullable|string',
+                'address' => 'nullable|string',
+            ]));
+        }
+        else if ($validatedData['type'] === 'legalEntity') {
+            $validatedData = array_merge($validatedData, $request->validate([
+                'name' => 'required|string',
+                'phone' => 'required|string',
+                'address' => 'nullable|string',
+                'company_name' => 'required|string',
+                'AVC' => 'required|string',
+                'accountant' => 'required|string',
+            ]));
+        }
 
         $client = Client::create($validatedData);
 

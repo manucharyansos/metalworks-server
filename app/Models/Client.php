@@ -12,31 +12,20 @@ class Client extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
+        'type',
         'name',
-        'number',
-        'AVC',
-        'group',
-        'VAT_payer',
-        'legal_address',
-        'valid_address',
-        'VAT_of_the_manager',
-        'leadership_position',
-        'accountants_VAT',
-        'accountant_position',
-        'registration_of_the_individual',
-        'type_of_ID_card',
-        'passport_number',
-        'email_address',
-        'contract',
-        'contract_date',
-        'sales_discount_percentage',
-//        'user_id'
+        'last_name',
+        'phone',
+        'second_phone',
+        'address',
+        'company_name'
     ];
 
-//    public function user(): BelongsTo
-//    {
-//        return $this->belongsTo(User::class);
-//    }
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
 
     public function orders(): HasMany
     {

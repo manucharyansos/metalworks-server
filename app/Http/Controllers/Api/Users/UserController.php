@@ -14,15 +14,14 @@ class UserController extends Controller
      */
     public function index(): JsonResponse
     {
-        $user = User::where('id', 3)->first();
-
-        if (!$user) {
+        $users = User::where('role_id', 3)->get();
+        if ($users->isEmpty()) {
             return response()->json([
-                'message' => 'User not found'
+                'message' => 'No users found with role_id 3'
             ], 404);
         }
 
-        return response()->json($user);
+        return response()->json($users);
     }
 
     /**
@@ -62,7 +61,35 @@ class UserController extends Controller
      */
     public function update(Request $request, string $id)
     {
-        //
+        $validatedData = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'email' => 'required|email|unique:users,email',
+            'type' => 'required|in:physPerson,legalEntity',
+        ]);
+
+        if ($validatedData['type'] === 'physPerson') {
+            $validatedData = array_merge($validatedData, $request->validate([
+                'name' => 'required|string',
+                'last_name' => 'nullable|string',
+                'phone' => 'required|string',
+                'second_phone' => 'nullable|string',
+                'address' => 'nullable|string',
+            ]));
+        }
+        else if ($validatedData['type'] === 'legalEntity') {
+            $validatedData = array_merge($validatedData, $request->validate([
+                'name' => 'required|string',
+                'phone' => 'required|string',
+                'address' => 'nullable|string',
+                'company_name' => 'required|string',
+                'AVC' => 'required|string',
+                'accountant' => 'required|string',
+            ]));
+        }
+
+        $client = User::create($validatedData);
+
+        return response()->json($client, 201);
     }
 
     /**
