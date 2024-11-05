@@ -62,8 +62,6 @@ class UserController extends Controller
     public function update(Request $request, string $id)
     {
         $validatedData = $request->validate([
-            'user_id' => 'required|exists:users,id',
-            'email' => 'required|email|unique:users,email',
             'type' => 'required|in:physPerson,legalEntity',
         ]);
 
@@ -75,8 +73,7 @@ class UserController extends Controller
                 'second_phone' => 'nullable|string',
                 'address' => 'nullable|string',
             ]));
-        }
-        else if ($validatedData['type'] === 'legalEntity') {
+        } elseif ($validatedData['type'] === 'legalEntity') {
             $validatedData = array_merge($validatedData, $request->validate([
                 'name' => 'required|string',
                 'phone' => 'required|string',
@@ -86,10 +83,9 @@ class UserController extends Controller
                 'accountant' => 'required|string',
             ]));
         }
+        $user = User::updateOrCreate(['id' => $id], $validatedData);
 
-        $client = User::create($validatedData);
-
-        return response()->json($client, 201);
+        return response()->json($user, 200);
     }
 
     /**

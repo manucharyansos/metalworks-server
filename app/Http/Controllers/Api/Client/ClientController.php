@@ -22,38 +22,38 @@ class ClientController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request): JsonResponse
-    {
-        $validatedData = $request->validate([
-            'user_id' => 'required|exists:users,id',
-            'email' => 'required|email|unique:users,email',
-            'type' => 'required|in:physPerson,legalEntity',
-        ]);
-
-        if ($validatedData['type'] === 'physPerson') {
-            $validatedData = array_merge($validatedData, $request->validate([
-                'name' => 'required|string',
-                'last_name' => 'nullable|string',
-                'phone' => 'required|string',
-                'second_phone' => 'nullable|string',
-                'address' => 'nullable|string',
-            ]));
-        }
-        else if ($validatedData['type'] === 'legalEntity') {
-            $validatedData = array_merge($validatedData, $request->validate([
-                'name' => 'required|string',
-                'phone' => 'required|string',
-                'address' => 'nullable|string',
-                'company_name' => 'required|string',
-                'AVC' => 'required|string',
-                'accountant' => 'required|string',
-            ]));
-        }
-
-        $client = Client::create($validatedData);
-
-        return response()->json($client, 201);
-    }
+//    public function store(Request $request): JsonResponse
+//    {
+//        $validatedData = $request->validate([
+//            'user_id' => 'required|exists:users,id',
+//            'email' => 'required|email|unique:users,email',
+//            'type' => 'required|in:physPerson,legalEntity',
+//        ]);
+//
+//        if ($validatedData['type'] === 'physPerson') {
+//            $validatedData = array_merge($validatedData, $request->validate([
+//                'name' => 'required|string',
+//                'last_name' => 'nullable|string',
+//                'phone' => 'required|string',
+//                'second_phone' => 'nullable|string',
+//                'address' => 'nullable|string',
+//            ]));
+//        }
+//        else if ($validatedData['type'] === 'legalEntity') {
+//            $validatedData = array_merge($validatedData, $request->validate([
+//                'name' => 'required|string',
+//                'phone' => 'required|string',
+//                'address' => 'nullable|string',
+//                'company_name' => 'required|string',
+//                'AVC' => 'required|string',
+//                'accountant' => 'required|string',
+//            ]));
+//        }
+//
+//        $client = Client::create($validatedData);
+//
+//        return response()->json($client, 201);
+//    }
 
     /**
      * Display the specified resource.
