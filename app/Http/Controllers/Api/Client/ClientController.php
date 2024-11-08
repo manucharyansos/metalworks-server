@@ -67,31 +67,39 @@ class ClientController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Client $client): JsonResponse
+    public function update(Request $request): JsonResponse
     {
+        // Validate the basic type field
         $validatedData = $request->validate([
-            'name' => 'sometimes|required|string|max:255',
-            'number' => 'sometimes|required|string',
-            'AVC' => 'sometimes|required|string|max:255',
-            'group' => 'sometimes|required|string|max:255',
-            'VAT_payer' => 'sometimes|required|string|max:255',
-            'legal_address' => 'sometimes|required|string|max:255',
-            'valid_address' => 'sometimes|required|string|max:255',
-            'VAT_of_the_manager' => 'sometimes|required|string|max:255',
-            'leadership_position' => 'sometimes|required|string|max:255',
-            'accountants_VAT' => 'sometimes|required|string|max:255',
-            'accountant_position' => 'sometimes|required|string|max:255',
-            'registration_of_the_individual' => 'sometimes|required|string|max:255',
-            'type_of_ID_card' => 'sometimes|required|string|max:255',
-            'passport_number' => 'sometimes|required|string|max:255',
-            'contract' => 'sometimes|required|string|max:255',
-            'contract_date' => 'sometimes|required|string|max:255',
-            'sales_discount_percentage' => 'sometimes|required|string|max:255',
-            'email_address' => 'sometimes|required|email|unique:clients,email_address,' . $client->id,
-//            'user_id' => 'sometimes|required|exists:users,id',
+            'type' => 'required|in:physPerson,legalEntity',
         ]);
 
-        $client->update($validatedData);
+        // Additional validation based on client type
+        if ($validatedData['type'] === 'physPerson') {
+            $validatedData = array_merge($validatedData, $request->validate([
+                'name' => 'required|string',
+                'last_name' => 'nullable|string',
+                'phone' => 'required|string',
+                'second_phone' => 'nullable|string',
+                'address' => 'nullable|string',
+            ]));
+        } elseif ($validatedData['type'] === 'legalEntity') {
+            $validatedData = array_merge($validatedData, $request->validate([
+                'name' => 'required|string',
+                'phone' => 'required|string',
+                'address' => 'nullable|string',
+                'company_name' => 'required|string',
+                'AVC' => 'required|string',
+                'accountant' => 'required|string',
+            ]));
+        }
+
+        // Update or create client data for the authenticated user
+        $user = auth()->user();
+        $client = $user->client()->updateOrCreate(
+            ['user_id' => $user->id],
+            $validatedData
+        );
 
         return response()->json($client, 200);
     }

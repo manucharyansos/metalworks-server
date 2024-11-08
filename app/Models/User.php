@@ -7,8 +7,10 @@ use DateTime;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -25,10 +27,6 @@ class User extends Authenticatable
         'email',
         'password',
         'role_id',
-        'last_name',
-        'phone',
-        'second_phone',
-        'address'
     ];
 
     /**
@@ -54,6 +52,11 @@ class User extends Authenticatable
     public function role(): BelongsTo
     {
         return $this->belongsTo(Role::class, 'role_id');
+    }
+
+    public function client(): HasOne
+    {
+        return $this->hasOne(Client::class, 'user_id');
     }
 
 

@@ -59,33 +59,9 @@ class UserController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(Request $request, string $id): JsonResponse
     {
-        $validatedData = $request->validate([
-            'type' => 'required|in:physPerson,legalEntity',
-        ]);
 
-        if ($validatedData['type'] === 'physPerson') {
-            $validatedData = array_merge($validatedData, $request->validate([
-                'name' => 'required|string',
-                'last_name' => 'nullable|string',
-                'phone' => 'required|string',
-                'second_phone' => 'nullable|string',
-                'address' => 'nullable|string',
-            ]));
-        } elseif ($validatedData['type'] === 'legalEntity') {
-            $validatedData = array_merge($validatedData, $request->validate([
-                'name' => 'required|string',
-                'phone' => 'required|string',
-                'address' => 'nullable|string',
-                'company_name' => 'required|string',
-                'AVC' => 'required|string',
-                'accountant' => 'required|string',
-            ]));
-        }
-        $user = User::updateOrCreate(['id' => $id], $validatedData);
-
-        return response()->json($user, 200);
     }
 
     /**
