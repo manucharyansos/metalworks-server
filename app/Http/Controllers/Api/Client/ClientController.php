@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Client;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -22,38 +23,32 @@ class ClientController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-//    public function store(Request $request): JsonResponse
-//    {
-//        $validatedData = $request->validate([
-//            'user_id' => 'required|exists:users,id',
-//            'email' => 'required|email|unique:users,email',
-//            'type' => 'required|in:physPerson,legalEntity',
-//        ]);
-//
-//        if ($validatedData['type'] === 'physPerson') {
-//            $validatedData = array_merge($validatedData, $request->validate([
-//                'name' => 'required|string',
-//                'last_name' => 'nullable|string',
-//                'phone' => 'required|string',
-//                'second_phone' => 'nullable|string',
-//                'address' => 'nullable|string',
-//            ]));
-//        }
-//        else if ($validatedData['type'] === 'legalEntity') {
-//            $validatedData = array_merge($validatedData, $request->validate([
-//                'name' => 'required|string',
-//                'phone' => 'required|string',
-//                'address' => 'nullable|string',
-//                'company_name' => 'required|string',
-//                'AVC' => 'required|string',
-//                'accountant' => 'required|string',
-//            ]));
-//        }
-//
-//        $client = Client::create($validatedData);
-//
-//        return response()->json($client, 201);
-//    }
+
+
+    public function store(Request $request): JsonResponse
+    {
+        // Validate the user data
+        $validatedUserData = $request->validate([
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        // Validate client-specific data
+        $validatedClientData = $this->getArr($request);
+
+        // Create a new user
+        $user = User::create([
+            'name' => $validatedClientData['name'],
+            'email' => $validatedUserData['email'],
+            'password' => bcrypt($validatedUserData['password']),
+        ]);
+
+        // Associate the client data with the user
+        $client = $user->client()->create($validatedClientData);
+
+        return response()->json($client, 201);
+    }
+
 
     /**
      * Display the specified resource.
@@ -69,30 +64,7 @@ class ClientController extends Controller
      */
     public function update(Request $request): JsonResponse
     {
-        // Validate the basic type field
-        $validatedData = $request->validate([
-            'type' => 'required|in:physPerson,legalEntity',
-        ]);
-
-        // Additional validation based on client type
-        if ($validatedData['type'] === 'physPerson') {
-            $validatedData = array_merge($validatedData, $request->validate([
-                'name' => 'required|string',
-                'last_name' => 'nullable|string',
-                'phone' => 'required|string',
-                'second_phone' => 'nullable|string',
-                'address' => 'nullable|string',
-            ]));
-        } elseif ($validatedData['type'] === 'legalEntity') {
-            $validatedData = array_merge($validatedData, $request->validate([
-                'name' => 'required|string',
-                'phone' => 'required|string',
-                'address' => 'nullable|string',
-                'company_name' => 'required|string',
-                'AVC' => 'required|string',
-                'accountant' => 'required|string',
-            ]));
-        }
+        $validatedData = $this->getArr($request);
 
         // Update or create client data for the authenticated user
         $user = auth()->user();
@@ -112,5 +84,36 @@ class ClientController extends Controller
         $client->delete();
 
         return response()->json(['message' => 'Client deleted successfully'], 200);
+    }
+
+    /**
+     * @param Request $request
+     * @return array
+     */
+    public function getArr(Request $request): array
+    {
+        $validatedClientData = $request->validate([
+            'type' => 'required|in:physPerson,legalEntity',
+        ]);
+
+        if ($validatedClientData['type'] === 'physPerson') {
+            $validatedClientData = array_merge($validatedClientData, $request->validate([
+                'name' => 'required|string',
+                'last_name' => 'nullable|string',
+                'phone' => 'required|string',
+                'second_phone' => 'nullable|string',
+                'address' => 'nullable|string',
+            ]));
+        } elseif ($validatedClientData['type'] === 'legalEntity') {
+            $validatedClientData = array_merge($validatedClientData, $request->validate([
+                'name' => 'required|string',
+                'phone' => 'required|string',
+                'address' => 'nullable|string',
+                'company_name' => 'required|string',
+                'AVC' => 'required|string',
+                'accountant' => 'required|string',
+            ]));
+        }
+        return $validatedClientData;
     }
 }

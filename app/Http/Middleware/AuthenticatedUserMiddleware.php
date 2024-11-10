@@ -14,7 +14,7 @@ class AuthenticatedUserMiddleware
      * @param  \Closure  $next
      * @return mixed
      */
-    public function handle($request, Closure $next)
+    public function handle($request, Closure $next): mixed
     {
         if (!Auth::check() && Auth::user()->role('authenticatedUser')) {
             return response()->json(['error' => 'Unauthorized'], 401);

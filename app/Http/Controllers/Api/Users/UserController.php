@@ -14,7 +14,8 @@ class UserController extends Controller
      */
     public function index(): JsonResponse
     {
-        $users = User::where('role_id', 3)->get();
+        $users = User::where('role_id', 3)->with('client')->get();
+
         if ($users->isEmpty()) {
             return response()->json([
                 'message' => 'No users found with role_id 3'

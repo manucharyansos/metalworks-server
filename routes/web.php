@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\Mail\MailController;
 use App\Http\Controllers\ServiceController;
 use Illuminate\Support\Facades\Route;
 
