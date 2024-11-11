@@ -66,10 +66,9 @@ class ClientController extends Controller
     {
         $validatedData = $this->getArr($request);
 
-        // Update or create client data for the authenticated user
         $user = auth()->user();
         $client = $user->client()->updateOrCreate(
-            ['user_id' => $user->id],
+            ['user_id' => $user->id, 'role_id' => 3],
             $validatedData
         );
 

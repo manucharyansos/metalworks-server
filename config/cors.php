@@ -23,7 +23,6 @@ return [
 
     'allowed_origins' => ['https://metalworks.am', 'https://api.metalworks.am'],
 
-
     'allowed_origins_patterns' => [],
 
     'allowed_headers' => ['*'],

@@ -53,7 +53,7 @@ class AuthController extends Controller
 
             return response()->json(['error' => 'Invalid credentials'], 401);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Login failed. Please try again later.'], 500);
+            return response()->json(['error' => $e], 500);
         }
     }
 
