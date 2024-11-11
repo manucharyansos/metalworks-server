@@ -67,10 +67,13 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         if (auth()->check()) {
-            return response()->json(auth()->user(), 200);
-        }
-        return response()->json(['error' => 'Unauthorized'], 401);
-    }
+            $user = auth()->user();
+            $user->load('role');
 
+            return response()->json($user, 200);
+        } else {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+    }
 
 }
