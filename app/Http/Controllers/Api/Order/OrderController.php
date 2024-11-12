@@ -39,7 +39,7 @@ class OrderController extends Controller
         ]);
 
         $order = Order::create([
-            'client_id' => $validatedData['client_id'],
+            'user_id' => $validatedData['client_id'],
             'name' => $validatedData['name'],
             'quantity' => $validatedData['quantity'],
             'description' => $validatedData['description'],
