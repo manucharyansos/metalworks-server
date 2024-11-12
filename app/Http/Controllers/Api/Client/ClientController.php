@@ -41,6 +41,7 @@ class ClientController extends Controller
             'name' => $validatedClientData['name'],
             'email' => $validatedUserData['email'],
             'password' => bcrypt($validatedUserData['password']),
+            'role_id' => 3
         ]);
 
         // Associate the client data with the user
