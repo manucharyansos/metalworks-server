@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\OrderCreated;
 use App\Models\Order;
 use App\Models\PrefixCode;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -24,7 +25,7 @@ class OrderController extends Controller
     public function store(Request $request): JsonResponse
     {
         $validatedData = $request->validate([
-            'client_id' => 'required|exists:clients,id',
+            'user_id' => 'required|exists:users,id',
             'description' => 'required|string',
             'quantity' => 'required|integer|min:1',
             'name' => 'required|string',
@@ -39,7 +40,7 @@ class OrderController extends Controller
         ]);
 
         $order = Order::create([
-            'client_id' => $validatedData['client_id'],
+            'user_id' => $validatedData['user_id'],
             'name' => $validatedData['name'],
             'quantity' => $validatedData['quantity'],
             'description' => $validatedData['description'],
@@ -75,12 +76,13 @@ class OrderController extends Controller
             }
         }
 
-        $email = $order->client->email_address;
+        $userEmail = User::find($validatedData['user_id'])->email;
         $orderUrl = route('orders.show', ['id' => $order->id]);
-        Mail::to($email)->send(new OrderCreated($order, $orderUrl));
+        Mail::to($userEmail)->send(new OrderCreated($order, $orderUrl));
 
         return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 201);
     }
+
 
 
 

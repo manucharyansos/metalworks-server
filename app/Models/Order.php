@@ -14,7 +14,7 @@ class Order extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['client_id', 'name', 'quantity', 'description', 'status'];
+    protected $fillable = ['user_id', 'name', 'quantity', 'description', 'status'];
 
     public function orderNumber(): HasOne
     {
@@ -45,7 +45,7 @@ class Order extends Model
         return $this->belongsToMany(Factory::class, 'factory_order', 'order_id', 'factory_id');
     }
 
-    public function client(): BelongsTo
+    public function user(): BelongsTo
     {
         return $this->belongsTo(Client::class);
     }
