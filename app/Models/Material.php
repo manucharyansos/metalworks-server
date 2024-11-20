@@ -6,14 +6,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Materials extends Model
+class Material extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'description', 'price', 'size', 'image', 'category_id'];
+    protected $fillable = ['name', 'description', 'size', 'price', 'image', 'material_category_id'];
 
     public function category(): BelongsTo
     {
-        return $this->belongsTo(Category::class);
+        return $this->belongsTo(MaterialCategory::class);
     }
 }
