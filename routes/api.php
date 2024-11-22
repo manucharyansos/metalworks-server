@@ -29,7 +29,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
         Route::group(['prefix'=>'orders', 'middleware' => 'check.order'], function () {
             Route::resource('order', OrderController::class);
-            Route::resource('materials', MaterialsController::class);
+//            Route::resource('materials', MaterialsController::class);
         });
 
         Route::group(['prefix'=>'users'], function () {
@@ -56,10 +56,10 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
     });
     Route::group(['prefix'=>'categories'],function (){
-        Route::resource('/category', CategoryController::class);
+//        Route::resource('/category', CategoryController::class);
     });
     Route::group(['prefix'=>'materials'],function (){
-        Route::resource('/', MaterialsController::class);
+//        Route::resource('/', MaterialsController::class);
     });
 
     Route::post('/contact', [ContactController::class, 'store']);

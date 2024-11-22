@@ -27,16 +27,13 @@ class ClientController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        // Validate the user data
         $validatedUserData = $request->validate([
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6|confirmed',
         ]);
 
-        // Validate client-specific data
         $validatedClientData = $this->getArr($request);
 
-        // Create a new user
         $user = User::create([
             'name' => $validatedClientData['name'],
             'email' => $validatedUserData['email'],
@@ -44,7 +41,6 @@ class ClientController extends Controller
             'role_id' => 3
         ]);
 
-        // Associate the client data with the user
         $client = $user->client()->create($validatedClientData);
 
         return response()->json($client, 201);
@@ -63,18 +59,23 @@ class ClientController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request): JsonResponse
+    public function update(Request $request, $id): JsonResponse
     {
         $validatedData = $this->getArr($request);
 
-        $user = auth()->user();
-        $client = $user->client()->updateOrCreate(
-            ['user_id' => $user->id, 'role_id' => 3],
+        $user = User::findOrFail($id);
+        $user->update(['name' => $validatedData['name']]);
+        $user->client()->updateOrCreate(
+            ['user_id' => $user->id],
             $validatedData
         );
 
-        return response()->json($client, 200);
+        return response()->json([
+            'user' => $user->load('client'),
+            'message' => 'Հաճախորդը հաջողությամբ թարմացվեց',
+        ], 200, [], JSON_UNESCAPED_UNICODE);
     }
+
 
     /**
      * Remove the specified resource from storage.
@@ -93,7 +94,7 @@ class ClientController extends Controller
     public function getArr(Request $request): array
     {
         $validatedClientData = $request->validate([
-            'type' => 'required|in:physPerson,legalEntity',
+            'type' => 'required|in:physPerson,legalEntity', // Վավերացնում ենք տեսակը
         ]);
 
         if ($validatedClientData['type'] === 'physPerson') {
@@ -114,6 +115,8 @@ class ClientController extends Controller
                 'accountant' => 'required|string',
             ]));
         }
+
         return $validatedClientData;
     }
+
 }
