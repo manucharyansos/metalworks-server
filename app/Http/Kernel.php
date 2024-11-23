@@ -21,6 +21,7 @@ class Kernel extends HttpKernel
         \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
         \App\Http\Middleware\TrimStrings::class,
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
+        \App\Http\Middleware\DetectDeviceMiddleware::class,
     ];
 
     /**
@@ -71,5 +72,6 @@ class Kernel extends HttpKernel
         'access_bending_forming' => \App\Http\Middleware\CheckBendingForming::class,
         'access_powder_cutting' => \App\Http\Middleware\CheckPowderCutting::class,
         'check.order' => \App\Http\Middleware\CheckOrder::class,
+        'detect.device' => \App\Http\Middleware\DetectDeviceMiddleware::class,
     ];
 }
