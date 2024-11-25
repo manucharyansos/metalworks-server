@@ -24,64 +24,69 @@ class OrderController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        $validatedData = $request->validate([
-            'user_id' => 'required|exists:users,id',
-            'description' => 'required|string',
-            'quantity' => 'required|integer|min:1',
-            'name' => 'required|string',
-            'status' => 'nullable|string',
-            'factories' => 'nullable|array',
-            'factories.*.id' => 'required|exists:factories,id',
-            'factories.*.status' => 'nullable|string',
-            'store_link.url' => 'nullable|url',
-            'finish_date' => 'nullable|string',
-            'files' => 'nullable|array',
-            'files.*' => 'file|mimes:step,dxf,DXF,png,jpg,jpeg,eps,pdf|max:2048',
-        ]);
+        try {
+            $validatedData = $request->validate([
+                'user_id' => 'required|exists:users,id',
+                'description' => 'required|string',
+                'quantity' => 'required|integer|min:1',
+                'name' => 'required|string',
+                'status' => 'nullable|string',
+                'factories' => 'nullable|array',
+                'factories.*.id' => 'required|exists:factories,id',
+                'factories.*.status' => 'nullable|string',
+                'store_link.url' => 'nullable|url',
+                'finish_date' => 'nullable|string',
+                'files' => 'nullable|array',
+                'files.*' => 'file|mimes:step,dxf,DXF,png,jpg,jpeg,eps,pdf|max:2048',
+            ]);
 
-        $order = Order::create([
-            'user_id' => $validatedData['user_id'],
-            'name' => $validatedData['name'],
-            'quantity' => $validatedData['quantity'],
-            'description' => $validatedData['description'],
-            'status' => $validatedData['status'] ?? 'pending',
-        ]);
+            $order = Order::create([
+                'user_id' => $validatedData['user_id'],
+                'name' => $validatedData['name'],
+                'quantity' => $validatedData['quantity'],
+                'description' => $validatedData['description'],
+                'status' => $validatedData['status'] ?? 'pending',
+            ]);
 
-        $order->orderNumber()->create([
-            'number' => $this->generateOrderNumber(),
-        ]);
+            $order->orderNumber()->create([
+                'number' => $this->generateOrderNumber(),
+            ]);
 
-        $order->prefixCode()->create(['code' => $this->generateUniquePrefixCode()]);
+            $order->prefixCode()->create(['code' => $this->generateUniquePrefixCode()]);
 
-        if (!empty($validatedData['store_link']['url'])) {
-            $order->storeLink()->create(['url' => $validatedData['store_link']['url']]);
-        }
-
-        if (!empty($validatedData['factories'])) {
-            foreach ($validatedData['factories'] as $factory) {
-                $order->factories()->attach($factory['id']);
-                $order->factoryOrderStatuses()->create([
-                    'factory_id' => $factory['id'],
-                    'status' => $factory['status'],
-                ]);
+            if (!empty($validatedData['store_link']['url'])) {
+                $order->storeLink()->create(['url' => $validatedData['store_link']['url']]);
             }
-        }
 
-        $order->dates()->create(['finish_date' => $validatedData['finish_date'] ?? null]);
-
-        if (!empty($validatedData['files'])) {
-            foreach ($validatedData['files'] as $file) {
-                $path = $file->store("uploads/orders/{$order->id}", 'public');
-                $order->files()->create(['path' => $path]);
+            if (!empty($validatedData['factories'])) {
+                foreach ($validatedData['factories'] as $factory) {
+                    $order->factories()->attach($factory['id']);
+                    $order->factoryOrderStatuses()->create([
+                        'factory_id' => $factory['id'],
+                        'status' => $factory['status'],
+                    ]);
+                }
             }
+
+            $order->dates()->create(['finish_date' => $validatedData['finish_date'] ?? null]);
+
+            if (!empty($validatedData['files'])) {
+                foreach ($validatedData['files'] as $file) {
+                    $path = $file->store("uploads/orders/{$order->id}", 'public');
+                    $order->files()->create(['path' => $path]);
+                }
+            }
+
+            $userEmail = User::find($validatedData['user_id'])->email;
+            $orderUrl = route('orders.show', ['id' => $order->id]);
+            Mail::to($userEmail)->send(new OrderCreated($order, $orderUrl));
+
+            return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 201);
+
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
         }
-
-        $userEmail = User::find($validatedData['user_id'])->email;
-        $orderUrl = route('orders.show', ['id' => $order->id]);
-        Mail::to($userEmail)->send(new OrderCreated($order, $orderUrl));
-
-        return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 201);
-    }
+ }
 
 
 
