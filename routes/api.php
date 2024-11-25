@@ -65,9 +65,5 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
     Route::post('/contact', [ContactController::class, 'store']);
 });
 
-Route::get('/visitors', function () {
-    $visitors = Visitor::all();
-    return response()->json($visitors);
-});
 Route::middleware('auth:sanctum')->get('/visitor-stats', [VisitorController::class, 'getDeviceStats']);
 

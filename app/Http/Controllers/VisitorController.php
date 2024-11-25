@@ -13,15 +13,26 @@ class VisitorController extends Controller
     {
         $totalVisitors = Visitor::count();
 
-        // Կանխատեսված սարքերի տոկոսներ
-        $desktopVisitors = Visitor::where('device', 'desktop')->count();
-        $mobileVisitors = Visitor::where('device', 'mobile')->count();
-        $tabletVisitors = Visitor::where('device', 'tablet')->count();
+        // Device counts
+        $desktopCount = Visitor::where('device', 'desktop')->count();
+        $mobileCount = Visitor::where('device', 'mobile')->count();
+        $tabletCount = Visitor::where('device', 'tablet')->count();
 
         return response()->json([
-            'desktop' => ($desktopVisitors / $totalVisitors) * 100,
-            'mobile' => ($mobileVisitors / $totalVisitors) * 100,
-            'tablet' => ($tabletVisitors / $totalVisitors) * 100,
+            'total' => $totalVisitors,
+            'desktop' => [
+                'count' => $desktopCount,
+                'percentage' => $totalVisitors ? ($desktopCount / $totalVisitors) * 100 : 0
+            ],
+            'mobile' => [
+                'count' => $mobileCount,
+                'percentage' => $totalVisitors ? ($mobileCount / $totalVisitors) * 100 : 0
+            ],
+            'tablet' => [
+                'count' => $tabletCount,
+                'percentage' => $totalVisitors ? ($tabletCount / $totalVisitors) * 100 : 0
+            ]
         ]);
     }
+
 }

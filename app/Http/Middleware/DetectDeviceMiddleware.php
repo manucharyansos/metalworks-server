@@ -21,16 +21,18 @@ class DetectDeviceMiddleware
             $device = 'desktop';
         }
 
-        // Log the detected device
-        \Log::info("Device detected: $device");
+        $ip = $request->ip();
 
-        // Store visitor data
-        Visitor::create([
-            'device' => $device,
-            'ip' => $request->ip(),
-        ]);
+        // Check if the visitor has already been logged
+        if (!Visitor::where('ip', $ip)->exists()) {
+            Visitor::create([
+                'device' => $device,
+                'ip' => $ip,
+            ]);
+        }
 
         return $next($request);
     }
+
 
 }
