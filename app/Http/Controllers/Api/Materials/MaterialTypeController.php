@@ -12,10 +12,7 @@ class MaterialTypeController extends Controller
     public function index(): JsonResponse
     {
         $materialTypes = MaterialType::with('categories')->get();
-        return response()->json([
-            'success' => true,
-            'data' => $materialTypes
-        ], 200);
+        return response()->json($materialTypes, 200);
     }
 
     public function store(Request $request): JsonResponse
@@ -29,7 +26,7 @@ class MaterialTypeController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Material type created successfully',
-            'data' => $materialType
+            $materialType
         ], 201);
     }
 

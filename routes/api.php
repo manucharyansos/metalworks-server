@@ -4,6 +4,9 @@ use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Client\ClientController;
 use App\Http\Controllers\Api\Factory\FactoryController;
+use App\Http\Controllers\Api\Materials\MaterialCategoryController;
+use App\Http\Controllers\Api\Materials\MaterialController;
+use App\Http\Controllers\Api\Materials\MaterialTypeController;
 use App\Http\Controllers\Api\Nav\ServiceController;
 use App\Http\Controllers\Api\Order\OrderController;
 use App\Http\Controllers\Api\Users\UserController;
@@ -47,19 +50,16 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::get('/getStatus', [FactoryController::class, 'getStatus']);
         });
 
-//        Route::group(['prefix'=>'mails'], function () {
-//            Route::get('send', [MailController::class, 'send']);
-//        });
-
         Route::resource('/roles', RoleController::class);
 
         Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
     });
     Route::group(['prefix'=>'categories'],function (){
-//        Route::resource('/category', CategoryController::class);
+        Route::resource('/materialType', MaterialTypeController::class);
+        Route::resource('/materialCategories', MaterialCategoryController::class);
     });
     Route::group(['prefix'=>'materials', 'middleware' => 'detect.device'],function (){
-//        Route::resource('/', MaterialsController::class);
+        Route::resource('/', MaterialController::class);
     });
 
     Route::post('/contact', [ContactController::class, 'store']);

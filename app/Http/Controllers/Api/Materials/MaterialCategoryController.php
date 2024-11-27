@@ -13,10 +13,7 @@ class MaterialCategoryController extends Controller
     {
         $categories = MaterialCategory::with('type')->get();
 
-        return response()->json([
-            'success' => true,
-            'data' => $categories
-        ], 200);
+        return response()->json($categories);
     }
 
     public function store(Request $request): JsonResponse
