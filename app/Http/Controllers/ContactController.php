@@ -8,6 +8,11 @@ use Illuminate\Http\Request;
 
 class ContactController extends Controller
 {
+    public function index(): JsonResponse
+    {
+        $contacts = Contact::all();
+        return response()->json($contacts);
+    }
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([

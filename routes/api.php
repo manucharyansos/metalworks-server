@@ -61,8 +61,12 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
     Route::group(['prefix'=>'materials', 'middleware' => 'detect.device'],function (){
         Route::resource('/', MaterialController::class);
     });
+    Route::group(['prefix'=>'contacts', 'middleware' => 'detect.device'],function (){
+        Route::get('/', [ContactController::class, 'index']);
+        Route::post('/', [ContactController::class, 'store']);
+    });
 
-    Route::post('/contact', [ContactController::class, 'store']);
+
 });
 
 Route::middleware('auth:sanctum')->get('/visitor-stats', [VisitorController::class, 'getDeviceStats']);
