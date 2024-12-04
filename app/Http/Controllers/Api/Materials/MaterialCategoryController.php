@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MaterialCategory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class MaterialCategoryController extends Controller
 {
@@ -20,9 +21,15 @@ class MaterialCategoryController extends Controller
     {
         $data = $request->validate([
             'name' => 'required|string|max:255',
+            'image' => 'nullable|file|mimes:jpg,jpeg,png|max:2048',
             'material_type_id' => 'required|exists:material_types,id',
         ]);
 
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+            $uniqueName = uniqid() . '_' . $file->getClientOriginalName();
+            $data['image'] = $file->storeAs('categories', $uniqueName, 'public');
+        }
         $category = MaterialCategory::create($data);
 
         return response()->json([
@@ -46,8 +53,17 @@ class MaterialCategoryController extends Controller
     {
         $data = $request->validate([
             'name' => 'required|string|max:255',
+            'image' => 'nullable|file|mimes:jpg,jpeg,png|max:2048',
             'material_type_id' => 'required|exists:material_types,id',
         ]);
+        if ($request->hasFile('image')) {
+            if ($materialCategory->image && Storage::disk('public')->exists($materialCategory->image)) {
+                Storage::disk('public')->delete($materialCategory->image);
+            }
+            $file = $request->file('image');
+            $uniqueName = uniqid() . '_' . $file->getClientOriginalName();
+            $data['image'] = $file->storeAs('categories', $uniqueName, 'public');
+        }
 
         $materialCategory->update($data);
 

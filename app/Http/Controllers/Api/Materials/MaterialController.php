@@ -20,10 +20,11 @@ class MaterialController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'size' => 'nullable|string|max:255',
-            'price' => 'nullable|numeric',
+            'width' => 'nullable|numeric',
+            'length' => 'nullable|numeric',
+            'thickness' => 'nullable|numeric',
+            'height' => 'nullable|numeric',
             'image' => 'nullable|file|mimes:jpg,jpeg,png|max:2048',
             'material_category_id' => 'required|exists:material_categories,id',
         ]);
@@ -43,13 +44,15 @@ class MaterialController extends Controller
         ], 201);
     }
 
+
     public function update(Request $request, Material $material): JsonResponse
     {
         $data = $request->validate([
-            'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'size' => 'nullable|string|max:255',
-            'price' => 'nullable|numeric',
+            'width' => 'nullable|numeric',
+            'length' => 'nullable|numeric',
+            'height' => 'nullable|numeric',
+            'thickness' => 'nullable|numeric',
             'image' => 'nullable|file|mimes:jpg,jpeg,png|max:2048',
             'material_category_id' => 'required|exists:material_categories,id',
         ]);
@@ -71,6 +74,7 @@ class MaterialController extends Controller
             'data' => $material
         ], 200);
     }
+
 
     public function destroy(Material $material): JsonResponse
     {

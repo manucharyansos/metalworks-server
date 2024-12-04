@@ -15,10 +15,11 @@ return new class extends Migration
             $table->id();
             $table->foreignId('material_category_id')->constrained()->onDelete('cascade');
             $table->text('description')->nullable();
-            $table->string('size')->nullable();
-            $table->decimal('price', 10, 2)->nullable();
             $table->string('image')->nullable();
-            $table->string('name');
+            $table->decimal('width', 8, 2)->nullable();
+            $table->decimal('length', 8, 2)->nullable();
+            $table->decimal('height', 8, 2)->nullable();
+            $table->decimal('thickness', 8, 2)->nullable();
             $table->timestamps();
         });
     }

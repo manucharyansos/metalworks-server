@@ -11,7 +11,7 @@ class MaterialTypeController extends Controller
 {
     public function index(): JsonResponse
     {
-        $materialTypes = MaterialType::with('categories')->get();
+        $materialTypes = MaterialType::with('categories.materials')->get();
         return response()->json($materialTypes, 200);
     }
 

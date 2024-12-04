@@ -11,7 +11,7 @@ class MaterialCategory extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'material_type_id'];
+    protected $fillable = ['name', 'image', 'material_type_id'];
 
     public function type(): BelongsTo
     {

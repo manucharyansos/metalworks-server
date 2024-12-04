@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('material_type_id')->constrained()->onDelete('cascade');
             $table->string('name');
+            $table->string('image')->nullable();
             $table->timestamps();
         });
     }
