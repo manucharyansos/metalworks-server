@@ -11,11 +11,11 @@ class MaterialCategory extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'image', 'material_type_id'];
+    protected $fillable = ['name', 'material_group_id'];
 
     public function type(): BelongsTo
     {
-        return $this->belongsTo(MaterialType::class);
+        return $this->belongsTo(MaterialGroup::class);
     }
 
     public function materials(): HasMany

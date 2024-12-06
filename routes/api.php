@@ -6,7 +6,7 @@ use App\Http\Controllers\Api\Client\ClientController;
 use App\Http\Controllers\Api\Factory\FactoryController;
 use App\Http\Controllers\Api\Materials\MaterialCategoryController;
 use App\Http\Controllers\Api\Materials\MaterialController;
-use App\Http\Controllers\Api\Materials\MaterialTypeController;
+use App\Http\Controllers\Api\Materials\MaterialGroupController;
 use App\Http\Controllers\Api\Nav\ServiceController;
 use App\Http\Controllers\Api\Order\OrderController;
 use App\Http\Controllers\Api\Users\UserController;
@@ -55,7 +55,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
     });
     Route::group(['prefix'=>'categories'],function (){
-        Route::resource('/materialType', MaterialTypeController::class);
+        Route::resource('/materialGroup', MaterialGroupController::class);
         Route::resource('/materialCategories', MaterialCategoryController::class);
     });
     Route::group(['prefix'=>'materials', 'middleware' => 'detect.device'],function (){

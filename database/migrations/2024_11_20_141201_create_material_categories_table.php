@@ -13,9 +13,8 @@ return new class extends Migration
     {
         Schema::create('material_categories', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('material_type_id')->constrained()->onDelete('cascade');
+            $table->foreignId('material_group_id')->constrained()->onDelete('cascade');
             $table->string('name');
-            $table->string('image')->nullable();
             $table->timestamps();
         });
     }
