@@ -10,6 +10,8 @@ use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class OrderController extends Controller
 {
@@ -37,7 +39,18 @@ class OrderController extends Controller
                 'store_link.url' => 'nullable|url',
                 'finish_date' => 'nullable|string',
                 'files' => 'nullable|array',
-                'files.*' => 'file|mimes:step,dxf,DXF,png,jpg,jpeg,eps,pdf, SLDPRT, SLDASM|max:2048',
+                'files.*' => [
+                    'file',
+                    'max:2048',
+                    function ($attribute, $value, $fail) {
+                        $allowedExtensions = ['pdf', 'png', 'jpeg', 'jpg', 'eps', 'step', 'sldprt', 'sldasm', 'dxf'];
+                        $extension = strtolower($value->getClientOriginalExtension());
+                        if (!in_array($extension, $allowedExtensions)) {
+                            $fail("The {$attribute} must be a valid file type.");
+                        }
+                    },
+                ],
+
             ]);
 
             $order = Order::create([
@@ -86,11 +99,7 @@ class OrderController extends Controller
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
- }
-
-
-
-
+    }
 
     public function show($id): JsonResponse
     {
@@ -161,10 +170,6 @@ class OrderController extends Controller
         return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 200);
     }
 
-
-
-
-
     public function destroy($id): JsonResponse
     {
         $order = Order::findOrFail($id);
@@ -194,4 +199,18 @@ class OrderController extends Controller
 
         return $prefixCode;
     }
+    public function downloadFile($filePath)
+    {
+        $diskPath = "uploads/orders/" . $filePath;
+        Log::info("Checking file at: {$diskPath}");
+
+        if (!Storage::disk('public')->exists($diskPath)) {
+            Log::error("File not found at: {$diskPath}");
+            return response()->json(['error' => 'File not found'], 404);
+        }
+
+        Log::info("File exists, proceeding with download.");
+        return Storage::disk('public')->download($diskPath);
+    }
+
 }

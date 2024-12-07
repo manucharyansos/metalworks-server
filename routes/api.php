@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Client\ClientController;
 use App\Http\Controllers\Api\Factory\FactoryController;
+use App\Http\Controllers\Api\File\FileController;
 use App\Http\Controllers\Api\Materials\MaterialCategoryController;
 use App\Http\Controllers\Api\Materials\MaterialController;
 use App\Http\Controllers\Api\Materials\MaterialGroupController;
@@ -15,6 +16,7 @@ use App\Http\Controllers\ContactController;
 use App\Http\Controllers\RoleController;
 use App\Models\Visitor;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function () {
@@ -32,7 +34,8 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
         Route::group(['prefix'=>'orders', ['middleware' => 'check.order', 'detect.device']], function () {
             Route::resource('order', OrderController::class);
-//            Route::resource('materials', MaterialsController::class);
+            Route::get('/files/download/{filePath}', [OrderController::class, 'downloadFile'])
+                ->where('filePath', '.*');
         });
 
         Route::group(['prefix'=>'users'], function () {
@@ -48,6 +51,8 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::get('/getOrdersByFactories', [FactoryController::class, 'getOrdersByFactories']);
             Route::put('/updateOrder/{order}', [FactoryController::class, 'updateOrder']);
             Route::get('/getStatus', [FactoryController::class, 'getStatus']);
+
+            Route::get('/files/{filename}', [FileController::class, 'downloadFile']);
         });
 
         Route::resource('/roles', RoleController::class);
