@@ -109,7 +109,9 @@ class FactoryController extends Controller
                 ],
                 [
                     'status' => $factoryOrderStatuses['status'] ?? null,
-                    'description' => $factoryOrderStatuses['description'] ?? null,
+//                    'description' => $factoryOrderStatuses['description'] ?? null,
+                    'canceling' => $factoryOrderStatuses['canceling'] ?? null,
+                    'change_date' => $factoryOrderStatuses['changeDate'] ?? null,
                 ]
             );
         }

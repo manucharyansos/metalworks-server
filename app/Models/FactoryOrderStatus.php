@@ -10,7 +10,7 @@ class FactoryOrderStatus extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['order_id', 'factory_id', 'status', 'description'];
+    protected $fillable = ['order_id', 'factory_id', 'status', 'canceling'];
 
     public function order(): BelongsTo
     {
