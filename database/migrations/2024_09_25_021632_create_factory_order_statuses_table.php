@@ -19,7 +19,7 @@ class CreateFactoryOrderStatusesTable extends Migration
             $table->foreignId('factory_id')->constrained('factories')->onDelete('cascade');
             $table->string('status')->default('waiting');
             $table->string('canceling')->nullable();
-            $table->date('cancel_date')->nullable();
+            $table->dateTime('cancel_date')->nullable();
             $table->timestamps();
         });
     }

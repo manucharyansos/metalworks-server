@@ -18,6 +18,9 @@ class Date extends Model
         return $this->belongsTo(Order::class);
     }
 
+    /**
+     * @throws \Exception
+     */
     public function getCreatedAtAttribute($value): string
     {
         $dateTime = new DateTime($value);

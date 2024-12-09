@@ -202,14 +202,11 @@ class OrderController extends Controller
     public function downloadFile($filePath)
     {
         $diskPath = "uploads/orders/" . $filePath;
-        Log::info("Checking file at: {$diskPath}");
 
         if (!Storage::disk('public')->exists($diskPath)) {
-            Log::error("File not found at: {$diskPath}");
             return response()->json(['error' => 'File not found'], 404);
         }
 
-        Log::info("File exists, proceeding with download.");
         return Storage::disk('public')->download($diskPath);
     }
 

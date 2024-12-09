@@ -60,6 +60,9 @@ class User extends Authenticatable
     }
 
 
+    /**
+     * @throws \Exception
+     */
     public function getCreatedAtAttribute($value): string
     {
         $dateTime = new DateTime($value);

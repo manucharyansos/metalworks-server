@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('dates', function (Blueprint $table) {
             $table->id();
             $table->foreignId('order_id')->constrained()->onDelete('cascade');
-            $table->date('finish_date')->nullable();
+            $table->dateTime('finish_date')->nullable();
             $table->timestamps();
         });
     }
