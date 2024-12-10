@@ -8,6 +8,9 @@ use App\Models\FactoryOrderStatus;
 use App\Models\Order;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class FactoryController extends Controller
 {
@@ -92,6 +95,9 @@ class FactoryController extends Controller
     {
         $validatedData = $request->validate([
             'factory_id' => 'required|exists:factories,id',
+            'factory_order_statuses.status' => 'nullable|string',
+            'factory_order_statuses.canceling' => 'nullable|string',
+            'factory_order_statuses.cancel_date' => 'nullable|date',
         ]);
 
         $order = Order::find($id);
@@ -100,26 +106,26 @@ class FactoryController extends Controller
             return response()->json(['error' => 'Order not found'], 404);
         }
 
-        if (isset($validatedData['factory_id'])) {
-            $factoryOrderStatuses = $request->input('factory_order_statuses', []);
-            FactoryOrderStatus::updateOrCreate(
-                [
-                    'order_id' => $order->id,
-                    'factory_id' => $validatedData['factory_id'],
-                ],
-                [
-                    'status' => $factoryOrderStatuses['status'] ?? null,
-                    'canceling' => $factoryOrderStatuses['canceling'] ?? null,
-                    'cancel_date' => $factoryOrderStatuses['cancel_date'] ?? null,
-                ]
-            );
-        }
+        $factoryOrderStatuses = $request->input('factory_order_statuses', []);
+        FactoryOrderStatus::updateOrCreate(
+            [
+                'order_id' => $order->id,
+                'factory_id' => $validatedData['factory_id'],
+            ],
+            [
+                'status' => $factoryOrderStatuses['status'] ?? null,
+                'canceling' => $factoryOrderStatuses['canceling'] ?? null,
+                'cancel_date' => $factoryOrderStatuses['cancel_date'] ?? null,
+                'finish_date' => $factoryOrderStatuses['finish_date'] ?? null,
+            ]
+        );
 
         return response()->json(
             $order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses'),
             200
         );
     }
+
 
     /**
      * Remove the specified resource from storage.
@@ -160,6 +166,16 @@ class FactoryController extends Controller
         return response()->json($orders);
     }
 
+    public function downloadFile(Request $request, $filePath): BinaryFileResponse
+    {
+        $fileFullPath = storage_path("app/public/storage/uploads/orders/{$filePath}");
+        \Log::info('Requested file path: ' . $fileFullPath);
+        if (file_exists($fileFullPath)) {
+            return response()->download($fileFullPath);
+        }
+
+        return response()->json(['error' => 'Ֆայլը չի գտնվել'], 404);
+    }
 
 
 }

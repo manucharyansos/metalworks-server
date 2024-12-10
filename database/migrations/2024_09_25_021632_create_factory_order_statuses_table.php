@@ -20,6 +20,7 @@ class CreateFactoryOrderStatusesTable extends Migration
             $table->string('status')->default('waiting');
             $table->string('canceling')->nullable();
             $table->dateTime('cancel_date')->nullable();
+            $table->dateTime('finish_date')->nullable();
             $table->timestamps();
         });
     }

@@ -86,7 +86,11 @@ class OrderController extends Controller
             if (!empty($validatedData['files'])) {
                 foreach ($validatedData['files'] as $file) {
                     $path = $file->store("uploads/orders/{$order->id}", 'public');
-                    $order->files()->create(['path' => $path]);
+                    $name = $file->getClientOriginalName();
+                    $order->files()->create([
+                        'path' => $path,
+                        'name' => $name,
+                    ]);
                 }
             }
 
@@ -199,15 +203,15 @@ class OrderController extends Controller
 
         return $prefixCode;
     }
-    public function downloadFile($filePath)
-    {
-        $diskPath = "uploads/orders/" . $filePath;
-
-        if (!Storage::disk('public')->exists($diskPath)) {
-            return response()->json(['error' => 'File not found'], 404);
-        }
-
-        return Storage::disk('public')->download($diskPath);
-    }
+//    public function downloadFile($filePath): JsonResponse|StreamedResponse
+//    {
+//        $diskPath = "uploads/orders/" . $filePath;
+//
+//        if (!Storage::disk('public')->exists($diskPath)) {
+//            return response()->json(['error' => 'File not found'], 404);
+//        }
+//
+//        return Storage::disk('public')->download($diskPath);
+//    }
 
 }
