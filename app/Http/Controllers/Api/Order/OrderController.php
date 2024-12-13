@@ -89,7 +89,7 @@ class OrderController extends Controller
                     $name = $file->getClientOriginalName();
                     $order->files()->create([
                         'path' => $path,
-                        'name' => $name,
+                        'original_name' => $name,
                     ]);
                 }
             }

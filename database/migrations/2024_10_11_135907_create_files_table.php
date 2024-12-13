@@ -12,6 +12,7 @@ class CreateFilesTable extends Migration
             $table->id();
             $table->foreignId('order_id')->constrained()->onDelete('cascade');
             $table->string('path');
+            $table->string('original_name');
             $table->timestamps();
         });
     }

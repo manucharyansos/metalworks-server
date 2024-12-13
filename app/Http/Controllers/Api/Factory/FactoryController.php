@@ -166,16 +166,4 @@ class FactoryController extends Controller
         return response()->json($orders);
     }
 
-    public function downloadFile(Request $request, $filePath): BinaryFileResponse
-    {
-        $fileFullPath = storage_path("app/public/storage/uploads/orders/{$filePath}");
-        \Log::info('Requested file path: ' . $fileFullPath);
-        if (file_exists($fileFullPath)) {
-            return response()->download($fileFullPath);
-        }
-
-        return response()->json(['error' => 'Ֆայլը չի գտնվել'], 404);
-    }
-
-
 }

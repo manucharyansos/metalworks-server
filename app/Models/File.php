@@ -8,11 +8,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class File extends Model
 {
-    use HasFactory;
 
     use HasFactory;
 
-    protected $fillable = ['path'];
+    protected $fillable = ['path', 'original_name'];
 
     public function order(): BelongsTo
     {

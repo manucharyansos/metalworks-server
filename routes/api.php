@@ -51,9 +51,6 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::get('/getOrdersByFactories', [FactoryController::class, 'getOrdersByFactories']);
             Route::put('/updateOrder/{order}', [FactoryController::class, 'updateOrder']);
             Route::get('/getStatus', [FactoryController::class, 'getStatus']);
-
-            Route::get('/download/{filename}', [FactoryController::class, 'download'])->where('filePath', '.*');
-
         });
 
         Route::resource('/roles', RoleController::class);
@@ -77,3 +74,4 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
 Route::middleware('auth:sanctum')->get('/visitor-stats', [VisitorController::class, 'getDeviceStats']);
 
+Route::get('/download/{path}', [FileController::class, 'downloadFile']);
