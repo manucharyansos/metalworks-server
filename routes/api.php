@@ -22,7 +22,7 @@ use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function () {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
-    Route::middleware('auth:sanctum',)->group(function () {
+    Route::middleware(['auth:sanctum', 'detect.device'])->group(function () {
         Route::get('user', [AuthController::class, 'me']);
         Route::post('logout', [AuthController::class, 'logout']);
 
@@ -32,7 +32,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::post('update/{order}', [OrderController::class, 'update']);
         });
 
-        Route::group(['prefix'=>'orders', ['middleware' => 'check.order', 'detect.device']], function () {
+        Route::group(['prefix'=>'orders', ['middleware' => 'check.order']], function () {
             Route::resource('order', OrderController::class);
             Route::get('/files/download/{filePath}', [OrderController::class, 'downloadFile'])
                 ->where('filePath', '.*');
@@ -53,25 +53,27 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::get('/getStatus', [FactoryController::class, 'getStatus']);
         });
 
+        Route::get('/download/{path}', [FileController::class, 'downloadFile'])->where('path', '.*');
+
         Route::resource('/roles', RoleController::class);
 
         Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
     });
+
     Route::group(['prefix'=>'categories'],function (){
         Route::resource('/materialGroup', MaterialGroupController::class);
         Route::resource('/materialCategories', MaterialCategoryController::class);
     });
-    Route::group(['prefix'=>'materials', 'middleware' => 'detect.device'],function (){
+
+    Route::group(['prefix'=>'materials'],function (){
         Route::resource('/', MaterialController::class);
     });
-    Route::group(['prefix'=>'contacts', 'middleware' => 'detect.device'],function (){
+
+    Route::group(['prefix'=>'contacts'],function (){
         Route::get('/', [ContactController::class, 'index']);
         Route::post('/', [ContactController::class, 'store']);
     });
 
-
 });
 
 Route::middleware('auth:sanctum')->get('/visitor-stats', [VisitorController::class, 'getDeviceStats']);
-
-Route::get('/download/{path}', [FileController::class, 'downloadFile']);

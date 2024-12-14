@@ -11,26 +11,17 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class FileController extends Controller
 {
-    public function downloadFile($filename): BinaryFileResponse|JsonResponse
+    public function downloadFile($filePath): BinaryFileResponse|JsonResponse
     {
-        if (!Storage::disk('public')->exists($filename)) {
+        if (!$filePath || !is_string($filePath)) {
+            return response()->json(['error' => 'Invalid file path.'], 400);
+        }
+        if (!Storage::disk('public')->exists($filePath)) {
             return response()->json(['error' => 'Ֆայլը չի գտնվել'], 404);
         }
-
-        return response()->download(storage_path("app/public/{$filename}"));
+        return response()->download(storage_path("app/public/{$filePath}"));
     }
 
-//    public function downloadFile($path): BinaryFileResponse|JsonResponse
-//    {
-//        $filePath = storage_path('app/public/' . $path);
-//
-//        if (!Storage::disk('public')->exists($path)) {
-//            return response()->json(['error' => 'File not found'], 404)
-//                ->header('Access-Control-Allow-Origin', 'http://localhost:3000')
-//                ->header('Access-Control-Allow-Methods', 'GET');
-//        }
-//
-//        return response()->download($filePath);
-//    }
+
 
 }
