@@ -19,9 +19,9 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['http://localhost:3000', 'http://localhost:8000', 'https://metalworks.am', 'https://api.metalworks.am'],
-//
-//    'allowed_origins' => ['https://metalworks.am', 'https://api.metalworks.am'],
+//    'allowed_origins' => ['http://localhost:3000', 'http://localhost:8000', 'https://metalworks.am', 'https://api.metalworks.am'],
+
+    'allowed_origins' => ['https://metalworks.am', 'https://api.metalworks.am'],
 
     'allowed_origins_patterns' => [],
 
