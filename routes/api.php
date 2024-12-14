@@ -22,7 +22,9 @@ use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function () {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
+
     Route::middleware(['auth:sanctum', 'detect.device'])->group(function () {
+
         Route::get('user', [AuthController::class, 'me']);
         Route::post('logout', [AuthController::class, 'logout']);
 
