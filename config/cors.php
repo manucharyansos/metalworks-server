@@ -25,7 +25,8 @@ return [
 
     'allowed_origins_patterns' => [],
 
-    'allowed_headers' => ['*', 'https://metalworks.am', 'https://api.metalworks.am', 'http://localhost:3000', 'http://localhost:8000'],
+//    'allowed_headers' => ['*', 'https://metalworks.am', 'https://api.metalworks.am', 'http://localhost:3000', 'http://localhost:8000'],
+    'allowed_headers' => ['*'],
 
     'exposed_headers' => [],
 
