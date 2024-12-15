@@ -22,4 +22,9 @@ class FileController extends Controller
         }
         return response()->download(storage_path("app/public/{$decodedPath}"));
     }
+
+
+
+
+
 }
