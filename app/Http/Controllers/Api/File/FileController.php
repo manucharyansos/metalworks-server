@@ -14,7 +14,7 @@ class FileController extends Controller
     public function downloadFile($filePath): BinaryFileResponse|JsonResponse
     {
         $decodedPath = urldecode($filePath);
-        if (!$decodedPath || str_contains($decodedPath, '../')) {
+        if (!$decodedPath) {
             return response()->json(['error' => 'Invalid file path.'], 400);
         }
         if (!Storage::disk('public')->exists($decodedPath)) {
@@ -22,9 +22,4 @@ class FileController extends Controller
         }
         return response()->download(storage_path("app/public/{$decodedPath}"));
     }
-
-
-
-
-
 }
