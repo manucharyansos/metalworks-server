@@ -13,14 +13,16 @@ class FileController extends Controller
 {
     public function downloadFile($filePath): BinaryFileResponse|JsonResponse
     {
-        if (!$filePath || !is_string($filePath)) {
+        $decodedPath = urldecode($filePath);
+        if (!$decodedPath || !is_string($decodedPath)) {
             return response()->json(['error' => 'Invalid file path.'], 400);
         }
-        if (!Storage::disk('public')->exists($filePath)) {
+        if (!Storage::disk('public')->exists($decodedPath)) {
             return response()->json(['error' => 'Ֆայլը չի գտնվել'], 404);
         }
-        return response()->download(storage_path("app/public/{$filePath}"));
+        return response()->download(storage_path("app/public/{$decodedPath}"));
     }
+
 
 
 
