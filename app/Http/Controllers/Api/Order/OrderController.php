@@ -124,7 +124,17 @@ class OrderController extends Controller
             'store_link.url' => 'nullable|url',
             'finish_date' => 'nullable|string',
             'files' => 'nullable|array',
-            'files.*' => 'file|mimes:step,dxf,png,jpg,eps,pdf|max:2048',
+            'files.*' => [
+                'file',
+                'max:2048',
+                function ($attribute, $value, $fail) {
+                    $allowedExtensions = ['pdf', 'png', 'jpeg', 'jpg', 'eps', 'step', 'sldprt', 'sldasm', 'dxf'];
+                    $extension = strtolower($value->getClientOriginalExtension());
+                    if (!in_array($extension, $allowedExtensions)) {
+                        $fail("The {$attribute} must be a valid file type.");
+                    }
+                },
+            ],
         ]);
 
         $order = Order::findOrFail($id);
@@ -167,9 +177,14 @@ class OrderController extends Controller
             }
             foreach ($validatedData['files'] as $file) {
                 $path = $file->store("uploads/orders/{$order->id}", 'public');
-                $order->files()->create(['path' => $path]);
+                $name = $file->getClientOriginalName();
+                $order->files()->create([
+                    'path' => $path,
+                    'original_name' => $name,
+                ]);
             }
         }
+
 
         return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 200);
     }
@@ -203,15 +218,5 @@ class OrderController extends Controller
 
         return $prefixCode;
     }
-//    public function downloadFile($filePath): JsonResponse|StreamedResponse
-//    {
-//        $diskPath = "uploads/orders/" . $filePath;
-//
-//        if (!Storage::disk('public')->exists($diskPath)) {
-//            return response()->json(['error' => 'File not found'], 404);
-//        }
-//
-//        return Storage::disk('public')->download($diskPath);
-//    }
 
 }

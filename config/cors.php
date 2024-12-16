@@ -15,13 +15,11 @@ return [
     |
     */
 
-//    'paths' => ['api/*', 'sanctum/csrf-cookie', 'factories/*', 'storage/*', 'download/*'],
+//    'paths' => ['api/*', 'sanctum/csrf-cookie', 'storage/*'],
 //
 //    'allowed_methods' => ['*'],
 //
-////    'allowed_origins' => ['http://localhost:3000', 'http://localhost:8000', 'https://metalworks.am', 'https://api.metalworks.am'],
-//
-//    'allowed_origins' => ['https://metalworks.am', 'https://api.metalworks.am'],
+//    'allowed_origins' => ['http://localhost:3000', 'http://localhost:8000', 'https://metalworks.am', 'https://api.metalworks.am'],
 //
 //    'allowed_origins_patterns' => [],
 //
@@ -33,6 +31,8 @@ return [
 //    'max_age' => 0,
 //
 //    'supports_credentials' => true
+
+
 
     'paths' => ['api/*', 'sanctum/csrf-cookie', 'storage/*'],
 

@@ -36,8 +36,6 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
         Route::group(['prefix'=>'orders', ['middleware' => 'check.order']], function () {
             Route::resource('order', OrderController::class);
-//            Route::get('/files/download/{filePath}', [OrderController::class, 'downloadFile'])
-//                ->where('filePath', '.*');
         });
 
         Route::group(['prefix'=>'users'], function () {
