@@ -55,11 +55,12 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::get('/getStatus', [FactoryController::class, 'getStatus']);
         });
 
+        Route::get('/download/{path}', [FileController::class, 'downloadFile'])->where('path', '.*');
+
         Route::resource('/roles', RoleController::class);
 
         Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
     });
-    Route::get('/download/{path}', [FileController::class, 'downloadFile'])->where('path', '.*');
 
     Route::group(['prefix'=>'categories'],function (){
         Route::resource('/materialGroup', MaterialGroupController::class);
