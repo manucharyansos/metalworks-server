@@ -34,17 +34,17 @@ return [
 //
 //    'supports_credentials' => true
 
-    'paths' => ['api/*', 'sanctum/csrf-cookie', 'storage/*'],
+    'paths' => ['api/*', 'sanctum/csrf-cookie'],
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['https://metalworks.am', 'https://api.metalworks.am'],
+    'allowed_origins' => ['https://metalworks.am'],
 
     'allowed_origins_patterns' => [],
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => ['Content-Disposition'],
+    'exposed_headers' => [],
 
     'max_age' => 0,
 
