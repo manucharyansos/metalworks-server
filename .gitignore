@@ -21,3 +21,5 @@ yarn-error.log
 config/cors.php
 config/sanctum.php
 config/app.php
+/storage/*
+!/storage/.gitignore

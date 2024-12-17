@@ -19,11 +19,11 @@ return [
 //
 //    'allowed_methods' => ['*'],
 //
-//    'allowed_origins' => ['http://localhost:3000', 'http://localhost:8000', 'https://metalworks.am', 'https://api.metalworks.am'],
+//    'allowed_origins' => ['http://localhost:3000', 'http://localhost:8000'],
 //
 //    'allowed_origins_patterns' => [],
 //
-//    'allowed_headers' => ['*', 'https://metalworks.am', 'https://api.metalworks.am', 'http://localhost:3000', 'http://localhost:8000'],
+//    'allowed_headers' => ['*', 'http://localhost:3000', 'http://localhost:8000'],
 ////    'allowed_headers' => ['*'],
 //
 //    'exposed_headers' => [],
