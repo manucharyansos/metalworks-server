@@ -50,6 +50,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::apiResource('factory', FactoryController::class);
             Route::get('/getOrdersByFactories', [FactoryController::class, 'getOrdersByFactories']);
             Route::put('/updateOrder/{order}', [FactoryController::class, 'updateOrder']);
+            Route::put('/confirmOrderStatus/{id}', [FactoryController::class, 'confirmOrderStatus']);
             Route::get('/getStatus', [FactoryController::class, 'getStatus']);
         });
 

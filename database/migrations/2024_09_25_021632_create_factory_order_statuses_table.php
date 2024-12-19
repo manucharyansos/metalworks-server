@@ -21,6 +21,8 @@ class CreateFactoryOrderStatusesTable extends Migration
             $table->string('canceling')->nullable();
             $table->dateTime('cancel_date')->nullable();
             $table->dateTime('finish_date')->nullable();
+            $table->dateTime('operator_finish_date')->nullable();
+            $table->dateTime('admin_confirmation_date')->nullable();
             $table->timestamps();
         });
     }

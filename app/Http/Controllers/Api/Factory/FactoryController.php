@@ -98,6 +98,8 @@ class FactoryController extends Controller
             'factory_order_statuses.status' => 'nullable|string',
             'factory_order_statuses.canceling' => 'nullable|string',
             'factory_order_statuses.cancel_date' => 'nullable|date',
+            'factory_order_statuses.operator_finish_date' => 'nullable|date',
+            'factory_order_statuses.admin_confirmation_date' => 'nullable|date',
         ]);
 
         $order = Order::find($id);
@@ -117,6 +119,8 @@ class FactoryController extends Controller
                 'canceling' => $factoryOrderStatuses['canceling'] ?? null,
                 'cancel_date' => $factoryOrderStatuses['cancel_date'] ?? null,
                 'finish_date' => $factoryOrderStatuses['finish_date'] ?? null,
+                'operator_finish_date' => $factoryOrderStatuses['operator_finish_date'] ?? null,
+                'admin_confirmation_date' => $factoryOrderStatuses['admin_confirmation_date'] ?? null,
             ]
         );
 
@@ -125,6 +129,8 @@ class FactoryController extends Controller
             200
         );
     }
+
+
 
 
     /**
@@ -160,10 +166,41 @@ class FactoryController extends Controller
         $orders = Order::whereHas('factories', function ($query) use ($factoryIdsArray) {
             $query->whereIn('factories.id', $factoryIdsArray);
         })
+            // Բացառել այն պատվերները, որոնց կարգավիճակը `confirmed` է
+            ->whereDoesntHave('factoryOrderStatuses', function ($query) {
+                $query->where('status', 'confirmed');
+            })
             ->with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'files', 'dates', 'factoryOrderStatuses', 'user')
             ->get();
 
         return response()->json($orders);
     }
+
+
+
+    public function confirmOrderStatus($id): JsonResponse
+    {
+        try {
+            $orderStatus = FactoryOrderStatus::where('order_id', $id)->firstOrFail();
+            $orderStatus->status = 'confirmed';
+            $orderStatus->admin_confirmation_date = now();
+            $orderStatus->save();
+
+            return response()->json([
+                'message' => 'Order status confirmed successfully.',
+                'data' => $orderStatus,
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json([
+                'message' => 'Order status not found.',
+            ], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'An error occurred while confirming the order status.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
 
 }
