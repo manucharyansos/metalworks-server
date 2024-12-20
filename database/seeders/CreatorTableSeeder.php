@@ -2,19 +2,19 @@
 
 namespace Database\Seeders;
 
-use App\Models\Creator;
+use App\Models\Manager;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
-class CreatorTableSeeder extends Seeder
+class ManagerTableSeeder extends Seeder
 {
     /**
      * Run the database seeds.
      */
     public function run(): void
     {
-        Creator::create([
-            'name' => 'Creator 1',
+        Manager::create([
+            'name' => 'Manager 1',
         ]);
     }
 }

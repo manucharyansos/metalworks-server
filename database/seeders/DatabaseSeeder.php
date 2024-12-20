@@ -22,18 +22,5 @@ class DatabaseSeeder extends Seeder
         $this->call(RoleTableSeeder::class);
         $this->call(UserSeeder::class);
         $this->call(FactorySeeder::class);
-//         User::factory(10)->create();
-//         Creator::factory(10)->create();
-//         Description::factory(10)->create();
-//         Order::factory(10)->create();
-//         PrefixCode::factory(10)->create();
-//         Status::factory(10)->create();
-//         StoreLink::factory(10)->create();
-
-//         \App\Models\User::factory()->create([
-//             'name' => 'Test User',
-//             'email' => 'test@example.com',
-//         ]);
-
     }
 }

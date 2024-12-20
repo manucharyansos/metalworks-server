@@ -1,11 +1,11 @@
 <?php
 
-namespace App\Http\Controllers\Api\Creator;
+namespace App\Http\Controllers\Api\Manager;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
-class CreatorController extends Controller
+class ManagerController extends Controller
 {
     /**
      * Display a listing of the resource.

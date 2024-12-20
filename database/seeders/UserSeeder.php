@@ -14,7 +14,7 @@ class UserSeeder extends Seeder
         $adminRole = Role::where('name', 'admin')->first();
         $guestUserRole = Role::where('name', 'guestUser')->first();
         $authenticatedUserRole = Role::where('name', 'authenticatedUser')->first();
-        $creatorRole = Role::where('name', 'creator')->first();
+        $managerRole = Role::where('name', 'manager')->first();
         $laserRole = Role::where('name', 'laser')->first();
         $bendRole = Role::where('name', 'bend')->first();
         $cattingRole = Role::where('name', 'powder_catting')->first();
@@ -41,10 +41,10 @@ class UserSeeder extends Seeder
         ]);
 
         User::create([
-            'name' => 'Creator User',
-            'email' => 'creator@example.com',
+            'name' => 'Mnager User',
+            'email' => 'Manager@example.com',
             'password' => Hash::make('password'),
-            'role_id' => $creatorRole->id,
+            'role_id' => $managerRole->id,
         ]);
 
         User::create([

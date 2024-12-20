@@ -2,7 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\Creator;
+use App\Models\Manager;
 use App\Models\Description;
 use App\Models\Order;
 use App\Models\PrefixCode;
@@ -18,7 +18,7 @@ class OrdersTableSeeder extends Seeder
         $descriptions = Description::factory(10)->create();
         $statuses = Status::factory(5)->create();
         $prefixCodes = PrefixCode::factory(5)->create();
-        $creators = Creator::factory(5)->create();
+        $creators = Manager::factory(5)->create();
         $storeLinks = StoreLink::factory(5)->create();
 
         // Now create orders

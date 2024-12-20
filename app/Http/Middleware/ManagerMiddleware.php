@@ -5,7 +5,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Support\Facades\Auth;
 
-class CreatorMiddleware
+class ManagerMiddleware
 {
     /**
      * Handle an incoming request.
@@ -16,7 +16,7 @@ class CreatorMiddleware
      */
     public function handle($request, Closure $next)
     {
-        if (Auth::check() && Auth::user()->role('creator')) {
+        if (Auth::check() && Auth::user()->role('manager')) {
             return $next($request);
         }
 

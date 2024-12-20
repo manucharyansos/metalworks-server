@@ -66,7 +66,7 @@ class Kernel extends HttpKernel
         'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'admin' => \App\Http\Middleware\AdminMiddleware::class,
-        'creator' => \App\Http\Middleware\CreatorMiddleware::class,
+        'manager' => \App\Http\Middleware\ManagerMiddleware::class,
         'authUser' => \App\Http\Middleware\AuthenticatedUserMiddleware::class,
         'check_laser_cutting' => \App\Http\Middleware\CheckLaserCutting::class,
         'access_bending_forming' => \App\Http\Middleware\CheckBendingForming::class,

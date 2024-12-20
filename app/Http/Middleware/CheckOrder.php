@@ -25,7 +25,7 @@ class CheckOrder
 
         $role = $user->role;
 
-        if ($role && $role->name !== 'creator') {
+        if ($role && $role->name !== 'manager') {
             return response()->json(['error' => 'Unauthorized'], 403);
         }
         return $next($request);
