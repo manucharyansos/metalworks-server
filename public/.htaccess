@@ -3,6 +3,12 @@
         Options -MultiViews -Indexes
     </IfModule>
 
+    <IfModule mod_mime.c>
+        AddType application/vnd.dxf dxf
+        AddType application/sldworks sldprt sldasm
+        AddType application/step step
+    </IfModule>
+
     RewriteEngine On
 
     # Handle Authorization Header

@@ -4,19 +4,19 @@ use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Client\ClientController;
 use App\Http\Controllers\Api\Factory\FactoryController;
+use App\Http\Controllers\Api\File\BendFileExtensionController;
 use App\Http\Controllers\Api\File\FileController;
+use App\Http\Controllers\Api\File\FileExtensionController;
+use App\Http\Controllers\Api\File\LaserFileExtensionController;
 use App\Http\Controllers\Api\Materials\MaterialCategoryController;
 use App\Http\Controllers\Api\Materials\MaterialController;
 use App\Http\Controllers\Api\Materials\MaterialGroupController;
-use App\Http\Controllers\Api\Nav\ServiceController;
 use App\Http\Controllers\Api\Order\OrderController;
 use App\Http\Controllers\Api\Users\UserController;
-use App\Http\Controllers\VisitorController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\RoleController;
-use App\Models\Visitor;
+use App\Http\Controllers\VisitorController;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function () {
@@ -31,7 +31,10 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::group(['prefix'=>'admin', 'middleware' => 'admin'],function (){
             Route::resource('/', AdminController::class);
             Route::resource('order', OrderController::class);
-            Route::post('update/{order}', [OrderController::class, 'update']);
+            Route::post('orders/update/{order}', [OrderController::class, 'update'])->name('orders.update');
+            Route::resource('file-extensions', FileExtensionController::class);
+            Route::resource('laser-file-extension', LaserFileExtensionController::class);
+            Route::resource('bend-file-extension', BendFileExtensionController::class);
         });
 
         Route::group(['prefix'=>'orders', ['middleware' => 'check.order']], function () {

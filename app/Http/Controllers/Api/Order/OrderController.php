@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Order;
 
 use App\Http\Controllers\Controller;
 use App\Mail\OrderCreated;
+use App\Models\FileExtension;
 use App\Models\Order;
 use App\Models\PrefixCode;
 use App\Models\User;
@@ -43,7 +44,7 @@ class OrderController extends Controller
                     'file',
                     'max:2048',
                     function ($attribute, $value, $fail) {
-                        $allowedExtensions = ['pdf', 'png', 'jpeg', 'jpg', 'eps', 'step', 'sldprt', 'sldasm', 'dxf'];
+                        $allowedExtensions = FileExtension::pluck('extension')->toArray();
                         $extension = strtolower($value->getClientOriginalExtension());
                         if (!in_array($extension, $allowedExtensions)) {
                             $fail("The {$attribute} must be a valid file type.");
@@ -87,9 +88,12 @@ class OrderController extends Controller
                 foreach ($validatedData['files'] as $file) {
                     $path = $file->store("uploads/orders/{$order->id}", 'public');
                     $name = $file->getClientOriginalName();
+                    $mimeType = $file->getMimeType();
+
                     $order->files()->create([
                         'path' => $path,
                         'original_name' => $name,
+                        'mime_type' => $mimeType,
                     ]);
                 }
             }
