@@ -9,5 +9,5 @@ class FileExtension extends Model
 {
     use HasFactory;
 
-    protected $table = ['extension'];
+    protected $fillable = ['extension'];
 }

@@ -24,7 +24,7 @@ class FileExtensionController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'extension' => 'required|string|unique:laser_file_extensions|max:10',
+            'extension' => 'required|string|unique:file_extensions|max:10',
         ]);
 
         $extension = FileExtension::create($data);
@@ -54,7 +54,7 @@ class FileExtensionController extends Controller
     public function update(Request $request, FileExtension $FileExtension): JsonResponse
     {
         $data = $request->validate([
-            'extension' => 'required|string|unique:laser_file_extensions,extension,' . $FileExtension->id . '|max:10',
+            'extension' => 'required|string|unique:file_extensions,extension,' . $FileExtension->id . '|max:10',
         ]);
 
         $FileExtension->update($data);

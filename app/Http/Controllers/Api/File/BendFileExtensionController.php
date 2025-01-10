@@ -21,10 +21,11 @@ class BendFileExtensionController extends Controller
     /**
      * Store a newly created resource in storage.
      */
+
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'extension' => 'required|string|unique:laser_file_extensions|max:10',
+            'extension' => 'required|string|unique:bend_file_extensions|max:10',
         ]);
 
         $extension = BendFileExtension::create($data);

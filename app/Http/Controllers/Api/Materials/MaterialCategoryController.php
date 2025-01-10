@@ -12,7 +12,7 @@ class MaterialCategoryController extends Controller
 {
     public function index(): JsonResponse
     {
-        $categories = MaterialCategory::with('type')->get();
+        $categories = MaterialCategory::with('material')->get();
 
         return response()->json($categories);
     }
@@ -33,9 +33,9 @@ class MaterialCategoryController extends Controller
         ], 201);
     }
 
-    public function show(MaterialCategory $materialCategory)
+    public function show(MaterialCategory $materialCategory): JsonResponse
     {
-        $materialCategory->load('type');
+        $materialCategory->load('materials');
 
         return response()->json([
             'success' => true,
