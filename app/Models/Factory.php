@@ -17,4 +17,9 @@ class Factory extends Model
     {
         return $this->hasMany(FactoryOrderStatus::class);
     }
+
+    public function factoryFiles(): HasMany
+    {
+        return $this->hasMany(FactoryFile::class);
+    }
 }

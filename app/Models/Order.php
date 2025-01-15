@@ -55,6 +55,11 @@ class Order extends Model
         return $this->hasMany(FactoryOrderStatus::class, 'order_id');
     }
 
+    public function factoryFiles(): HasMany
+    {
+        return $this->hasMany(FactoryFile::class, 'order_id');
+    }
+
     /**
      * @throws \Exception
      */

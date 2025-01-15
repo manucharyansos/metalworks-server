@@ -3,6 +3,9 @@
 namespace App\Http\Controllers\Api\Factory;
 
 use App\Http\Controllers\Controller;
+use App\Models\FactoryFile;
+use App\Models\FileExtension;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class EngineerController extends Controller
@@ -15,53 +18,57 @@ class EngineerController extends Controller
         //
     }
 
+    public function getFilesForFactoryAndOrder($factoryId, $orderId): JsonResponse
+    {
+        // Ստուգել, եթե տվյալ ֆայլերը կան տվյալ գործարանից ու պատվերից
+        $files = FactoryFile::with('factory', 'order')
+            ->where('factory_id', $factoryId)
+            ->where('order_id', $orderId)
+            ->get();
+
+        // Վերադարձնել ֆայլերը JSON ձևաչափով
+        return response()->json(['files' => $files], 200);
+    }
+
     /**
      * Store a newly created resource in storage.
      */
-   public function store(Request $request)
-   {
-       $request->validate([
-           'files' => 'required|array',
-           'files.*' => 'file|mimes:jpg,png,pdf', // adjust mime types
-       ]);
+    public function store(Request $request): JsonResponse
+    {
+        $request->validate([
+            'files' => 'required|array',
+            'files.*' => 'nullable|file|mimes:jpg,png,pdf,dxf',  // Ստուգում ենք, թե արդյոք դա ֆայլ է
+            'factory_id' => 'required|exists:factories,id',
+            'order_id' => 'required|exists:orders,id',
+        ]);
 
-       $files = $request->file('files');
-       foreach ($files as $file) {
-           $path = $file->store('laser-files');
-           LaserFile::create(['path' => $path, 'original_name' => $file->getClientOriginalName()]);
-       }
+        // Աշխատանքներ բեռնելու համար
+        foreach ($request->file('files') as $index => $file) {
+            // Եթե դա ֆիզիկական ֆայլ է, պահպանեք այն
+            if ($file instanceof \Illuminate\Http\UploadedFile) {
+                $path = $file->store('uploads/orders/' . $request->order_id);  // Ստեղծում ենք ֆայլի պահեստի հղումը
+                $originalName = $file->getClientOriginalName();
+            } else {
+                // Եթե դա միայն path-ով ֆայլ է, ապա վերցնում ենք միայն տվյալները
+                $path = $request->input('files')[$index];
+                $originalName = $request->input('original_name')[$index];
+            }
 
-       return response()->json(['message' => 'Laser files uploaded successfully!'], 200);
-   }
+            // Նոր FactoryFile մոդելի գրառման ստեղծում
+            FactoryFile::create([
+                'factory_id' => $request->factory_id,
+                'order_id' => $request->order_id,
+                'path' => $path,
+                'original_name' => $originalName,
+            ]);
+        }
 
-   // app/Http/Controllers/BendFileController.php
-   public function store(Request $request)
-   {
-       $request->validate([
-           'files' => 'required|array',
-           'files.*' => 'file|mimes:jpg,png,pdf', // adjust mime types
-       ]);
+        return response()->json(['message' => 'Files uploaded successfully']);
+    }
 
-       $files = $request->file('files');
-       foreach ($files as $file) {
-           $path = $file->store('bend-files');
-           BendFile::create(['path' => $path, 'original_name' => $file->getClientOriginalName()]);
-       }
 
-       return response()->json(['message' => 'Bend files uploaded successfully!'], 200);
-   }
 
-   // app/Http/Controllers/OrderController.php
-   public function store(Request $request)
-   {
-       $order = Order::create($request->all());
 
-       foreach ($request->laserFiles as $file) {
-           $order->files()->create(['path' => $file['path']]);
-       }
-
-       return response()->json(['message' => 'Order created successfully!'], 200);
-   }
 
     /**
      * Display the specified resource.

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Client\ClientController;
+use App\Http\Controllers\Api\Factory\EngineerController;
 use App\Http\Controllers\Api\Factory\FactoryController;
 use App\Http\Controllers\Api\File\BendFileExtensionController;
 use App\Http\Controllers\Api\File\FileController;
@@ -55,6 +56,8 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::put('/updateOrder/{order}', [FactoryController::class, 'updateOrder']);
             Route::put('/confirmOrderStatus/{id}', [FactoryController::class, 'confirmOrderStatus']);
             Route::get('/getStatus', [FactoryController::class, 'getStatus']);
+            Route::apiResource('engineer', EngineerController::class);
+            Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder']);
         });
 
         Route::get('/download/{path}', [FileController::class, 'downloadFile'])->where('path', '.*');

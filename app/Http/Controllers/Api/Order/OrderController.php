@@ -21,7 +21,7 @@ class OrderController extends Controller
      */
     public function index(): JsonResponse
     {
-        $orders = Order::with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files')->get();
+        $orders = Order::with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files', 'factoryFiles')->get();
         return response()->json($orders);
     }
 
@@ -102,7 +102,7 @@ class OrderController extends Controller
             $orderUrl = route('orders.show', ['id' => $order->id]);
             Mail::to($userEmail)->send(new OrderCreated($order, $orderUrl));
 
-            return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 201);
+            return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files', 'factoryFiles'), 201);
 
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -111,7 +111,7 @@ class OrderController extends Controller
 
     public function show($id): JsonResponse
     {
-        $order = Order::with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'factoryOrderStatuses.factory', 'dates', 'files')->findOrFail($id);
+        $order = Order::with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'factoryOrderStatuses.factory', 'dates', 'files', 'factoryFiles')->findOrFail($id);
         return response()->json($order);
     }
 
@@ -190,7 +190,7 @@ class OrderController extends Controller
         }
 
 
-        return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files'), 200);
+        return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files', 'factoryFiles'), 200);
     }
 
     public function destroy($id): JsonResponse
