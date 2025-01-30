@@ -22,4 +22,9 @@ class Factory extends Model
     {
         return $this->hasMany(FactoryFile::class);
     }
+
+    public function orders(): BelongsToMany
+    {
+        return $this->belongsToMany(Order::class, 'factory_order');
+    }
 }

@@ -11,19 +11,13 @@ class FactoryFile extends Model
     use HasFactory;
 
     protected $fillable = [
-        'factory_id',
-        'order_id',
+        'factory_order_id',
         'path',
         'original_name',
     ];
 
-    public function factory(): BelongsTo
+    public function factoryOrder(): BelongsTo
     {
-        return $this->belongsTo(Factory::class);
-    }
-
-    public function order(): BelongsTo
-    {
-        return $this->belongsTo(Order::class);
+        return $this->belongsTo(FactoryOrder::class);
     }
 }

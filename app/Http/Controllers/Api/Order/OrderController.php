@@ -72,28 +72,66 @@ class OrderController extends Controller
                 $order->storeLink()->create(['url' => $validatedData['store_link']['url']]);
             }
 
+//            if (!empty($validatedData['factories'])) {
+//                foreach ($validatedData['factories'] as $factory) {
+//                    $order->factories()->attach($factory['id']);
+//                    $order->factoryOrderStatuses()->create([
+//                        'factory_id' => $factory['id'],
+//                        'status' => $factory['status'],
+//                    ]);
+//                }
+//            }
             if (!empty($validatedData['factories'])) {
                 foreach ($validatedData['factories'] as $factory) {
-                    $order->factories()->attach($factory['id']);
+                    $factoryOrder = $order->factories()->attach($factory['id']);
                     $order->factoryOrderStatuses()->create([
                         'factory_id' => $factory['id'],
-                        'status' => $factory['status'],
+                        'status' => $factory['status'] ?? 'waiting',
+                    ]);
+                    $order->factoryFiles()->create([
+                        'factory_id' => $factory['id'],
+                        'order_id' => $order->id,
+                        'path' => 'some_path',
+                        'original_name' => 'filename.pdf',
                     ]);
                 }
             }
 
             $order->dates()->create(['finish_date' => $validatedData['finish_date'] ?? null]);
 
+//            if (!empty($validatedData['files'])) {
+//                foreach ($validatedData['files'] as $file) {
+//                    $path = $file->store("uploads/orders/{$order->id}", 'public');
+//                    $name = $file->getClientOriginalName();
+//                    $order->files()->create([
+//                        'path' => $path,
+//                        'original_name' => $name,
+//                    ]);
+//                    foreach ($order->factories as $factory) {
+//                        $order->factoryFiles()->create([
+//                            'factory_id' => $factory->id,
+//                            'path' => $path,
+//                            'original_name' => $name,
+//                        ]);
+//                    }
+//                }
+//            }
             if (!empty($validatedData['files'])) {
                 foreach ($validatedData['files'] as $file) {
-                    $path = $file->store("uploads/orders/{$order->id}", 'public');
-                    $name = $file->getClientOriginalName();
-                    $mimeType = $file->getMimeType();
+                    // Get the original file name and extension
+                    $originalName = $file->getClientOriginalName();
+                    $extension = $file->getClientOriginalExtension();
 
+                    // Generate a unique file name with the original extension
+                    $fileName = pathinfo($originalName, PATHINFO_FILENAME) . '_' . time() . '.' . $extension;
+
+                    // Store the file with the custom file name
+                    $path = $file->storeAs("uploads/orders/{$order->id}", $fileName, 'public');
+
+                    // Save the file details in the database
                     $order->files()->create([
                         'path' => $path,
-                        'original_name' => $name,
-                        'mime_type' => $mimeType,
+                        'original_name' => $originalName,
                     ]);
                 }
             }
@@ -156,6 +194,18 @@ class OrderController extends Controller
             );
         }
 
+//        if (!empty($validatedData['factories'])) {
+//            $factoryIds = array_column($validatedData['factories'], 'id');
+//            $order->factories()->sync($factoryIds);
+//
+//            foreach ($validatedData['factories'] as $factory) {
+//                $order->factoryOrderStatuses()->updateOrCreate(
+//                    ['factory_id' => $factory['id'], 'order_id' => $order->id],
+//                    ['status' => $factory['status'] ?? 'pending']
+//                );
+//            }
+//        }
+
         if (!empty($validatedData['factories'])) {
             $factoryIds = array_column($validatedData['factories'], 'id');
             $order->factories()->sync($factoryIds);
@@ -176,9 +226,6 @@ class OrderController extends Controller
         }
 
         if (!empty($validatedData['files'])) {
-            foreach ($order->files as $existingFile) {
-                $existingFile->delete();
-            }
             foreach ($validatedData['files'] as $file) {
                 $path = $file->store("uploads/orders/{$order->id}", 'public');
                 $name = $file->getClientOriginalName();
@@ -186,6 +233,14 @@ class OrderController extends Controller
                     'path' => $path,
                     'original_name' => $name,
                 ]);
+                // Բաժանել այս ֆայլը նաև գործարանին
+                foreach ($order->factories as $factory) {
+                    $order->factoryFiles()->create([
+                        'factory_id' => $factory->id,
+                        'path' => $path,
+                        'original_name' => $name,
+                    ]);
+                }
             }
         }
 

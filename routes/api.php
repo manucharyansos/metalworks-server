@@ -58,6 +58,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::get('/getStatus', [FactoryController::class, 'getStatus']);
             Route::apiResource('engineer', EngineerController::class);
             Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder']);
+            Route::post('storeWithFiles', [EngineerController::class, 'storeWithFiles']);
         });
 
         Route::get('/download/{path}', [FileController::class, 'downloadFile'])->where('path', '.*');

@@ -22,5 +22,8 @@ class DatabaseSeeder extends Seeder
         $this->call(RoleTableSeeder::class);
         $this->call(UserSeeder::class);
         $this->call(FactorySeeder::class);
+        $this->call(FileExtensionSeeder::class);
+        $this->call(LaserFileExtensionSeeder::class);
+        $this->call(BendFileExtensionSeeder::class);
     }
 }

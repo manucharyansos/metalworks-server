@@ -2,18 +2,20 @@
 
 namespace App\Models;
 
-use DateTime;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class FactoryOrderStatus extends Model
+class FactoryOrder extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'factory_order_id',
+        'factory_id',
+        'order_id',
         'status',
+        'path',
+        'original_name',
         'canceling',
         'cancel_date',
         'finish_date',
@@ -21,8 +23,13 @@ class FactoryOrderStatus extends Model
         'admin_confirmation_date'
     ];
 
-    public function factoryOrder(): BelongsTo
+    public function factory(): BelongsTo
     {
-        return $this->belongsTo(FactoryOrder::class);
+        return $this->belongsTo(Factory::class);
+    }
+
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
     }
 }

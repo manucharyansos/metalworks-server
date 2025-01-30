@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::create('factory_order', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('order_id')->constrained()->onDelete('cascade');  // foreign key to orders table
-            $table->foreignId('factory_id')->constrained()->onDelete('cascade'); // foreign key to factories table
+            $table->foreignId('factory_id')->constrained('factories')->onDelete('cascade');
+            $table->foreignId('order_id')->constrained('orders')->onDelete('cascade');
             $table->timestamps();
         });
     }

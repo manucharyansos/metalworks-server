@@ -13,7 +13,7 @@ class CreateFilesTable extends Migration
             $table->unsignedBigInteger('order_id');
             $table->string('path');
             $table->string('original_name');
-            $table->string('mime_type');
+            $table->string('mime_type')->default('unknown')->change();
             $table->timestamps();
 
             $table->foreign('order_id')->references('id')->on('orders')->onDelete('cascade');

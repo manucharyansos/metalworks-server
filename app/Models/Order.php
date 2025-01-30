@@ -30,6 +30,7 @@ class Order extends Model
     {
         return $this->hasOne(StoreLink::class);
     }
+
     public function dates(): HasOne
     {
         return $this->hasOne(Date::class);
@@ -60,9 +61,6 @@ class Order extends Model
         return $this->hasMany(FactoryFile::class, 'order_id');
     }
 
-    /**
-     * @throws \Exception
-     */
     public function getCreatedAtAttribute($value): string
     {
         $dateTime = new DateTime($value);
