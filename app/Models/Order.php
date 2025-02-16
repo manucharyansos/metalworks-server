@@ -43,7 +43,9 @@ class Order extends Model
 
     public function factories(): BelongsToMany
     {
-        return $this->belongsToMany(Factory::class, 'factory_order', 'order_id', 'factory_id');
+        return $this->belongsToMany(Factory::class, 'factory_orders', 'order_id', 'factory_id')
+            ->withPivot(['status', 'canceling', 'cancel_date', 'finish_date', 'operator_finish_date', 'admin_confirmation_date'])
+            ->withTimestamps();
     }
 
     public function user(): BelongsTo
@@ -51,19 +53,13 @@ class Order extends Model
         return $this->belongsTo(User::class);
     }
 
-    public function factoryOrderStatuses(): HasMany
+    public function factoryOrders(): HasMany
     {
-        return $this->hasMany(FactoryOrderStatus::class, 'order_id');
-    }
-
-    public function factoryFiles(): HasMany
-    {
-        return $this->hasMany(FactoryFile::class, 'order_id');
+        return $this->hasMany(FactoryOrder::class, 'order_id');
     }
 
     public function getCreatedAtAttribute($value): string
     {
-        $dateTime = new DateTime($value);
-        return $dateTime->format('d/m/Y');
+        return (new DateTime($value))->format('d/m/Y');
     }
 }

@@ -145,7 +145,7 @@ class EngineerController extends Controller
         $orderUrl = route('orders.show', ['id' => $order->id]);
         Mail::to($userEmail)->send(new OrderCreated($order, $orderUrl));
 
-        return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files', 'factoryFiles'), 201);
+        return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'files'), 201);
     }
 
 

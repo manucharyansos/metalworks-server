@@ -11,15 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('factory_files', function (Blueprint $table) {
+        Schema::create('factory_order_files', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('factory_id')->constrained()->onDelete('cascade');
-            $table->foreignId('order_id')->constrained()->onDelete('cascade');
+            $table->foreignId('factory_order_id')->constrained('factory_orders')->onDelete('cascade');
             $table->string('path');
             $table->string('original_name');
             $table->timestamps();
         });
-
     }
 
     /**
@@ -27,6 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('factory_files');
+        Schema::dropIfExists('factory_order_files');
     }
 };

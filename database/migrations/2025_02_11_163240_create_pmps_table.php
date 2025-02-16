@@ -11,10 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('factory_order', function (Blueprint $table) {
+        Schema::create('pmps', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('factory_id')->constrained('factories')->onDelete('cascade');
-            $table->foreignId('order_id')->constrained('orders')->onDelete('cascade');
+            $table->string('group', 3)->unique();
+            $table->string('group_name');
+            $table->boolean('admin_confirmation');
             $table->timestamps();
         });
     }
@@ -24,6 +25,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('factory_order');
+        Schema::dropIfExists('pmps');
     }
 };

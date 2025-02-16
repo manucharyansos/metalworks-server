@@ -5,6 +5,7 @@ namespace Database\Seeders;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use App\Models\Materials;
 use App\Models\Order;
+use App\Models\Pmp;
 use App\Models\PrefixCode;
 use App\Models\Status;
 use App\Models\StoreLink;
@@ -25,5 +26,6 @@ class DatabaseSeeder extends Seeder
         $this->call(FileExtensionSeeder::class);
         $this->call(LaserFileExtensionSeeder::class);
         $this->call(BendFileExtensionSeeder::class);
+        $this->call(PmpSeeder::class);
     }
 }

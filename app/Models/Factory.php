@@ -11,20 +11,17 @@ class Factory extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name'];
-
-    public function orderStatuses(): HasMany
-    {
-        return $this->hasMany(FactoryOrderStatus::class);
-    }
-
-    public function factoryFiles(): HasMany
-    {
-        return $this->hasMany(FactoryFile::class);
-    }
+    protected $fillable = ['name', 'value'];
 
     public function orders(): BelongsToMany
     {
-        return $this->belongsToMany(Order::class, 'factory_order');
+        return $this->belongsToMany(Order::class, 'factory_orders', 'factory_id', 'order_id')
+            ->withPivot(['status', 'canceling', 'cancel_date', 'finish_date', 'operator_finish_date', 'admin_confirmation_date'])
+            ->withTimestamps();
+    }
+
+    public function pmpFiles(): HasMany
+    {
+        return $this->hasMany(PmpFiles::class, 'factory_id');
     }
 }

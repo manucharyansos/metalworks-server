@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Factory;
 
 use App\Http\Controllers\Controller;
 use App\Models\Factory;
+use App\Models\FactoryOrder;
 use App\Models\FactoryOrderStatus;
 use App\Models\Order;
 use Illuminate\Http\JsonResponse;
@@ -50,16 +51,22 @@ class FactoryController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $id): JsonResponse
+
+    public function show($id): JsonResponse
     {
-        $factory = Factory::find($id);
+        $factory = Factory::with(['orders.factoryOrders' => function ($query) use ($id) {
+            $query->where('factory_id', $id)->with('files');
+        }])->find($id);
 
-        if (!$factory) {
-            return response()->json(['message' => 'Factory not found'], 404);
-        }
+        $filteredOrders = $factory->orders->filter(function ($order) {
+            return $order->factoryOrders->isNotEmpty();
+        });
 
-        return response()->json($factory, 200);
+        $factory->setRelation('orders', $filteredOrders);
+
+        return response()->json($factory);
     }
+
 
     /**
      * Show the form for editing the specified resource.
@@ -95,11 +102,11 @@ class FactoryController extends Controller
     {
         $validatedData = $request->validate([
             'factory_id' => 'required|exists:factories,id',
-            'factory_order_statuses.status' => 'nullable|string',
-            'factory_order_statuses.canceling' => 'nullable|string',
-            'factory_order_statuses.cancel_date' => 'nullable|date',
-            'factory_order_statuses.operator_finish_date' => 'nullable|date',
-            'factory_order_statuses.admin_confirmation_date' => 'nullable|date',
+            'factory_order.status' => 'nullable|string',
+            'factory_order.canceling' => 'nullable|string',
+            'factory_order.cancel_date' => 'nullable|date',
+            'factory_order.operator_finish_date' => 'nullable|date',
+            'factory_order.admin_confirmation_date' => 'nullable|date',
         ]);
 
         $order = Order::find($id);
@@ -108,24 +115,24 @@ class FactoryController extends Controller
             return response()->json(['error' => 'Order not found'], 404);
         }
 
-        $factoryOrderStatuses = $request->input('factory_order_statuses', []);
-        FactoryOrderStatus::updateOrCreate(
+        $factoryOrder = $request->input('factory_order', []);
+        FactoryOrder::updateOrCreate(
             [
                 'order_id' => $order->id,
                 'factory_id' => $validatedData['factory_id'],
             ],
             [
-                'status' => $factoryOrderStatuses['status'] ?? null,
-                'canceling' => $factoryOrderStatuses['canceling'] ?? null,
-                'cancel_date' => $factoryOrderStatuses['cancel_date'] ?? null,
-                'finish_date' => $factoryOrderStatuses['finish_date'] ?? null,
-                'operator_finish_date' => $factoryOrderStatuses['operator_finish_date'] ?? null,
-                'admin_confirmation_date' => $factoryOrderStatuses['admin_confirmation_date'] ?? null,
+                'status' => $factoryOrder['status'] ?? null,
+                'canceling' => $factoryOrder['canceling'] ?? null,
+                'cancel_date' => $factoryOrder['cancel_date'] ?? null,
+                'finish_date' => $factoryOrder['finish_date'] ?? null,
+                'operator_finish_date' => $factoryOrder['operator_finish_date'] ?? null,
+                'admin_confirmation_date' => $factoryOrder['admin_confirmation_date'] ?? null,
             ]
         );
 
         return response()->json(
-            $order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses'),
+            $order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates'),
             200
         );
     }
@@ -167,10 +174,10 @@ class FactoryController extends Controller
             $query->whereIn('factories.id', $factoryIdsArray);
         })
             // Բացառել այն պատվերները, որոնց կարգավիճակը `confirmed` է
-            ->whereDoesntHave('factoryOrderStatuses', function ($query) {
+            ->whereDoesntHave('factoryOrder', function ($query) {
                 $query->where('status', 'confirmed');
             })
-            ->with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'files', 'dates', 'factoryOrderStatuses', 'user')
+            ->with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'files', 'dates', 'user')
             ->get();
 
         return response()->json($orders);

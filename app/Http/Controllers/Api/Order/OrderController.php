@@ -21,7 +21,7 @@ class OrderController extends Controller
      */
     public function index(): JsonResponse
     {
-        $orders = Order::with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files', 'factoryFiles')->get();
+        $orders = Order::with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'files')->get();
         return response()->json($orders);
     }
 
@@ -75,7 +75,7 @@ class OrderController extends Controller
 //            if (!empty($validatedData['factories'])) {
 //                foreach ($validatedData['factories'] as $factory) {
 //                    $order->factories()->attach($factory['id']);
-//                    $order->factoryOrderStatuses()->create([
+//                    $order->factoryOrder()->create([
 //                        'factory_id' => $factory['id'],
 //                        'status' => $factory['status'],
 //                    ]);
@@ -84,16 +84,16 @@ class OrderController extends Controller
             if (!empty($validatedData['factories'])) {
                 foreach ($validatedData['factories'] as $factory) {
                     $factoryOrder = $order->factories()->attach($factory['id']);
-                    $order->factoryOrderStatuses()->create([
+                    $order->factoryOrder()->create([
                         'factory_id' => $factory['id'],
                         'status' => $factory['status'] ?? 'waiting',
                     ]);
-                    $order->factoryFiles()->create([
-                        'factory_id' => $factory['id'],
-                        'order_id' => $order->id,
-                        'path' => 'some_path',
-                        'original_name' => 'filename.pdf',
-                    ]);
+//                    $order->factoryFiles()->create([
+//                        'factory_id' => $factory['id'],
+//                        'order_id' => $order->id,
+//                        'path' => 'some_path',
+//                        'original_name' => 'filename.pdf',
+//                    ]);
                 }
             }
 
@@ -140,7 +140,7 @@ class OrderController extends Controller
             $orderUrl = route('orders.show', ['id' => $order->id]);
             Mail::to($userEmail)->send(new OrderCreated($order, $orderUrl));
 
-            return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files', 'factoryFiles'), 201);
+            return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'files'), 201);
 
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
@@ -149,7 +149,16 @@ class OrderController extends Controller
 
     public function show($id): JsonResponse
     {
-        $order = Order::with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'factoryOrderStatuses.factory', 'dates', 'files', 'factoryFiles')->findOrFail($id);
+        $order = Order::with([
+            'orderNumber',
+            'prefixCode',
+            'storeLink',
+            'factories',
+            'dates',
+            'files',
+            'factoryOrders.files'
+        ])->findOrFail($id);
+
         return response()->json($order);
     }
 
@@ -199,7 +208,7 @@ class OrderController extends Controller
 //            $order->factories()->sync($factoryIds);
 //
 //            foreach ($validatedData['factories'] as $factory) {
-//                $order->factoryOrderStatuses()->updateOrCreate(
+//                $order->factoryOrder()->updateOrCreate(
 //                    ['factory_id' => $factory['id'], 'order_id' => $order->id],
 //                    ['status' => $factory['status'] ?? 'pending']
 //                );
@@ -211,7 +220,7 @@ class OrderController extends Controller
             $order->factories()->sync($factoryIds);
 
             foreach ($validatedData['factories'] as $factory) {
-                $order->factoryOrderStatuses()->updateOrCreate(
+                $order->factoryOrder()->updateOrCreate(
                     ['factory_id' => $factory['id'], 'order_id' => $order->id],
                     ['status' => $factory['status'] ?? 'pending']
                 );
@@ -235,17 +244,17 @@ class OrderController extends Controller
                 ]);
                 // Բաժանել այս ֆայլը նաև գործարանին
                 foreach ($order->factories as $factory) {
-                    $order->factoryFiles()->create([
-                        'factory_id' => $factory->id,
-                        'path' => $path,
-                        'original_name' => $name,
-                    ]);
+//                    $order->factoryFiles()->create([
+//                        'factory_id' => $factory->id,
+//                        'path' => $path,
+//                        'original_name' => $name,
+//                    ]);
                 }
             }
         }
 
 
-        return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'factoryOrderStatuses.factory', 'files', 'factoryFiles'), 200);
+        return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'files'), 200);
     }
 
     public function destroy($id): JsonResponse

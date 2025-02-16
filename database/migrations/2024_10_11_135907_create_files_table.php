@@ -10,13 +10,10 @@ class CreateFilesTable extends Migration
     {
         Schema::create('files', function (Blueprint $table) {
             $table->id();
-            $table->unsignedBigInteger('order_id');
+            $table->foreignId('order_id')->constrained()->onDelete('cascade');
             $table->string('path');
             $table->string('original_name');
-            $table->string('mime_type')->default('unknown')->change();
             $table->timestamps();
-
-            $table->foreign('order_id')->references('id')->on('orders')->onDelete('cascade');
         });
     }
 

@@ -6,15 +6,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class FactoryFile extends Model
+class FactoryOrderFile extends Model
 {
     use HasFactory;
 
-    protected $fillable = [
-        'factory_order_id',
-        'path',
-        'original_name',
-    ];
+    protected $fillable = ['factory_order_id', 'path', 'original_name'];
 
     public function factoryOrder(): BelongsTo
     {

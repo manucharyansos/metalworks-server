@@ -2,34 +2,44 @@
 
 namespace App\Models;
 
+use DateTime;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class FactoryOrder extends Model
 {
     use HasFactory;
 
     protected $fillable = [
-        'factory_id',
         'order_id',
+        'factory_id',
         'status',
-        'path',
-        'original_name',
         'canceling',
         'cancel_date',
         'finish_date',
         'operator_finish_date',
-        'admin_confirmation_date'
+        'admin_confirmation_date',
     ];
+
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
+    }
 
     public function factory(): BelongsTo
     {
         return $this->belongsTo(Factory::class);
     }
 
-    public function order(): BelongsTo
+    public function files(): HasMany
     {
-        return $this->belongsTo(Order::class);
+        return $this->hasMany(FactoryOrderFile::class, 'factory_order_id');
+    }
+
+    public function getCreatedAtAttribute($value): string
+    {
+        return (new DateTime($value))->format('d/m/Y');
     }
 }

@@ -13,6 +13,8 @@ use App\Http\Controllers\Api\Materials\MaterialCategoryController;
 use App\Http\Controllers\Api\Materials\MaterialController;
 use App\Http\Controllers\Api\Materials\MaterialGroupController;
 use App\Http\Controllers\Api\Order\OrderController;
+use App\Http\Controllers\Api\PMP\PmpController;
+use App\Http\Controllers\Api\PMP\PmpFilesController;
 use App\Http\Controllers\Api\Users\UserController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\RoleController;
@@ -36,6 +38,14 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::resource('file-extensions', FileExtensionController::class);
             Route::resource('laser-file-extension', LaserFileExtensionController::class);
             Route::resource('bend-file-extension', BendFileExtensionController::class);
+
+
+            Route::apiResource('pmps', PmpController::class);
+            Route::post('pmps/remoteNumber/{id}', [PmpController::class, 'remoteNumber']);
+            Route::post('/pmps/check-group', [PmpController::class, 'checkGroup']);
+            Route::post('/pmps/check-group-name', [PmpController::class, 'checkGroupName']);
+            Route::apiResource('pmpFiles', PmpFilesController::class);
+            Route::post('upload', [PmpFilesController::class, 'upload']);
         });
 
         Route::group(['prefix'=>'orders', ['middleware' => 'check.order']], function () {
@@ -66,6 +76,12 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::resource('/roles', RoleController::class);
 
         Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
+    });
+
+    Route::group(['prefix'=>'engineers'],function (){
+        Route::resource('/engineer', \App\Http\Controllers\Api\Engineer\EngineerController::class);
+        Route::post('/upload', [\App\Http\Controllers\Api\Engineer\EngineerController::class, 'upload']);
+
     });
 
     Route::group(['prefix'=>'categories'],function (){
