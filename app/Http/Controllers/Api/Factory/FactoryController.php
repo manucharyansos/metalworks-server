@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api\Factory;
 use App\Http\Controllers\Controller;
 use App\Models\Factory;
 use App\Models\FactoryOrder;
+use App\Models\FactoryOrderFile;
 use App\Models\FactoryOrderStatus;
+use App\Models\File;
 use App\Models\Order;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -188,7 +190,7 @@ class FactoryController extends Controller
     public function confirmOrderStatus($id): JsonResponse
     {
         try {
-            $orderStatus = FactoryOrderStatus::where('order_id', $id)->firstOrFail();
+            $orderStatus = FactoryOrder::where('order_id', $id)->firstOrFail();
             $orderStatus->status = 'confirmed';
             $orderStatus->admin_confirmation_date = now();
             $orderStatus->save();
@@ -209,5 +211,30 @@ class FactoryController extends Controller
         }
     }
 
+    public function getFile($filePath): JsonResponse
+    {
+        $decodedPath = urldecode($filePath);
 
+        if (!Storage::disk('public')->exists($decodedPath)) {
+            return response()->json(['error' => 'File not found'], 404);
+        }
+
+        // Ստանալ ֆայլի տվյալները
+        $fileContent = Storage::disk('public')->get($decodedPath);
+        $originalName = basename($decodedPath); // Ֆայլի անունը
+        $fileSize = Storage::disk('public')->size($decodedPath); // Ֆայլի չափը
+        $mimeType = Storage::disk('public')->mimeType($decodedPath); // Ֆայլի MIME տեսակը
+
+        // Base64 կոդավորում (եթե անհրաժեշտ է)
+        $base64Content = base64_encode($fileContent);
+
+        // JSON պատասխան
+        return response()->json([
+            'path' => $decodedPath,
+            'original_name' => $originalName,
+            'file_size' => $fileSize,
+            'mime_type' => $mimeType,
+            'content' => $base64Content, // Base64 կոդավորված բովանդակություն
+        ], 200);
+    }
 }

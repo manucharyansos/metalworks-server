@@ -114,7 +114,7 @@ class EngineerController extends Controller
                         'admin_confirmation_date' => null,
                     ]
                 );
-                $directoryPath = "MetalWorks/PMP_{$orderName}_{$orderId}/{$factoryName}";
+                $directoryPath = "uploads/PMP_{$orderName}_{$orderId}/{$factoryName}";
                 Storage::disk('public')->makeDirectory($directoryPath);
                 foreach ($factoryData['files'] as $file) {
                     $originalName = $file->getClientOriginalName();

@@ -23,12 +23,12 @@ return [
 //        'http://localhost:3000,http://localhost:3000/'
 //    ))),
 
-    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', 'metalworks.am,api.metalworks.am')),
+//    'stateful' => explode(',', env('SANCTUM_STATEFUL_DOMAINS', 'metalworks.am,api.metalworks.am')),
 //
-//    'stateful' => explode(',', env(
-//        'SANCTUM_STATEFUL_DOMAINS',
-//        'localhost,localhost:3000,127.0.0.1,127.0.0.1:8000,::1'
-//    )),
+    'stateful' => explode(',', env(
+        'SANCTUM_STATEFUL_DOMAINS',
+        'localhost,localhost:3000,127.0.0.1,127.0.0.1:8000,::1'
+    )),
 
 
     /*

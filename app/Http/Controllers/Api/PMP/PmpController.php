@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\PMP;
 
 use App\Http\Controllers\Controller;
 use App\Models\Factory;
+use App\Models\FactoryOrder;
 use App\Models\Pmp;
 use App\Models\RemoteNumber;
 use Illuminate\Http\JsonResponse;
@@ -17,7 +18,7 @@ class PmpController extends Controller
      */
     public function index(): JsonResponse
     {
-        $pmp = Pmp::with('remoteNumber')->get();
+        $pmp = Pmp::with('remoteNumber', 'files')->get();
         return response()->json(['pmp' => $pmp]);
     }
     /**
@@ -178,8 +179,9 @@ class PmpController extends Controller
         if (!$group) {
             return response()->json(['error' => 'Group parameter is required'], 400);
         }
-        $pmp = Pmp::with('remoteNumber')
-        ->where('group', $group)
+
+        $pmp = Pmp::with(['remoteNumber', 'files'])
+            ->where('group', $group)
             ->first();
 
         if ($pmp) {
@@ -200,9 +202,10 @@ class PmpController extends Controller
             return response()->json(['error' => 'Group parameter is required'], 400);
         }
 
-        $pmp = Pmp::with('remoteNumber')
+        $pmp = Pmp::with(['remoteNumber', 'files'])
             ->where('group_name', $group)
             ->first();
+
         if ($pmp) {
             return response()->json([
                 'exists' => true,

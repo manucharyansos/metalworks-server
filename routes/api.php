@@ -62,6 +62,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
         Route::group(['prefix'=>'factories'], function () {
             Route::apiResource('factory', FactoryController::class);
+            Route::get('getFile/{path}', [FactoryController::class, 'getFile'])->where('path', '.*');
             Route::get('/getOrdersByFactories', [FactoryController::class, 'getOrdersByFactories']);
             Route::put('/updateOrder/{order}', [FactoryController::class, 'updateOrder']);
             Route::put('/confirmOrderStatus/{id}', [FactoryController::class, 'confirmOrderStatus']);

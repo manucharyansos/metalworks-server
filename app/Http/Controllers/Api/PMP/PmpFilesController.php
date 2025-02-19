@@ -82,14 +82,11 @@ class PmpFilesController extends Controller
 
                 Storage::disk('public')->makeDirectory($baseDirectoryPath);
 
-                // Ֆայլի անվանումը
                 $originalName = $file->getClientOriginalName();
                 $fileName = pathinfo($originalName, PATHINFO_FILENAME) . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
 
-                // Պահպանել ֆայլը
                 $path = $file->storeAs($baseDirectoryPath, $fileName, 'public');
 
-                // Պահպանել տվյալները բազայում
                 PmpFiles::create([
                     'pmp_id' => $pmp->id,
                     'remote_number_id' => $remoteNumber->id,
