@@ -63,6 +63,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::group(['prefix'=>'factories'], function () {
             Route::apiResource('factory', FactoryController::class);
             Route::get('getFile/{path}', [FactoryController::class, 'getFile'])->where('path', '.*');
+            Route::get('/download/{path}', [FactoryController::class, 'downloadFile'])->where('path', '.*');
             Route::get('/getOrdersByFactories', [FactoryController::class, 'getOrdersByFactories']);
             Route::put('/updateOrder/{order}', [FactoryController::class, 'updateOrder']);
             Route::put('/confirmOrderStatus/{id}', [FactoryController::class, 'confirmOrderStatus']);
@@ -72,7 +73,6 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::post('storeWithFiles', [EngineerController::class, 'storeWithFiles']);
         });
 
-        Route::get('/download/{path}', [FileController::class, 'downloadFile'])->where('path', '.*');
 
         Route::resource('/roles', RoleController::class);
 

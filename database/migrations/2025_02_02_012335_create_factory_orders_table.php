@@ -13,7 +13,7 @@ return new class extends Migration
             $table->foreignId('order_id')->constrained()->onDelete('cascade');
             $table->foreignId('factory_id')->constrained()->onDelete('cascade');
             $table->string('status')->default('pending');
-            $table->boolean('canceling')->default(false);
+            $table->string('canceling')->default('');
             $table->date('cancel_date')->nullable();
             $table->date('finish_date')->nullable();
             $table->date('operator_finish_date')->nullable();

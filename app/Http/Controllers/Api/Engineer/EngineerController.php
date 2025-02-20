@@ -13,6 +13,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+
 class EngineerController extends Controller
 {
     /**
@@ -94,9 +96,11 @@ class EngineerController extends Controller
                 'factories.*.files' => 'required|array',
                 'factories.*.files.*' => 'required|file|max:10240',
             ]);
+
             $order = Order::findOrFail($validatedData['order_id']);
             $orderName = str_replace(' ', '_', strtolower($order->name));
             $orderId = $order->id;
+
             foreach ($validatedData['factories'] as $factoryData) {
                 $factory = Factory::findOrFail($factoryData['id']);
                 $factoryName = str_replace(' ', '_', $factory->value);
@@ -114,22 +118,29 @@ class EngineerController extends Controller
                         'admin_confirmation_date' => null,
                     ]
                 );
+
                 $directoryPath = "uploads/PMP_{$orderName}_{$orderId}/{$factoryName}";
                 Storage::disk('public')->makeDirectory($directoryPath);
+
                 foreach ($factoryData['files'] as $file) {
                     $originalName = $file->getClientOriginalName();
                     $fileName = pathinfo($originalName, PATHINFO_FILENAME) . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
 
-                    $path = $file->storeAs(
-                        $directoryPath,
-                        $fileName,
-                        'public'
-                    );
+                    // Check if the file already exists in the database
+                    $existingFile = $factoryOrder->files()->where('original_name', $originalName)->first();
 
-                    $factoryOrder->files()->create([
-                        'path' => $path,
-                        'original_name' => $originalName,
-                    ]);
+                    if (!$existingFile) {
+                        $path = $file->storeAs(
+                            $directoryPath,
+                            $fileName,
+                            'public'
+                        );
+
+                        $factoryOrder->files()->create([
+                            'path' => $path,
+                            'original_name' => $originalName,
+                        ]);
+                    }
                 }
             }
 
@@ -152,7 +163,7 @@ class EngineerController extends Controller
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(string $id): JsonResponse
+    public function edit(string $id)
     {
         //
     }

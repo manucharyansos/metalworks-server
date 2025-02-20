@@ -125,7 +125,7 @@ class FactoryController extends Controller
             ],
             [
                 'status' => $factoryOrder['status'] ?? null,
-                'canceling' => $factoryOrder['canceling'] ?? null,
+                'canceling' => $factoryOrder['canceling'] ?? '',
                 'cancel_date' => $factoryOrder['cancel_date'] ?? null,
                 'finish_date' => $factoryOrder['finish_date'] ?? null,
                 'operator_finish_date' => $factoryOrder['operator_finish_date'] ?? null,
@@ -237,4 +237,18 @@ class FactoryController extends Controller
             'content' => $base64Content, // Base64 կոդավորված բովանդակություն
         ], 200);
     }
+
+    public function downloadFile($filePath): BinaryFileResponse|JsonResponse
+    {
+        $decodedPath = urldecode($filePath);
+
+        if (!Storage::disk('public')->exists($decodedPath)) {
+            return response()->json(['error' => 'File not found'], 404);
+        }
+
+        $fullPath = storage_path("app/public/{$decodedPath}");
+
+        return response()->download($fullPath, basename($decodedPath));
+    }
+
 }

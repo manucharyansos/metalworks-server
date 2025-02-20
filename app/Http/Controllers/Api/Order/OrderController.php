@@ -84,7 +84,7 @@ class OrderController extends Controller
             if (!empty($validatedData['factories'])) {
                 foreach ($validatedData['factories'] as $factory) {
                     $factoryOrder = $order->factories()->attach($factory['id']);
-                    $order->factoryOrder()->create([
+                    $order->factoryOrders()->create([
                         'factory_id' => $factory['id'],
                         'status' => $factory['status'] ?? 'waiting',
                     ]);
@@ -118,17 +118,13 @@ class OrderController extends Controller
 //            }
             if (!empty($validatedData['files'])) {
                 foreach ($validatedData['files'] as $file) {
-                    // Get the original file name and extension
                     $originalName = $file->getClientOriginalName();
                     $extension = $file->getClientOriginalExtension();
 
-                    // Generate a unique file name with the original extension
                     $fileName = pathinfo($originalName, PATHINFO_FILENAME) . '_' . time() . '.' . $extension;
 
-                    // Store the file with the custom file name
                     $path = $file->storeAs("uploads/orders/{$order->id}", $fileName, 'public');
 
-                    // Save the file details in the database
                     $order->files()->create([
                         'path' => $path,
                         'original_name' => $originalName,
@@ -220,7 +216,7 @@ class OrderController extends Controller
             $order->factories()->sync($factoryIds);
 
             foreach ($validatedData['factories'] as $factory) {
-                $order->factoryOrder()->updateOrCreate(
+                $order->factoryOrders()->updateOrCreate(
                     ['factory_id' => $factory['id'], 'order_id' => $order->id],
                     ['status' => $factory['status'] ?? 'pending']
                 );
