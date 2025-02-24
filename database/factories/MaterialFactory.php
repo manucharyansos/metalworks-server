@@ -2,13 +2,13 @@
 
 namespace Database\Factories;
 
-use App\Models\Materials;
+use App\Models\Material;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
-class MaterialsFactory extends Factory
+class MaterialFactory extends Factory
 {
-    protected $model = Materials::class;
+    protected $model = Material::class;
     /**
      * Define the model's default state.
      *

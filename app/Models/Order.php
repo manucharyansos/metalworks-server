@@ -14,7 +14,7 @@ class Order extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'name', 'quantity', 'description', 'status'];
+    protected $fillable = ['user_id', 'name', 'description', 'status'];
 
     public function orderNumber(): HasOne
     {

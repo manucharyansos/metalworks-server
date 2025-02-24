@@ -18,6 +18,9 @@ class PmpFiles extends Model
         'factory_id',
         'path',
         'original_name',
+        'quantity',
+        'material_type', 
+        'thickness',
     ];
 
     public function pmp(): BelongsTo

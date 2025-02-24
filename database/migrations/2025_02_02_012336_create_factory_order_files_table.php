@@ -16,6 +16,9 @@ return new class extends Migration
             $table->foreignId('factory_order_id')->constrained('factory_orders')->onDelete('cascade');
             $table->string('path');
             $table->string('original_name');
+            $table->integer('quantity')->nullable();
+            $table->string('material_type')->nullable();
+            $table->decimal('thickness', 8, 2)->nullable();
             $table->timestamps();
         });
     }

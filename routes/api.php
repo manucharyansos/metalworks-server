@@ -3,7 +3,8 @@
 use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Client\ClientController;
-use App\Http\Controllers\Api\Factory\EngineerController;
+use App\Http\Controllers\Api\Engineer\EngineerController;
+use App\Http\Controllers\Api\Factory\EngineersController;
 use App\Http\Controllers\Api\Factory\FactoryController;
 use App\Http\Controllers\Api\File\BendFileExtensionController;
 use App\Http\Controllers\Api\File\FileController;
@@ -40,15 +41,10 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::resource('bend-file-extension', BendFileExtensionController::class);
 
 
-            Route::apiResource('pmps', PmpController::class);
-            Route::post('pmps/remoteNumber/{id}', [PmpController::class, 'remoteNumber']);
-            Route::post('/pmps/check-group', [PmpController::class, 'checkGroup']);
-            Route::post('/pmps/check-group-name', [PmpController::class, 'checkGroupName']);
-            Route::apiResource('pmpFiles', PmpFilesController::class);
-            Route::post('upload', [PmpFilesController::class, 'upload']);
+
         });
 
-        Route::group(['prefix'=>'orders', ['middleware' => 'check.order']], function () {
+        Route::group(['prefix'=>'orders', 'middleware' => 'check.order'], function () {
             Route::resource('order', OrderController::class);
         });
 
@@ -68,21 +64,26 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::put('/updateOrder/{order}', [FactoryController::class, 'updateOrder']);
             Route::put('/confirmOrderStatus/{id}', [FactoryController::class, 'confirmOrderStatus']);
             Route::get('/getStatus', [FactoryController::class, 'getStatus']);
-            Route::apiResource('engineer', EngineerController::class);
-            Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder']);
-            Route::post('storeWithFiles', [EngineerController::class, 'storeWithFiles']);
+
         });
 
+        Route::group(['prefix'=>'engineers', 'middleware' => 'engineer'], function () {
+//            Route::apiResource('factory-engineer', EngineerController::class);
+            Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder']);
+            Route::post('storeWithFiles', [EngineerController::class, 'storeWithFiles']);
+            Route::resource('/engineer', EngineerController::class);
+            Route::post('/upload', [EngineerController::class, 'upload']);
+            Route::apiResource('pmps', PmpController::class);
+            Route::post('pmps/remoteNumber/{id}', [PmpController::class, 'remoteNumber']);
+            Route::post('/pmps/check-group', [PmpController::class, 'checkGroup']);
+            Route::post('/pmps/check-group-name', [PmpController::class, 'checkGroupName']);
+            Route::apiResource('pmpFiles', PmpFilesController::class);
+            Route::post('uploadPmpFile', [PmpFilesController::class, 'upload']);
+        });
 
         Route::resource('/roles', RoleController::class);
 
         Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
-    });
-
-    Route::group(['prefix'=>'engineers'],function (){
-        Route::resource('/engineer', \App\Http\Controllers\Api\Engineer\EngineerController::class);
-        Route::post('/upload', [\App\Http\Controllers\Api\Engineer\EngineerController::class, 'upload']);
-
     });
 
     Route::group(['prefix'=>'categories'],function (){

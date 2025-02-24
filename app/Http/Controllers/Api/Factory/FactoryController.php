@@ -219,13 +219,11 @@ class FactoryController extends Controller
             return response()->json(['error' => 'File not found'], 404);
         }
 
-        // Ստանալ ֆայլի տվյալները
         $fileContent = Storage::disk('public')->get($decodedPath);
-        $originalName = basename($decodedPath); // Ֆայլի անունը
-        $fileSize = Storage::disk('public')->size($decodedPath); // Ֆայլի չափը
-        $mimeType = Storage::disk('public')->mimeType($decodedPath); // Ֆայլի MIME տեսակը
+        $originalName = basename($decodedPath);
+        $fileSize = Storage::disk('public')->size($decodedPath);
+        $mimeType = Storage::disk('public')->mimeType($decodedPath);
 
-        // Base64 կոդավորում (եթե անհրաժեշտ է)
         $base64Content = base64_encode($fileContent);
 
         // JSON պատասխան

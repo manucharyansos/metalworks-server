@@ -2,7 +2,7 @@
 
 namespace Database\Seeders;
 
-use App\Models\Materials;
+use App\Models\Material;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Support\Facades\File;
 use Illuminate\Database\Seeder;
@@ -12,6 +12,6 @@ class MaterialsSeeder extends Seeder
 {
     public function run()
     {
-        Materials::factory(10)->create();
+        Material::factory(10)->create();
     }
 }

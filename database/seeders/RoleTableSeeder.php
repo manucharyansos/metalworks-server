@@ -16,5 +16,6 @@ class RoleTableSeeder extends Seeder
         Role::create(['name' => 'bend']);
         Role::create(['name' => 'laser']);
         Role::create(['name' => 'powder_catting']);
+        Role::create(['name' => 'engineer']);
     }
 }

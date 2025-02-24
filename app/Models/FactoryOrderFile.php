@@ -10,7 +10,7 @@ class FactoryOrderFile extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['factory_order_id', 'path', 'original_name'];
+    protected $fillable = ['factory_order_id', 'path', 'original_name', 'quantity', 'material_type', 'thickness',];
 
     public function factoryOrder(): BelongsTo
     {

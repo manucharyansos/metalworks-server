@@ -73,5 +73,6 @@ class Kernel extends HttpKernel
         'access_powder_cutting' => \App\Http\Middleware\CheckPowderCutting::class,
         'check.order' => \App\Http\Middleware\CheckOrder::class,
         'detect.device' => \App\Http\Middleware\DetectDeviceMiddleware::class,
+        'engineer' => \App\Http\Middleware\EngineerMiddleware::class,
     ];
 }
