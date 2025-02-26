@@ -9,6 +9,7 @@ use App\Models\FactoryOrderFile;
 use App\Models\FactoryOrderStatus;
 use App\Models\File;
 use App\Models\Order;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -42,11 +43,9 @@ class FactoryController extends Controller
         $request->validate([
             'name' => 'required|unique:roles|max:255',
         ]);
-
         $factory = Factory::create([
             'name' => $request->name,
         ]);
-
         return response()->json($factory, 201);
     }
 
@@ -59,13 +58,10 @@ class FactoryController extends Controller
         $factory = Factory::with(['orders.factoryOrders' => function ($query) use ($id) {
             $query->where('factory_id', $id)->with('files');
         }])->find($id);
-
         $filteredOrders = $factory->orders->filter(function ($order) {
             return $order->factoryOrders->isNotEmpty();
         });
-
         $factory->setRelation('orders', $filteredOrders);
-
         return response()->json($factory);
     }
 
@@ -86,17 +82,13 @@ class FactoryController extends Controller
         $request->validate([
             'name' => 'required|unique:roles,name,' . $id . '|max:255',
         ]);
-
         $factory = Factory::find($id);
-
         if (!$factory) {
             return response()->json(['message' => 'Factory not found'], 404);
         }
-
         $factory->update([
             'name' => $request->name,
         ]);
-
         return response()->json($factory, 200);
     }
 
@@ -110,13 +102,10 @@ class FactoryController extends Controller
             'factory_order.operator_finish_date' => 'nullable|date',
             'factory_order.admin_confirmation_date' => 'nullable|date',
         ]);
-
         $order = Order::find($id);
-
         if (!$order) {
             return response()->json(['error' => 'Order not found'], 404);
         }
-
         $factoryOrder = $request->input('factory_order', []);
         FactoryOrder::updateOrCreate(
             [
@@ -132,7 +121,6 @@ class FactoryController extends Controller
                 'admin_confirmation_date' => $factoryOrder['admin_confirmation_date'] ?? null,
             ]
         );
-
         return response()->json(
             $order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates'),
             200
@@ -148,34 +136,26 @@ class FactoryController extends Controller
     public function destroy(string $id): JsonResponse
     {
         $factory = Factory::find($id);
-
         if (!$factory) {
             return response()->json(['message' => 'Factory not found'], 404);
         }
-
         $factory->delete();
-
         return response()->json(null, 204);
     }
 
     public function getOrdersByFactories(Request $request): JsonResponse
     {
         $factoryIds = $request->input('factory_ids');
-
         if (!$factoryIds) {
             return response()->json(['message' => 'Factory IDs are required'], 400);
         }
-
         $factoryIdsArray = explode(',', $factoryIds);
-
         if (empty($factoryIdsArray)) {
             return response()->json(['message' => 'Invalid factory IDs'], 400);
         }
-
         $orders = Order::whereHas('factories', function ($query) use ($factoryIdsArray) {
             $query->whereIn('factories.id', $factoryIdsArray);
         })
-            // Բացառել այն պատվերները, որոնց կարգավիճակը `confirmed` է
             ->whereDoesntHave('factoryOrder', function ($query) {
                 $query->where('status', 'confirmed');
             })
@@ -199,7 +179,7 @@ class FactoryController extends Controller
                 'message' => 'Order status confirmed successfully.',
                 'data' => $orderStatus,
             ], 200);
-        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+        } catch (ModelNotFoundException $e) {
             return response()->json([
                 'message' => 'Order status not found.',
             ], 404);
@@ -214,11 +194,9 @@ class FactoryController extends Controller
     public function getFile($filePath): JsonResponse
     {
         $decodedPath = urldecode($filePath);
-
         if (!Storage::disk('public')->exists($decodedPath)) {
             return response()->json(['error' => 'File not found'], 404);
         }
-
         $fileContent = Storage::disk('public')->get($decodedPath);
         $originalName = basename($decodedPath);
         $fileSize = Storage::disk('public')->size($decodedPath);
@@ -226,26 +204,22 @@ class FactoryController extends Controller
 
         $base64Content = base64_encode($fileContent);
 
-        // JSON պատասխան
         return response()->json([
             'path' => $decodedPath,
             'original_name' => $originalName,
             'file_size' => $fileSize,
             'mime_type' => $mimeType,
-            'content' => $base64Content, // Base64 կոդավորված բովանդակություն
+            'content' => $base64Content,
         ], 200);
     }
 
     public function downloadFile($filePath): BinaryFileResponse|JsonResponse
     {
         $decodedPath = urldecode($filePath);
-
         if (!Storage::disk('public')->exists($decodedPath)) {
             return response()->json(['error' => 'File not found'], 404);
         }
-
         $fullPath = storage_path("app/public/{$decodedPath}");
-
         return response()->download($fullPath, basename($decodedPath));
     }
 

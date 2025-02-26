@@ -121,7 +121,7 @@ class EngineerController extends Controller
                 $directoryPath = "uploads/PMP_{$orderName}_{$orderId}/{$factoryName}";
                 Storage::disk('public')->makeDirectory($directoryPath);
 
-                foreach ($factoryData['files'] as $file) {
+                foreach ($factoryData['files'] as $fileIndex => $file) {
                     $originalName = $file->getClientOriginalName();
                     $fileName = pathinfo($originalName, PATHINFO_FILENAME) . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
                     $existingFile = $factoryOrder->files()->where('original_name', $originalName)->first();
@@ -133,13 +133,17 @@ class EngineerController extends Controller
                             'public'
                         );
 
+                        $quantity = $request->input("factories.{$factoryData['id']}.files_quantity.{$fileIndex}");
+                        $materialType = $request->input("factories.{$factoryData['id']}.files_material_type.{$fileIndex}");
+                        $thickness = $request->input("factories.{$factoryData['id']}.files_thickness.{$fileIndex}");
+
                         $factoryOrder->files()->create([
                             'path' => $path,
                             'original_name' => $originalName,
-                            'quantity' => $file->quantity,
-                            'material_type' => $file->material_type,
-                            'thickness' => $file->thickness,
-                        ]);
+                            'quantity' => $quantity,
+                            'material_type' => $materialType,
+                            'thickness' => $thickness,
+                            ]);
                     }
                 }
             }
