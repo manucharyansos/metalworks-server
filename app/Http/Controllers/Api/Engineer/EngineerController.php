@@ -46,8 +46,6 @@ class EngineerController extends Controller
             ->where('factory_id', $factoryId)
             ->where('order_id', $orderId)
             ->get();
-
-        // Վերադարձնել ֆայլերը JSON ձևաչափով
         return response()->json(['files' => $files], 200);
     }
 /**

@@ -18,7 +18,7 @@ return new class extends Migration
             $table->string('original_name');
             $table->integer('quantity')->nullable();
             $table->string('material_type')->nullable();
-            $table->decimal('thickness', 8, 2)->nullable();
+            $table->string('thickness', 2)->nullable();
             $table->timestamps();
         });
     }

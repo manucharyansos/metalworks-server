@@ -74,9 +74,11 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::resource('/engineer', EngineerController::class);
             Route::post('/upload', [EngineerController::class, 'upload']);
             Route::apiResource('pmps', PmpController::class);
+//            Route::post('addPmpGroup', [PmpController::class, 'addPmpGroup']);
             Route::post('pmps/remoteNumber/{id}', [PmpController::class, 'remoteNumber']);
             Route::post('/pmps/check-group', [PmpController::class, 'checkGroup']);
             Route::post('/pmps/check-group-name', [PmpController::class, 'checkGroupName']);
+            Route::post('/pmps/check-pmp-by-remote-number', [PmpController::class, 'checkPmpByRemoteNumber']);
             Route::apiResource('pmpFiles', PmpFilesController::class);
             Route::post('uploadPmpFile', [PmpFilesController::class, 'upload']);
         });

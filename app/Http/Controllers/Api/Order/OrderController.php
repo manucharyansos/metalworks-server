@@ -31,7 +31,7 @@ class OrderController extends Controller
             $validatedData = $request->validate([
                 'user_id' => 'required|exists:users,id',
                 'description' => 'required|string',
-                'quantity' => 'required|integer|min:1',
+//                'quantity' => 'required|integer|min:1',
                 'name' => 'required|string',
                 'status' => 'nullable|string',
                 'factories' => 'nullable|array',
@@ -162,7 +162,7 @@ class OrderController extends Controller
     {
         $validatedData = $request->validate([
             'description' => 'required|string',
-            'quantity' => 'required|integer|min:1',
+//            'quantity' => 'required|integer|min:1',
             'name' => 'required|string',
             'status' => 'nullable|string',
             'factories' => 'required|array',
@@ -187,7 +187,7 @@ class OrderController extends Controller
         $order = Order::findOrFail($id);
         $order->update([
             'description' => $validatedData['description'],
-            'quantity' => $validatedData['quantity'],
+//            'quantity' => $validatedData['quantity'],
             'name' => $validatedData['name'],
             'status' => $validatedData['status'] ?? $order->status,
         ]);

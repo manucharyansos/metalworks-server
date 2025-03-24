@@ -32,12 +32,18 @@ class PmpController extends Controller
     /**
      * Store a newly created resource in storage.
      */
+
+
+    /**
+     * Store a newly created resource in storage.
+     */
     public function store(Request $request): JsonResponse
     {
         $validatedData = $request->validate([
             'group' => 'required|string|size:3',
             'group_name' => 'required|string',
             'remote_number' => 'required|string',
+            'remote_number_name' => 'required|string',
             'admin_confirmation' => 'required|boolean',
         ]);
 
@@ -61,6 +67,7 @@ class PmpController extends Controller
         RemoteNumber::create([
             'pmp_id' => $pmp->id,
             'remote_number' => $validatedData['remote_number'],
+            'remote_number_name' => $validatedData['remote_number_name'],
         ]);
 
         return response()->json($pmp->load('remoteNumber'), 201);
@@ -117,9 +124,19 @@ class PmpController extends Controller
      */
     public function show($id): JsonResponse
     {
-        $pmp = Pmp::findOrFail($id);
-        return response()->json($pmp);
+        $remoteNumber = RemoteNumber::findOrFail($id);
+
+        $pmp = Pmp::with(['remoteNumber', 'files'])
+            ->where('id', $remoteNumber->pmp_id)
+            ->first();
+
+        if (!$pmp) {
+            return response()->json(['error' => 'PMP not found.'], 404);
+        }
+
+        return response()->json(['pmp' => $pmp]);
     }
+
 
 
     /**
@@ -216,6 +233,32 @@ class PmpController extends Controller
         }
     }
 
+    public function checkPmpByRemoteNumber(Request $request): JsonResponse
+    {
+        $remoteNumber = $request->input('remote_number'); // ստանում ենք ուղարկված remote_number-ը
 
+        if (!$remoteNumber) {
+            return response()->json(['error' => 'Remote number is required'], 400);
+        }
+
+        // Որոնում ենք PMP, որն ունի այդ remote_number-ը և կապված է ֆայլերով
+        $pmp = Pmp::with(['remoteNumber', 'files']) // ներառում ենք remoteNumber և files
+        ->whereHas('remoteNumber', function ($query) use ($remoteNumber) {
+            $query->where('remote_number', $remoteNumber);
+        })
+            ->first();
+
+        if ($pmp) {
+            return response()->json([
+                'exists' => true,
+                'pmp' => $pmp,
+            ]);
+        } else {
+            return response()->json([
+                'exists' => false,
+                'message' => 'PMP with the given remote number not found.',
+            ]);
+        }
+    }
 
 }

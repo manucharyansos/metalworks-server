@@ -155,12 +155,28 @@ class PmpFilesController extends Controller
         }
     }
 
-
     /**
-     * Remove the specified resource from storage.
+     * Delete a DXF file.
+     *
+     * @param  \App\Models\PmpFiles  $pmpFiles
+     * @return \Illuminate\Http\JsonResponse
      */
-    public function destroy(PmpFiles $pmpFiles)
+    public function destroy($id): \Illuminate\Http\JsonResponse
     {
-        //
+        $pmpFile = PmpFiles::find($id);
+        if (!$pmpFile) {
+            return response()->json([
+                'error' => 'File not found!',
+            ], 404);
+        }
+        $filePath = public_path("storage/" . $pmpFile->path);
+        if (file_exists($filePath)) {
+            unlink($filePath);
+        }
+        $pmpFile->delete();
+        return response()->json([
+            'message' => 'File deleted successfully',
+        ], 200);
     }
+
 }

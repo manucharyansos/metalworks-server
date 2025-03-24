@@ -12,7 +12,7 @@ class RemoteNumber extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['remote_number', 'pmp_id'];
+    protected $fillable = ['remote_number', 'remote_number_name', 'pmp_id'];
     public function pmp(): BelongsTo
     {
         return $this->belongsTo(Pmp::class, 'pmp_id');

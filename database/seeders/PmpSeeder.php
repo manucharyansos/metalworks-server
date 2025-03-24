@@ -23,12 +23,12 @@ class PmpSeeder extends Seeder
         $pmp7 = Pmp::create(["group" => "007", "group_name" => "Ռեշոտկա", "admin_confirmation" => false]);
 
         // Create RemoteNumber for each Pmp
-        RemoteNumber::create(["remote_number" => "01", "pmp_id" => $pmp1->id]);
-        RemoteNumber::create(["remote_number" => "02", "pmp_id" => $pmp2->id]);
-        RemoteNumber::create(["remote_number" => "03", "pmp_id" => $pmp3->id]);
-        RemoteNumber::create(["remote_number" => "04", "pmp_id" => $pmp4->id]);
-        RemoteNumber::create(["remote_number" => "05", "pmp_id" => $pmp5->id]);
-        RemoteNumber::create(["remote_number" => "06", "pmp_id" => $pmp6->id]);
-        RemoteNumber::create(["remote_number" => "07", "pmp_id" => $pmp7->id]);
+        RemoteNumber::create(["remote_number" => "01", "pmp_id" => $pmp1->id, 'remote_number_name' => 'Աթոռ ոտերով']);
+        RemoteNumber::create(["remote_number" => "02", "pmp_id" => $pmp2->id, 'remote_number_name' => 'Սեղան ոտերով']);
+        RemoteNumber::create(["remote_number" => "03", "pmp_id" => $pmp3->id, 'remote_number_name' => 'Սեյֆ 1800 մմ']);
+        RemoteNumber::create(["remote_number" => "04", "pmp_id" => $pmp4->id, 'remote_number_name' => 'Մանղալ տանիքով']);
+        RemoteNumber::create(["remote_number" => "05", "pmp_id" => $pmp5->id, 'remote_number_name' => 'Աստիճան ուղիղ']);
+        RemoteNumber::create(["remote_number" => "06", "pmp_id" => $pmp6->id, 'remote_number_name' => 'Դուռ 1500 մմ']);
+        RemoteNumber::create(["remote_number" => "07", "pmp_id" => $pmp7->id, 'remote_number_name' => 'Ռեշոտկա']);
     }
 }

@@ -9,6 +9,7 @@ use App\Models\FactoryOrderFile;
 use App\Models\FactoryOrderStatus;
 use App\Models\File;
 use App\Models\Order;
+use App\Models\PmpFiles;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -55,15 +56,16 @@ class FactoryController extends Controller
 
     public function show($id): JsonResponse
     {
-        $factory = Factory::with(['orders.factoryOrders' => function ($query) use ($id) {
-            $query->where('factory_id', $id)->with('files');
+        $factory = Factory::with(['orders' => function ($query) use ($id) {
+            $query->whereHas('factoryOrders', function ($q) use ($id) {
+                $q->where('factory_id', $id)
+                    ->whereNull('admin_confirmation_date'); // Վերցնում ենք միայն այն factoryOrders-ները, որոնք դատարկ admin_confirmation_date ունեն
+            })->with(['factoryOrders.files']);
         }])->find($id);
-        $filteredOrders = $factory->orders->filter(function ($order) {
-            return $order->factoryOrders->isNotEmpty();
-        });
-        $factory->setRelation('orders', $filteredOrders);
+
         return response()->json($factory);
     }
+
 
 
     /**
@@ -212,6 +214,36 @@ class FactoryController extends Controller
             'content' => $base64Content,
         ], 200);
     }
+
+//    public function getFile($filePath): JsonResponse
+//    {
+//        $decodedPath = urldecode($filePath);
+//
+//        $file = PmpFiles::where('path', $decodedPath)->first();
+//
+//        if (!$file || !Storage::disk('public')->exists($decodedPath)) {
+//            return response()->json(['error' => 'File not found'], 404);
+//        }
+//
+//        $fileContent = Storage::disk('public')->get($decodedPath);
+//        $base64Content = base64_encode($fileContent);
+//
+//        return response()->json([
+//            'id' => $file->id,
+//            'pmp_id' => $file->pmp_id,
+//            'remote_number_id' => $file->remote_number_id,
+//            'factory_id' => $file->factory_id,
+//            'path' => $decodedPath,
+//            'original_name' => $file->original_name,
+//            'quantity' => $file->quantity,
+//            'material_type' => $file->material_type,
+//            'thickness' => $file->thickness,
+//            'file_size' => Storage::disk('public')->size($decodedPath),
+//            'mime_type' => Storage::disk('public')->mimeType($decodedPath),
+//            'content' => $base64Content,
+//        ], 200);
+//    }
+
 
     public function downloadFile($filePath): BinaryFileResponse|JsonResponse
     {

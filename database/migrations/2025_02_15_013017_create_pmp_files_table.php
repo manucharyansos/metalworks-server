@@ -18,9 +18,9 @@ return new class extends Migration
             $table->unsignedBigInteger('factory_id');
             $table->string('path');
             $table->string('original_name');
-            $table->integer('quantity')->nullable(); 
+            $table->integer('quantity')->nullable();
             $table->string('material_type')->nullable();
-            $table->decimal('thickness', 8, 2)->nullable();
+            $table->string('thickness', 8)->nullable();
             $table->timestamps();
 
             $table->foreign('pmp_id')->references('id')->on('pmps')->onDelete('cascade');
