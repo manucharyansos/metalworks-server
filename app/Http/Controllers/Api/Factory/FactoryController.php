@@ -57,10 +57,12 @@ class FactoryController extends Controller
     public function show($id): JsonResponse
     {
         $factory = Factory::with(['orders' => function ($query) use ($id) {
-            $query->whereHas('factoryOrders', function ($q) use ($id) {
-                $q->where('factory_id', $id)
-                    ->whereNull('admin_confirmation_date'); // Վերցնում ենք միայն այն factoryOrders-ները, որոնք դատարկ admin_confirmation_date ունեն
-            })->with(['factoryOrders.files']);
+            $query->wherePivot('admin_confirmation_date', null)
+                ->with(['factoryOrders' => function ($q) use ($id) {
+                    $q->where('factory_id', $id)
+                        ->whereNull('admin_confirmation_date')
+                        ->with('files');
+                }]);
         }])->find($id);
 
         return response()->json($factory);
