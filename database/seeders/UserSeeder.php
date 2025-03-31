@@ -49,13 +49,6 @@ class UserSeeder extends Seeder
         ]);
 
         User::create([
-            'name' => 'Laser User',
-            'email' => 'laser@example.com',
-            'password' => Hash::make('password'),
-            'role_id' => $laserRole->id,
-        ]);
-
-        User::create([
             'name' => 'Bend User',
             'email' => 'bend@example.com',
             'password' => Hash::make('password'),
@@ -70,9 +63,23 @@ class UserSeeder extends Seeder
         ]);
 
         User::create([
+            'name' => 'Laser 1',
+            'email' => 'laser1@metalworks.am',
+            'password' => Hash::make('G8UHOBjwBa4s'),
+            'role_id' => $laserRole->id,
+        ]);
+
+        User::create([
+            'name' => 'Laser 2',
+            'email' => 'laser2@metalworks.am',
+            'password' => Hash::make('u;KrS)I$.Oxl'),
+            'role_id' => $laserRole->id,
+        ]);
+
+        User::create([
             'name' => 'Engineer',
-            'email' => 'engineer@example.com',
-            'password' => Hash::make('password'),
+            'email' => 'engineering@metalworks.am',
+            'password' => Hash::make('pl$#MLZv~oX2'),
             'role_id' => $engineerRole->id,
         ]);
     }

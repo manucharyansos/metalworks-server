@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\Order\OrderController;
 use App\Http\Controllers\Api\PMP\PmpController;
 use App\Http\Controllers\Api\PMP\PmpFilesController;
 use App\Http\Controllers\Api\Users\UserController;
+use App\Http\Controllers\Api\Workers\WorkersController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\VisitorController;
@@ -50,10 +51,15 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
         Route::group(['prefix'=>'users'], function () {
             Route::resource('/', UserController::class);
+            Route::get('getWorkers', [UserController::class, 'getWorkers']);
         });
 
         Route::group(['prefix'=>'clients'], function () {
             Route::resource('client', ClientController::class);
+        });
+        Route::group(['prefix'=>'workers'], function () {
+            Route::apiResource('/', WorkersController::class);
+            Route::put('/{worker}', [WorkersController::class, 'update']);
         });
 
         Route::group(['prefix'=>'factories'], function () {
