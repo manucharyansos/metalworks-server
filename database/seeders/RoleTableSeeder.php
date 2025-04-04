@@ -9,13 +9,13 @@ class RoleTableSeeder extends Seeder
 {
     public function run(): void
     {
-        Role::create(['name' => 'admin']);
-        Role::create(['name' => 'guestUser']);
-        Role::create(['name' => 'authenticatedUser']);
-        Role::create(['name' => 'manager']);
-        Role::create(['name' => 'bend']);
-        Role::create(['name' => 'laser']);
-        Role::create(['name' => 'powder_catting']);
-        Role::create(['name' => 'engineer']);
+        Role::create(['name' => 'admin', 'value' => 'Ադմին']);
+        Role::create(['name' => 'guestUser', 'value' => 'Չգրանցված օգտատեր']);
+        Role::create(['name' => 'authenticatedUser', 'value' => 'Գրանցված օգտատեր']);
+        Role::create(['name' => 'manager' , 'value' => 'Մենեջեր']);
+        Role::create(['name' => 'bend', 'value' => 'Կռում']);
+        Role::create(['name' => 'laser', 'value' => 'Լազերաին կտրում']);
+        Role::create(['name' => 'powder_catting', 'value' => 'Փոշեներկում']);
+        Role::create(['name' => 'engineer', 'value' => 'Ինժիներ']);
     }
 }

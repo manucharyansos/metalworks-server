@@ -15,7 +15,7 @@ class WorkersController extends Controller
      */
     public function index(): JsonResponse
     {
-        $users = User::whereIn('role_id', [5, 6])->with('client')->get();
+        $users = User::whereIn('role_id', [5, 6, 8])->with('client')->get();
 
         if ($users->isEmpty()) {
             return response()->json([
@@ -37,9 +37,23 @@ class WorkersController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
-        //
+        $validatedUserData = $request->validate([
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:6|confirmed',
+            'role_id' => 'required|exists:roles,id'
+        ]);
+        $validatedClientData = $this->getArr($request);
+        $user = User::create([
+            'name' => $validatedClientData['name'],
+            'email' => $validatedUserData['email'],
+            'password' => bcrypt($validatedUserData['password']),
+            'role_id' => $validatedUserData['role_id']
+        ]);
+        $client = $user->client()->create($validatedClientData);
+
+        return response()->json($client, 201);
     }
 
     /**
@@ -66,7 +80,10 @@ class WorkersController extends Controller
         $validatedData = $this->getArr($request);
 
         $user = User::findOrFail($id);
-        $user->update(['name' => $validatedData['name']]);
+        $user->update([
+            'name' => $validatedData['name'],
+            'email' => $validatedData['email']
+        ]);
         $user->client()->updateOrCreate(
             ['user_id' => $user->id],
             $validatedData
@@ -90,7 +107,8 @@ class WorkersController extends Controller
     public function getArr(Request $request): array
     {
         $validatedClientData = $request->validate([
-            'type' => 'required|in:laser,bend,Laser operator,Bend operator',
+            'type' => 'required|string',
+            'email' => 'required|email|unique:users,email',
             'name' => 'required|string',
             'last_name' => 'nullable|string',
             'phone' => 'required|string',
