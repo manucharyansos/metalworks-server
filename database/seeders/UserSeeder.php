@@ -79,7 +79,7 @@ class UserSeeder extends Seeder
         User::create([
             'name' => 'Engineer',
             'email' => 'engineering@metalworks.am',
-            'password' => Hash::make('pl$#MLZv~oX2'),
+            'password' => Hash::make('password'),
             'role_id' => $engineerRole->id,
         ]);
     }

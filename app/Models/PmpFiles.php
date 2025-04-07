@@ -19,7 +19,7 @@ class PmpFiles extends Model
         'path',
         'original_name',
         'quantity',
-        'material_type', 
+        'material_type',
         'thickness',
     ];
 
@@ -36,5 +36,12 @@ class PmpFiles extends Model
     public function factory(): BelongsTo
     {
         return $this->belongsTo(Factory::class, 'factory_id');
+    }
+
+    public function factoryOrders()
+    {
+        return $this->belongsToMany(FactoryOrder::class, 'factory_order_files')
+                    ->withPivot(['quantity', 'material_type', 'thickness'])
+                    ->withTimestamps();
     }
 }

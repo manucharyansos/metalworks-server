@@ -14,7 +14,12 @@ class Order extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'name', 'description', 'status'];
+    protected $fillable = ['user_id', 'name', 'description', 'status', 'creator_id', 'remote_number_id'];
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'creator_id');
+    }
 
     public function orderNumber(): HasOne
     {

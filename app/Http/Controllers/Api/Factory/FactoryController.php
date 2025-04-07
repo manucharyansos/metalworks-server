@@ -10,6 +10,7 @@ use App\Models\FactoryOrderStatus;
 use App\Models\File;
 use App\Models\Order;
 use App\Models\PmpFiles;
+use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -54,19 +55,23 @@ class FactoryController extends Controller
      * Display the specified resource.
      */
 
-    public function show($id): JsonResponse
-    {
-        $factory = Factory::with(['orders' => function ($query) use ($id) {
-            $query->wherePivot('admin_confirmation_date', null)
-                ->with(['factoryOrders' => function ($q) use ($id) {
-                    $q->where('factory_id', $id)
-                        ->whereNull('admin_confirmation_date')
-                        ->with('files');
-                }]);
-        }])->find($id);
+     public function show($id): JsonResponse
+     {
+         $factory = Factory::with(['orders' => function ($query) use ($id) {
+             $query->wherePivot('admin_confirmation_date', null)
+                 ->with([
+                     'factoryOrders' => function ($q) use ($id) {
+                         $q->where('factory_id', $id)
+                             ->whereNull('admin_confirmation_date')
+                             ->with('files');
+                     },
+                     'dates',
+                     'creator' // This will load the creator relationship
+                 ]);
+         }])->find($id);
 
-        return response()->json($factory);
-    }
+         return response()->json($factory);
+     }
 
 
 

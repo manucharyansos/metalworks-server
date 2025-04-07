@@ -15,6 +15,8 @@ return new class extends Migration
             $table->text('description');
             $table->string('status')->default('pending');
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->string('creator_id');
+            $table->string('remote_number_id');
             $table->timestamps();
         });
     }

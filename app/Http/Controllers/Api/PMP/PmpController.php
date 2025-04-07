@@ -124,9 +124,13 @@ class PmpController extends Controller
      */
     public function show($id): JsonResponse
     {
+        // Գտնել remote number-ը ըստ ID-ի
         $remoteNumber = RemoteNumber::findOrFail($id);
 
-        $pmp = Pmp::with(['remoteNumber', 'files'])
+        // Գտնել PMP-ն և eager load անել միայն այն remote number-ները, որոնք համապատասխանում են տրված ID-ին
+        $pmp = Pmp::with(['remoteNumber' => function($query) use ($id) {
+                $query->where('id', $id);
+            }, 'files'])
             ->where('id', $remoteNumber->pmp_id)
             ->first();
 
@@ -163,6 +167,7 @@ class PmpController extends Controller
             'group' => 'required|string|unique:pmps,group,' . $id,
             'group_name' => 'required|string',
             'remote_number' => 'required|string|unique:remote_numbers,remote_number,NULL,id,pmp_id,' . $pmp->id,
+            'remote_number_name' => 'required|string|unique:remote_numbers,remote_number_name,NULL,id,pmp_id,' . $pmp->id,
         ]);
 
         $pmp->update([
@@ -173,6 +178,7 @@ class PmpController extends Controller
         RemoteNumber::create([
             'pmp_id' => $pmp->id,
             'remote_number' => $validatedData['remote_number'],
+            'remote_number_name' => $validatedData['remote_number_name'],
         ]);
 
         return response()->json($pmp->load('remoteNumber'));

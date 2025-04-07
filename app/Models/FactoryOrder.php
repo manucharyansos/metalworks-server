@@ -33,9 +33,11 @@ class FactoryOrder extends Model
         return $this->belongsTo(Factory::class);
     }
 
-    public function files(): HasMany
+    public function files()
     {
-        return $this->hasMany(FactoryOrderFile::class, 'factory_order_id');
+        return $this->belongsToMany(PmpFiles::class, 'factory_order_files')
+                    ->withPivot(['quantity', 'material_type', 'thickness'])
+                    ->withTimestamps();
     }
 
     public function getCreatedAtAttribute($value): string

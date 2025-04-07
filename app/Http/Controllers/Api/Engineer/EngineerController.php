@@ -11,6 +11,7 @@ use App\Models\FileExtension;
 use App\Models\Order;
 use App\Models\PrefixCode;
 use App\Models\User;
+use App\Models\Pmp;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -51,60 +52,145 @@ class EngineerController extends Controller
 /**
      * Store a newly created resource in storage.
      */
+    // public function store(Request $request): JsonResponse
+    // {
+    //     try {
+    //         $validatedData = $request->validate([
+    //             'user_id' => 'required|exists:users,id',
+    //             'description' => 'required|string',
+    //             'name' => 'required|string',
+    //             'status' => 'nullable|string',
+    //             'creator_id' => 'required|exists:users,id',
+    //             'factories' => 'required|array',
+    //             'factories.*.id' => 'required|exists:factories,id',
+    //             'factories.*.files' => 'required|array',
+    //             'factories.*.files.*' => 'required|file|max:10240',
+    //             'factories.*.files.*.quantity' => 'required|integer|min:1',
+    //             'factories.*.files.*.material_type' => 'required|string|max:255',
+    //             'factories.*.files.*.thickness' => 'required|numeric|min:0',
+    //         ]);
+
+
+    //         $order = Order::create([
+    //             'user_id' => $validatedData['user_id'],
+    //             'name' => $validatedData['name'],
+    //             'description' => $validatedData['description'],
+    //             'status' => $validatedData['status'] ?? 'pending',
+    //             'creator_id' => $validatedData['creator_id']
+    //         ]);
+
+    //         $order->orderNumber()->create([
+    //             'number' => $this->generateOrderNumber(),
+    //         ]);
+
+    //         $order->prefixCode()->create([
+    //             'code' => $this->generateUniquePrefixCode(),
+    //         ]);
+
+    //         if (!empty($validatedData['store_link']['url'])) {
+    //             $order->storeLink()->create([
+    //                 'url' => $validatedData['store_link']['url'],
+    //             ]);
+    //         }
+
+    //         $order->dates()->create([
+    //             'finish_date' => $validatedData['finish_date'] ?? null,
+    //         ]);
+
+    //         $orderName = str_replace(' ', '_', strtolower($order->name));
+    //         $orderId = $order->id;
+
+    //         foreach ($validatedData['factories'] as $factoryData) {
+    //             $factory = Factory::findOrFail($factoryData['id']);
+    //             $factoryName = str_replace(' ', '_', $factory->value);
+
+    //             $factoryOrder = FactoryOrder::firstOrCreate(
+    //                 [
+    //                     'order_id' => $order->id,
+    //                     'factory_id' => $factory->id,
+    //                 ],
+    //                 [
+    //                     'status' => $validatedData['status'] ?? 'pending',
+    //                     'canceling' => false,
+    //                     'cancel_date' => null,
+    //                     'finish_date' => null,
+    //                     'operator_finish_date' => null,
+    //                     'admin_confirmation_date' => null,
+    //                 ]
+    //             );
+
+    //             $directoryPath = "uploads/PMP_{$orderName}_{$orderId}/{$factoryName}";
+    //             Storage::disk('public')->makeDirectory($directoryPath);
+
+    //             foreach ($factoryData['files'] as $fileIndex => $file) {
+    //                 $originalName = $file->getClientOriginalName();
+    //                 $fileName = pathinfo($originalName, PATHINFO_FILENAME) . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
+    //                 $existingFile = $factoryOrder->files()->where('original_name', $originalName)->first();
+
+    //                 if (!$existingFile) {
+    //                     $path = $file->storeAs(
+    //                         $directoryPath,
+    //                         $fileName,
+    //                         'public'
+    //                     );
+
+    //                     $quantity = $request->input("factories.{$factoryData['id']}.files_quantity.{$fileIndex}");
+    //                     $materialType = $request->input("factories.{$factoryData['id']}.files_material_type.{$fileIndex}");
+    //                     $thickness = $request->input("factories.{$factoryData['id']}.files_thickness.{$fileIndex}");
+
+    //                     $factoryOrder->files()->create([
+    //                         'path' => $path,
+    //                         'original_name' => $originalName,
+    //                         'quantity' => $quantity,
+    //                         'material_type' => $materialType,
+    //                         'thickness' => $thickness,
+    //                         ]);
+    //                 }
+    //             }
+    //         }
+
+    //         $userEmail = User::find($validatedData['user_id'])->email;
+    //         $orderUrl = route('orders.show', ['id' => $order->id]);
+    //         Mail::to($userEmail)->send(new OrderCreated($order, $orderUrl));
+
+    //         return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'files'), 201);
+    //     } catch (\Exception $e) {
+    //         return response()->json(['error' => $e->getMessage()], 500);
+    //     }
+    // }
+
     public function store(Request $request): JsonResponse
     {
-        try {
-            $validatedData = $request->validate([
-                'user_id' => 'required|exists:users,id',
-                'description' => 'required|string',
-                'name' => 'required|string',
-                'status' => 'nullable|string',
-                'factories' => 'required|array',
-                'factories.*.id' => 'required|exists:factories,id',
-                'factories.*.files' => 'required|array',
-                'factories.*.files.*' => 'required|file|max:10240',
-                'factories.*.files.*.quantity' => 'required|integer|min:1',
-                'factories.*.files.*.material_type' => 'required|string|max:255',
-                'factories.*.files.*.thickness' => 'required|numeric|min:0',
-            ]);
+    try {
+        $validatedData = $request->validate([
+            'user_id' => 'required|exists:users,id',
+            'description' => 'required|string',
+            'name' => 'required|string',
+            'status' => 'nullable|string',
+            'creator_id' => 'required|exists:users,id',
+            'finish_date' => 'required|date',
+            'remote_number_id' => 'nullable|exists:remote_numbers,id',
+            'pmp_id' => 'required|exists:pmps,id',
+            'link_existing_files' => 'sometimes|boolean',
+        ]);
 
+        // Create order
+        $order = Order::create($validatedData);
 
-            $order = Order::create([
-                'user_id' => $validatedData['user_id'],
-                'name' => $validatedData['name'],
-                'description' => $validatedData['description'],
-                'status' => $validatedData['status'] ?? 'pending',
-            ]);
+        // Create related records
+        $order->orderNumber()->create(['number' => $this->generateOrderNumber()]);
+        $order->prefixCode()->create(['code' => $this->generateUniquePrefixCode()]);
+        $order->dates()->create(['finish_date' => $validatedData['finish_date']]);
 
-            $order->orderNumber()->create([
-                'number' => $this->generateOrderNumber(),
-            ]);
+        // Link existing PMP files to FactoryOrders if requested
+        if ($request->link_existing_files) {
+            $pmp = Pmp::with('files.factory')->findOrFail($validatedData['pmp_id']);
 
-            $order->prefixCode()->create([
-                'code' => $this->generateUniquePrefixCode(),
-            ]);
-
-            if (!empty($validatedData['store_link']['url'])) {
-                $order->storeLink()->create([
-                    'url' => $validatedData['store_link']['url'],
-                ]);
-            }
-
-            $order->dates()->create([
-                'finish_date' => $validatedData['finish_date'] ?? null,
-            ]);
-
-            $orderName = str_replace(' ', '_', strtolower($order->name));
-            $orderId = $order->id;
-
-            foreach ($validatedData['factories'] as $factoryData) {
-                $factory = Factory::findOrFail($factoryData['id']);
-                $factoryName = str_replace(' ', '_', $factory->value);
-
+            foreach ($pmp->files as $pmpFile) {
                 $factoryOrder = FactoryOrder::firstOrCreate(
                     [
                         'order_id' => $order->id,
-                        'factory_id' => $factory->id,
+                        'factory_id' => $pmpFile->factory_id,
                     ],
                     [
                         'status' => $validatedData['status'] ?? 'pending',
@@ -116,41 +202,28 @@ class EngineerController extends Controller
                     ]
                 );
 
-                $directoryPath = "uploads/PMP_{$orderName}_{$orderId}/{$factoryName}";
-                Storage::disk('public')->makeDirectory($directoryPath);
-
-                foreach ($factoryData['files'] as $fileIndex => $file) {
-                    $originalName = $file->getClientOriginalName();
-                    $fileName = pathinfo($originalName, PATHINFO_FILENAME) . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-                    $existingFile = $factoryOrder->files()->where('original_name', $originalName)->first();
-
-                    if (!$existingFile) {
-                        $path = $file->storeAs(
-                            $directoryPath,
-                            $fileName,
-                            'public'
-                        );
-
-                        $quantity = $request->input("factories.{$factoryData['id']}.files_quantity.{$fileIndex}");
-                        $materialType = $request->input("factories.{$factoryData['id']}.files_material_type.{$fileIndex}");
-                        $thickness = $request->input("factories.{$factoryData['id']}.files_thickness.{$fileIndex}");
-
-                        $factoryOrder->files()->create([
-                            'path' => $path,
-                            'original_name' => $originalName,
-                            'quantity' => $quantity,
-                            'material_type' => $materialType,
-                            'thickness' => $thickness,
-                            ]);
-                    }
-                }
+                // Attach file with pivot data
+                $factoryOrder->files()->attach($pmpFile->id);
             }
+        }
 
-            $userEmail = User::find($validatedData['user_id'])->email;
-            $orderUrl = route('orders.show', ['id' => $order->id]);
-            Mail::to($userEmail)->send(new OrderCreated($order, $orderUrl));
+        // Send email notification
+        $userEmail = User::find($validatedData['user_id'])->email;
+        $orderUrl = route('orders.show', ['id' => $order->id]);
+        Mail::to($userEmail)->send(new OrderCreated($order, $orderUrl));
 
-            return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'files'), 201);
+        return response()->json(
+            [
+                'message' => 'Order created successfully',
+                'order' => $order->load([
+                    'orderNumber',
+                    'prefixCode',
+                    'dates',
+                    'factoryOrders.files',
+                ]),
+            ],
+            201
+        );
         } catch (\Exception $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }

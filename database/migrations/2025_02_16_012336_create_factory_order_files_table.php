@@ -14,11 +14,10 @@ return new class extends Migration
         Schema::create('factory_order_files', function (Blueprint $table) {
             $table->id();
             $table->foreignId('factory_order_id')->constrained('factory_orders')->onDelete('cascade');
-            $table->string('path');
-            $table->string('original_name');
+            $table->foreignId('pmp_files_id')->constrained('pmp_files')->onDelete('cascade');
             $table->integer('quantity')->nullable();
             $table->string('material_type')->nullable();
-            $table->string('thickness', 2)->nullable();
+            $table->string('thickness', 10)->nullable();
             $table->timestamps();
         });
     }
