@@ -14,6 +14,6 @@ class BendFileExtensionSeeder extends Seeder
     public function run(): void
     {
         BendFileExtension::create(['extension' => 'pdf']);
-        BendFileExtension::create(['extension' => 'dxf']);
+        // BendFileExtension::create(['extension' => 'dxf']);
     }
 }

@@ -84,7 +84,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::post('pmps/remoteNumber/{id}', [PmpController::class, 'remoteNumber']);
             Route::post('/pmps/check-group', [PmpController::class, 'checkGroup']);
             Route::post('/pmps/check-group-name', [PmpController::class, 'checkGroupName']);
-            Route::post('/pmps/check-pmp-by-remote-number', [PmpController::class, 'checkPmpByRemoteNumber']);
+            Route::post('/pmps/check-pmp-by-remote-number/{id}', [PmpController::class, 'checkPmpByRemoteNumber']);
             Route::apiResource('pmpFiles', PmpFilesController::class);
             Route::post('uploadPmpFile', [PmpFilesController::class, 'upload']);
         });
@@ -94,20 +94,20 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
     });
 
-    Route::group(['prefix'=>'categories'],function (){
-        Route::resource('/materialGroup', MaterialGroupController::class);
-        Route::resource('/materialCategories', MaterialCategoryController::class);
-    });
-
-    Route::group(['prefix'=>'materials'],function (){
-        Route::resource('/', MaterialController::class);
-    });
 
     Route::group(['prefix'=>'contacts'],function (){
         Route::get('/', [ContactController::class, 'index']);
         Route::post('/', [ContactController::class, 'store']);
     });
 
+});
+Route::group(['prefix'=>'categories'],function (){
+    Route::resource('/materialGroup', MaterialGroupController::class);
+    Route::resource('/materialCategories', MaterialCategoryController::class);
+});
+
+Route::group(['prefix'=>'materials'],function (){
+    Route::resource('/', MaterialController::class);
 });
 
 Route::middleware('auth:sanctum')->get('/visitor-stats', [VisitorController::class, 'getDeviceStats']);

@@ -114,36 +114,41 @@ class PmpFilesController extends Controller
 //            return response()->json(['error' => $e->getMessage()], 500);
 //        }
 //    }
-
 public function upload(Request $request): JsonResponse
 {
     try {
-        $validatedData = $request->validate([
+        $rules = [
             'pmp_id' => 'required|exists:pmps,id',
             'remote_number_id' => 'required|exists:remote_numbers,id',
             'factory_id' => 'required|exists:factories,id',
             'file' => 'required|file|max:10240',
-            'quantity' => 'required|integer|min:1',
-            'material_type' => 'required|string|max:255',
-            'thickness' => 'required|numeric|min:0',
-        ]);
+        ];
+
+        $factory = Factory::findOrFail($request->input('factory_id'));
+        if ($factory->value === 'DXF') {
+            $rules['quantity'] = 'required|integer|min:1';
+            $rules['material_type'] = 'required|string|max:255';
+            $rules['thickness'] = 'required|numeric|min:0';
+        } else {
+            $rules['quantity'] = 'nullable|integer|min:1';
+            $rules['material_type'] = 'nullable|string|max:255';
+            $rules['thickness'] = 'nullable|numeric|min:0';
+        }
+
+        $validatedData = $request->validate($rules);
 
         $pmp = Pmp::findOrFail($validatedData['pmp_id']);
         $remoteNumber = RemoteNumber::findOrFail($validatedData['remote_number_id']);
-        $factory = Factory::findOrFail($validatedData['factory_id']);
 
-        // Ստանալ ֆայլի տվյալները
         $file = $validatedData['file'];
-        $originalName = $file->getClientOriginalName(); // Բնօրինակ անուն (himq1.pdf)
-        $extension = $file->getClientOriginalExtension(); // Ընդլայնում
+        $originalName = $file->getClientOriginalName();
+        $extension = $file->getClientOriginalExtension();
 
-        // Ստուգել ֆայլի տեսակը ըստ գործարանի
         $allowedExtensions = $this->getAllowedExtensions($factory->value);
         if (!in_array(strtolower($extension), $allowedExtensions)) {
             throw new \Exception("Այս գործարանը ընդունում է միայն: " . implode(', ', $allowedExtensions));
         }
 
-        // Ստուգել կրկնօրինակ ֆայլերի առկայությունը
         if (PmpFiles::where('pmp_id', $pmp->id)
             ->where('factory_id', $factory->id)
             ->where('original_name', $originalName)
@@ -151,25 +156,22 @@ public function upload(Request $request): JsonResponse
             throw new \Exception("Այս անունով ֆայլ արդեն գոյություն ունի այս գործարանում");
         }
 
-        // Ստեղծել պանակի կառուցվածք
         $baseDirectoryPath = "MetalWorks/PMP_{$pmp->group}.{$remoteNumber->remote_number}/{$factory->value}";
         Storage::disk('public')->makeDirectory($baseDirectoryPath);
 
-        // Ստեղծել յուրահատուկ ֆայլի անուն (himq1_67f1b3845b1ca.pdf)
         $uniqueName = pathinfo($originalName, PATHINFO_FILENAME) . '_' . $extension;
         $path = $file->storeAs($baseDirectoryPath, $uniqueName, 'public');
 
-        // Պահել տվյալների բազայում
         PmpFiles::create([
             'pmp_id' => $pmp->id,
             'remote_number_id' => $remoteNumber->id,
             'factory_id' => $factory->id,
             'path' => $path,
-            'original_name' => $originalName, // Պահպանել բնօրինակ անունը
+            'original_name' => $originalName,
             'file_type' => $extension,
-            'quantity' => $validatedData['quantity'],
-            'material_type' => $validatedData['material_type'],
-            'thickness' => $validatedData['thickness'],
+            'quantity' => $validatedData['quantity'] ?? null,
+            'material_type' => $validatedData['material_type'] ?? null,
+            'thickness' => $validatedData['thickness'] ?? null,
         ]);
 
         return response()->json(['message' => 'Ֆայլը հաջողությամբ վերբեռնվեց'], 200);

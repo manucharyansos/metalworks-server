@@ -185,8 +185,15 @@ class EngineerController extends Controller
         // Link existing PMP files to FactoryOrders if requested
         if ($request->link_existing_files) {
             $pmp = Pmp::with('files.factory')->findOrFail($validatedData['pmp_id']);
+            $selectedFileIds = $request->input('selected_files', []);
 
             foreach ($pmp->files as $pmpFile) {
+                if (!empty($selectedFileIds)) {
+                    if (!in_array($pmpFile->id, $selectedFileIds)) {
+                        continue;
+                    }
+                }
+
                 $factoryOrder = FactoryOrder::firstOrCreate(
                     [
                         'order_id' => $order->id,
@@ -202,7 +209,6 @@ class EngineerController extends Controller
                     ]
                 );
 
-                // Attach file with pivot data
                 $factoryOrder->files()->attach($pmpFile->id);
             }
         }

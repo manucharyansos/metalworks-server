@@ -124,15 +124,18 @@ class PmpController extends Controller
      */
     public function show($id): JsonResponse
     {
-        // Գտնել remote number-ը ըստ ID-ի
         $remoteNumber = RemoteNumber::findOrFail($id);
 
-        // Գտնել PMP-ն և eager load անել միայն այն remote number-ները, որոնք համապատասխանում են տրված ID-ին
-        $pmp = Pmp::with(['remoteNumber' => function($query) use ($id) {
+        $pmp = Pmp::with([
+            'remoteNumber' => function($query) use ($id) {
                 $query->where('id', $id);
-            }, 'files'])
-            ->where('id', $remoteNumber->pmp_id)
-            ->first();
+            },
+            'files' => function($query) use ($id) {
+                $query->where('remote_number_id', $id);
+            }
+        ])
+        ->where('id', $remoteNumber->pmp_id)
+        ->first();
 
         if (!$pmp) {
             return response()->json(['error' => 'PMP not found.'], 404);
@@ -239,32 +242,22 @@ class PmpController extends Controller
         }
     }
 
-    public function checkPmpByRemoteNumber(Request $request): JsonResponse
+    public function checkPmpByRemoteNumber(Request $request, $id): JsonResponse
     {
-        $remoteNumber = $request->input('remote_number'); // ստանում ենք ուղարկված remote_number-ը
+       $pmp = Pmp::with(['remoteNumber', 'files'])
+           ->where('id', $id)
+           ->first();
 
-        if (!$remoteNumber) {
-            return response()->json(['error' => 'Remote number is required'], 400);
-        }
+       if ($pmp) {
+           return response()->json([
+               'exists' => true,
+               'pmp' => $pmp,
+           ]);
+       }
 
-        // Որոնում ենք PMP, որն ունի այդ remote_number-ը և կապված է ֆայլերով
-        $pmp = Pmp::with(['remoteNumber', 'files']) // ներառում ենք remoteNumber և files
-        ->whereHas('remoteNumber', function ($query) use ($remoteNumber) {
-            $query->where('remote_number', $remoteNumber);
-        })
-            ->first();
-
-        if ($pmp) {
-            return response()->json([
-                'exists' => true,
-                'pmp' => $pmp,
-            ]);
-        } else {
-            return response()->json([
-                'exists' => false,
-                'message' => 'PMP with the given remote number not found.',
-            ]);
-        }
+       return response()->json([
+           'exists' => false,
+           'message' => 'PMP with the given ID not found.',
+       ]);
     }
-
-}
+    }

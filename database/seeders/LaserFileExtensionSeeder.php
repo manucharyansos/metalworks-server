@@ -13,7 +13,7 @@ class LaserFileExtensionSeeder extends Seeder
      */
     public function run(): void
     {
-        LaserFileExtension::create(['extension' => 'pdf']);
+        // LaserFileExtension::create(['extension' => 'pdf']);
         LaserFileExtension::create(['extension' => 'dxf']);
     }
 }
