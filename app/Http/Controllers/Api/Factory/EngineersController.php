@@ -28,34 +28,34 @@ class EngineersController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request): JsonResponse
-    {
-        $request->validate([
-            'files' => 'required|array',
-            'files.*' => 'nullable|file|mimes:jpg,png,pdf,dxf',
-            'factory_id' => 'required|exists:factories,id',
-            'order_id' => 'required|exists:orders,id',
-        ]);
+    // public function store(Request $request): JsonResponse
+    // {
+    //     $request->validate([
+    //         'files' => 'required|array',
+    //         'files.*' => 'nullable|file|mimes:jpg,png,pdf,dxf',
+    //         'factory_id' => 'required|exists:factories,id',
+    //         'order_id' => 'required|exists:orders,id',
+    //     ]);
 
-        foreach ($request->file('files') as $index => $file) {
-            if ($file instanceof \Illuminate\Http\UploadedFile) {
-                $path = $file->store('uploads/orders/' . $request->order_id);
-                $originalName = $file->getClientOriginalName();
-            } else {
-                $path = $request->input('files')[$index];
-                $originalName = $request->input('original_name')[$index];
-            }
+    //     foreach ($request->file('files') as $index => $file) {
+    //         if ($file instanceof \Illuminate\Http\UploadedFile) {
+    //             $path = $file->store('uploads/orders/' . $request->order_id);
+    //             $originalName = $file->getClientOriginalName();
+    //         } else {
+    //             $path = $request->input('files')[$index];
+    //             $originalName = $request->input('original_name')[$index];
+    //         }
 
-            FactoryFile::create([
-                'factory_id' => $request->factory_id,
-                'order_id' => $request->order_id,
-                'path' => $path,
-                'original_name' => $originalName,
-            ]);
-        }
+    //         FactoryFile::create([
+    //             'factory_id' => $request->factory_id,
+    //             'order_id' => $request->order_id,
+    //             'path' => $path,
+    //             'original_name' => $originalName,
+    //         ]);
+    //     }
 
-        return response()->json(['message' => 'Files uploaded successfully']);
-    }
+    //     return response()->json(['message' => 'Files uploaded successfully']);
+    // }
 
 
 
