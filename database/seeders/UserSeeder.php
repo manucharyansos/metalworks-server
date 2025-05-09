@@ -65,7 +65,7 @@ class UserSeeder extends Seeder
         User::create([
             'name' => 'Laser 1',
             'email' => 'laser1@metalworks.am',
-            'password' => Hash::make('G8UHOBjwBa4s'),
+            'password' => Hash::make('password'),
             'role_id' => $laserRole->id,
         ]);
 
