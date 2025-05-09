@@ -66,7 +66,7 @@ class FactoryController extends Controller
                              ->with('files');
                      },
                      'dates',
-                     'creator' // This will load the creator relationship
+                     'creator'
                  ]);
          }])->find($id);
 

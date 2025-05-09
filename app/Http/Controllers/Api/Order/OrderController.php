@@ -21,8 +21,21 @@ class OrderController extends Controller
      */
     public function index(): JsonResponse
     {
-        $orders = Order::with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'files')->get();
-        return response()->json($orders);
+        try {
+            $orders = Order::with([
+                'orderNumber',
+                'prefixCode',
+                'dates',
+                'factoryOrders.factory',
+                'factoryOrders.files',
+                'selectedFiles.pmpFile',
+                'user',
+            ])->get();
+
+            return response()->json(['orders' => $orders], 200);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     public function store(Request $request): JsonResponse

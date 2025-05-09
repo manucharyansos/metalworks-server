@@ -10,6 +10,7 @@ use App\Models\PrefixCode;
 use App\Models\Status;
 use App\Models\StoreLink;
 use App\Models\User;
+use App\Models\Products;
 use Database\Factories\CreatorFactory;
 use Illuminate\Database\Seeder;
 
@@ -28,5 +29,6 @@ class DatabaseSeeder extends Seeder
         $this->call(BendFileExtensionSeeder::class);
         $this->call(PmpSeeder::class);
         $this->call(MaterialsSeeder::class);
+        $this->call(ProductSeeder::class);
     }
 }

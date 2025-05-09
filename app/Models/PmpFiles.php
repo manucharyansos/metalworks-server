@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PmpFiles extends Model
 {
@@ -36,6 +37,11 @@ class PmpFiles extends Model
     public function factory(): BelongsTo
     {
         return $this->belongsTo(Factory::class, 'factory_id');
+    }
+
+    public function selectedFiles(): HasMany
+    {
+        return $this->hasMany(SelectedFile::class, 'pmp_file_id');
     }
 
     public function factoryOrders()

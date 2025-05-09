@@ -14,11 +14,19 @@ class Order extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'name', 'description', 'status', 'quantity', 'creator_id', 'remote_number_id'];
+    protected $fillable = ['user_id', 'name', 'description', 'status', 'link_existing_files', 'creator_id', 'remote_number_id'];
 
+    protected $casts = [
+        'link_existing_files' => 'boolean',
+    ];
     public function creator()
     {
         return $this->belongsTo(User::class, 'creator_id');
+    }
+
+    public function selectedFiles(): HasMany
+    {
+        return $this->hasMany(SelectedFile::class);
     }
 
     public function orderNumber(): HasOne

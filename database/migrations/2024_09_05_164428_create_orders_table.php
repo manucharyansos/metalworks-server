@@ -14,7 +14,7 @@ return new class extends Migration
             $table->string('name');
             $table->text('description');
             $table->string('status')->default('pending');
-            $table->string('quantity')->default(0);
+            $table->boolean('link_existing_files')->default(false);
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->string('creator_id');
             $table->string('remote_number_id');

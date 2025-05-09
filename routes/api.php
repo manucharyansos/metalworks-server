@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\Materials\MaterialGroupController;
 use App\Http\Controllers\Api\Order\OrderController;
 use App\Http\Controllers\Api\PMP\PmpController;
 use App\Http\Controllers\Api\PMP\PmpFilesController;
+use App\Http\Controllers\Api\Product\ProductController;
 use App\Http\Controllers\Api\Users\UserController;
 use App\Http\Controllers\Api\Workers\WorkersController;
 use App\Http\Controllers\ContactController;
@@ -110,4 +111,7 @@ Route::group(['prefix'=>'materials'],function (){
     Route::resource('/', MaterialController::class);
 });
 
+Route::group(['prefix'=>'products'],function (){
+    Route::resource('/', ProductController::class);
+});
 Route::middleware('auth:sanctum')->get('/visitor-stats', [VisitorController::class, 'getDeviceStats']);

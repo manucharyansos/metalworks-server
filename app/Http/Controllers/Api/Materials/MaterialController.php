@@ -12,7 +12,7 @@ class MaterialController extends Controller
 {
     public function index(): JsonResponse
     {
-        $materials = Material::all();
+        $materials = Material::paginate(10);
 
         return response()->json($materials);
     }
