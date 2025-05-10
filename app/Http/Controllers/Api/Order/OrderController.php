@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Illuminate\Validation\ValidationException;
 
 class OrderController extends Controller
 {
@@ -44,7 +45,6 @@ class OrderController extends Controller
             $validatedData = $request->validate([
                 'user_id' => 'required|exists:users,id',
                 'description' => 'required|string',
-//                'quantity' => 'required|integer|min:1',
                 'name' => 'required|string',
                 'status' => 'nullable|string',
                 'factories' => 'nullable|array',
@@ -52,25 +52,12 @@ class OrderController extends Controller
                 'factories.*.status' => 'nullable|string',
                 'store_link.url' => 'nullable|url',
                 'finish_date' => 'nullable|string',
-                'files' => 'nullable|array',
-                'files.*' => [
-                    'file',
-                    'max:2048',
-                    function ($attribute, $value, $fail) {
-                        $allowedExtensions = FileExtension::pluck('extension')->toArray();
-                        $extension = strtolower($value->getClientOriginalExtension());
-                        if (!in_array($extension, $allowedExtensions)) {
-                            $fail("The {$attribute} must be a valid file type.");
-                        }
-                    },
-                ],
 
             ]);
 
             $order = Order::create([
                 'user_id' => $validatedData['user_id'],
                 'name' => $validatedData['name'],
-                'quantity' => $validatedData['quantity'],
                 'description' => $validatedData['description'],
                 'status' => $validatedData['status'] ?? 'pending',
             ]);
@@ -84,16 +71,6 @@ class OrderController extends Controller
             if (!empty($validatedData['store_link']['url'])) {
                 $order->storeLink()->create(['url' => $validatedData['store_link']['url']]);
             }
-
-//            if (!empty($validatedData['factories'])) {
-//                foreach ($validatedData['factories'] as $factory) {
-//                    $order->factories()->attach($factory['id']);
-//                    $order->factoryOrder()->create([
-//                        'factory_id' => $factory['id'],
-//                        'status' => $factory['status'],
-//                    ]);
-//                }
-//            }
             if (!empty($validatedData['factories'])) {
                 foreach ($validatedData['factories'] as $factory) {
                     $factoryOrder = $order->factories()->attach($factory['id']);
@@ -101,34 +78,10 @@ class OrderController extends Controller
                         'factory_id' => $factory['id'],
                         'status' => $factory['status'] ?? 'waiting',
                     ]);
-//                    $order->factoryFiles()->create([
-//                        'factory_id' => $factory['id'],
-//                        'order_id' => $order->id,
-//                        'path' => 'some_path',
-//                        'original_name' => 'filename.pdf',
-//                    ]);
                 }
             }
 
             $order->dates()->create(['finish_date' => $validatedData['finish_date'] ?? null]);
-
-//            if (!empty($validatedData['files'])) {
-//                foreach ($validatedData['files'] as $file) {
-//                    $path = $file->store("uploads/orders/{$order->id}", 'public');
-//                    $name = $file->getClientOriginalName();
-//                    $order->files()->create([
-//                        'path' => $path,
-//                        'original_name' => $name,
-//                    ]);
-//                    foreach ($order->factories as $factory) {
-//                        $order->factoryFiles()->create([
-//                            'factory_id' => $factory->id,
-//                            'path' => $path,
-//                            'original_name' => $name,
-//                        ]);
-//                    }
-//                }
-//            }
             if (!empty($validatedData['files'])) {
                 foreach ($validatedData['files'] as $file) {
                     $originalName = $file->getClientOriginalName();
@@ -172,58 +125,36 @@ class OrderController extends Controller
     }
 
     public function update(Request $request, $id): JsonResponse
-    {
+{
+    try {
         $validatedData = $request->validate([
+            'name' => 'required|string|max:255',
             'description' => 'required|string',
-//            'quantity' => 'required|integer|min:1',
-            'name' => 'required|string',
             'status' => 'nullable|string',
-            'factories' => 'required|array',
+            'factories' => 'required|array|min:1',
             'factories.*.id' => 'required|exists:factories,id',
-            'factories.*.status' => 'nullable|string',
             'store_link.url' => 'nullable|url',
-            'finish_date' => 'nullable|string',
-            'files' => 'nullable|array',
-            'files.*' => [
-                'file',
-                'max:2048',
-                function ($attribute, $value, $fail) {
-                    $allowedExtensions = ['pdf', 'png', 'jpeg', 'jpg', 'eps', 'step', 'sldprt', 'sldasm', 'dxf'];
-                    $extension = strtolower($value->getClientOriginalExtension());
-                    if (!in_array($extension, $allowedExtensions)) {
-                        $fail("The {$attribute} must be a valid file type.");
-                    }
-                },
-            ],
+            'finish_date' => 'nullable|date',
         ]);
 
         $order = Order::findOrFail($id);
         $order->update([
-            'description' => $validatedData['description'],
-//            'quantity' => $validatedData['quantity'],
             'name' => $validatedData['name'],
+            'description' => $validatedData['description'],
             'status' => $validatedData['status'] ?? $order->status,
         ]);
 
+        // Handle store_link
         if (!empty($validatedData['store_link']['url'])) {
             $order->storeLink()->updateOrCreate(
                 ['order_id' => $order->id],
                 ['url' => $validatedData['store_link']['url']]
             );
+        } else {
+            $order->storeLink()->delete();
         }
 
-//        if (!empty($validatedData['factories'])) {
-//            $factoryIds = array_column($validatedData['factories'], 'id');
-//            $order->factories()->sync($factoryIds);
-//
-//            foreach ($validatedData['factories'] as $factory) {
-//                $order->factoryOrder()->updateOrCreate(
-//                    ['factory_id' => $factory['id'], 'order_id' => $order->id],
-//                    ['status' => $factory['status'] ?? 'pending']
-//                );
-//            }
-//        }
-
+        // Handle factories
         if (!empty($validatedData['factories'])) {
             $factoryIds = array_column($validatedData['factories'], 'id');
             $order->factories()->sync($factoryIds);
@@ -236,35 +167,47 @@ class OrderController extends Controller
             }
         }
 
+        // Handle finish_date
         if (isset($validatedData['finish_date'])) {
             $order->dates()->updateOrCreate(
                 ['order_id' => $order->id],
                 ['finish_date' => $validatedData['finish_date']]
             );
+        } else {
+            $order->dates()->delete();
         }
 
-        if (!empty($validatedData['files'])) {
-            foreach ($validatedData['files'] as $file) {
-                $path = $file->store("uploads/orders/{$order->id}", 'public');
-                $name = $file->getClientOriginalName();
-                $order->files()->create([
-                    'path' => $path,
-                    'original_name' => $name,
-                ]);
-                // Բաժանել այս ֆայլը նաև գործարանին
-                foreach ($order->factories as $factory) {
-//                    $order->factoryFiles()->create([
-//                        'factory_id' => $factory->id,
-//                        'path' => $path,
-//                        'original_name' => $name,
-//                    ]);
-                }
-            }
-        }
+        // Load relationships
+        $order->load(
+            'orderNumber',
+            'prefixCode',
+            'dates',
+            'factoryOrders.factory',
+            'factoryOrders.files',
+            'selectedFiles.pmpFile',
+            'user'
+        );
 
+        // Ensure orderNumber is always in the response
+        // $orderData = $order->toArray();
+        $order['orderNumber'] = $order->orderNumber ? $order->orderNumber->toArray() : null;
 
-        return response()->json($order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates', 'files'), 200);
+        return response()->json([
+            'order' => $order,
+            'message' => 'Պատվերը հաջողությամբ թարմացվել է',
+        ], 200);
+    } catch (ValidationException $e) {
+        return response()->json([
+            'message' => 'Վավերացման սխալ',
+            'errors' => $e->errors(),
+        ], 422);
+    } catch (\Exception $e) {
+        return response()->json([
+            'message' => 'Սխալ պատվերի թարմացման ընթացքում',
+            'error' => $e->getMessage(),
+        ], 500);
     }
+}
 
     public function destroy($id): JsonResponse
     {

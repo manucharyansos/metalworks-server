@@ -58,62 +58,7 @@ class PmpFilesController extends Controller
     /**
      * Update the specified resource in storage.
      */
-//    public function upload(Request $request): JsonResponse
-//    {
-//        try {
-//            $validatedData = $request->validate([
-//                'pmp_id' => 'required|exists:pmps,id',
-//                'remote_number_ids' => 'required|array',
-//                'remote_number_ids.*' => 'required|exists:remote_numbers,id',
-//                'factory_ids' => 'required|array',
-//                'factory_ids.*' => 'required|exists:factories,id',
-//                'files' => 'required|array',
-//                'files.*' => 'required|file|max:10240',
-//                'quantities' => 'required|array',
-//                'quantities.*' => 'required|integer|min:1',
-//                'material_types' => 'required|array',
-//                'material_types.*' => 'required|string|max:255',
-//                'thicknesses' => 'required|array',
-//                'thicknesses.*' => 'required|numeric|min:0',
-//            ]);
-//
-//
-//            $pmp = Pmp::findOrFail($validatedData['pmp_id']);
-//
-//            foreach ($validatedData['files'] as $index => $file) {
-//                $remoteNumberId = $validatedData['remote_number_ids'][$index];
-//                $factoryId = $validatedData['factory_ids'][$index];
-//
-//                $remoteNumber = RemoteNumber::findOrFail($remoteNumberId);
-//                $factory = Factory::findOrFail($factoryId);
-//
-//                $baseDirectoryPath = "MetalWorks/PMP_{$pmp->group}.{$remoteNumber->remote_number}/{$factory->value}";
-//
-//                Storage::disk('public')->makeDirectory($baseDirectoryPath);
-//
-//                $originalName = $file->getClientOriginalName();
-//                $fileName = pathinfo($originalName, PATHINFO_FILENAME) . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-//
-//                $path = $file->storeAs($baseDirectoryPath, $fileName, 'public');
-//
-//                PmpFiles::create([
-//                    'pmp_id' => $pmp->id,
-//                    'remote_number_id' => $remoteNumber->id,
-//                    'factory_id' => $factory->id,
-//                    'path' => $path,
-//                    'original_name' => $originalName,
-//                    'quantity' => $validatedData['quantities'][$index], // Քանակ
-//                    'material_type' => $validatedData['material_types'][$index], // Նյութի տեսակ
-//                    'thickness' => $validatedData['thicknesses'][$index], // Հաստություն
-//                ]);
-//            }
-//
-//
-//            return response()->json(['message' => 'Files uploaded successfully'], 200);
-//        } catch (\Exception $e) {
-//            return response()->json(['error' => $e->getMessage()], 500);
-//        }
-//    }
+
 public function upload(Request $request): JsonResponse
 {
     try {

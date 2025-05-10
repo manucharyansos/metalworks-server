@@ -13,85 +13,105 @@ class ProductController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request)
-    {
-        try {
-            $perPage = $request->query('per_page', 10); // Default to 10 items per page
-            $products = Products::paginate($perPage);
+   public function index(Request $request)
+{
+    $perPage = $request->input('per_page', 10);
+    $search = $request->input('search');
 
-            return response()->json([
-                'status' => true,
-                'message' => 'Products retrieved successfully',
-                'data' => $products->items(), // Only the items for the current page
-                'pagination' => [
-                    'current_page' => $products->currentPage(),
-                    'last_page' => $products->lastPage(),
-                    'per_page' => $products->perPage(),
-                    'total' => $products->total(),
-                    'next_page_url' => $products->nextPageUrl(),
-                    'prev_page_url' => $products->previousPageUrl(),
-                ]
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Error retrieving products',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+    $query = Products::query();
+
+    if ($search) {
+        $query->where('name', 'like', "%{$search}%")
+              ->orWhere('description', 'like', "%{$search}%");
     }
 
+    // Sort by created_at in descending order
+    $query->orderBy('created_at', 'desc');
+
+    if ($search) {
+        // Return all matching results without pagination
+        $products = $query->get();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Products retrieved successfully',
+            'data' => $products,
+            'pagination' => null // No pagination for search
+        ], 200);
+    }
+
+    // Return paginated results
+    $products = $query->paginate($perPage);
+
+    return response()->json([
+        'status' => true,
+        'message' => 'Products retrieved successfully',
+        'data' => $products->items(),
+        'pagination' => [
+            'current_page' => $products->currentPage(),
+            'last_page' => $products->lastPage(),
+            'per_page' => $products->perPage(),
+            'total' => $products->total(),
+            'next_page_url' => $products->nextPageUrl(),
+            'prev_page_url' => $products->previousPageUrl()
+        ]
+    ], 200);
+}
     /**
      * Store a newly created resource in storage.
      */
     public function store(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Made image optional
-            'price' => 'required|integer|min:0'
-        ]);
+{
+    $validator = Validator::make($request->all(), [
+        'name' => 'required|string|max:255',
+        'description' => 'required|string',
+        'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+        'price' => 'required|integer|min:0'
+    ]);
 
-        if ($validator->fails()) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Validation error',
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        try {
-            $imagePath = null;
-            if ($request->hasFile('image')) {
-                // Ensure directory exists
-                $directoryPath = 'Products';
-                Storage::disk('public')->makeDirectory($directoryPath);
-                // Store image in MetalWorks/
-                $imagePath = $request->file('image')->store('Products', 'public');
-            }
-
-            $product = Products::create([
-                'name' => $request->name,
-                'description' => $request->description,
-                'image' => $imagePath ? '/storage/' . $imagePath : null,
-                'price' => $request->price
-            ]);
-
-            return response()->json([
-                'status' => true,
-                'message' => 'Product created successfully',
-                'data' => $product
-            ], 201);
-        } catch (\Exception $e) {
-            return response()->json([
-                'status' => false,
-                'message' => 'Error creating product',
-                'error' => $e->getMessage()
-            ], 500);
-        }
+    if ($validator->fails()) {
+        return response()->json([
+            'status' => false,
+            'message' => 'Validation error',
+            'errors' => $validator->errors()
+        ], 422);
     }
 
+    try {
+        $data = $request->only(['name', 'description', 'price']);
+
+        if ($request->hasFile('image')) {
+            $file = $request->file('image');
+            $directory = 'Products';
+            $uniqueName = uniqid() . '_' . $file->getClientOriginalName();
+
+            // Store the file and get the path
+            $path = $file->storeAs($directory, $uniqueName, 'public');
+
+            // Store full public URL in database
+            $data['image'] = '/storage/' . $path;  // Manual URL construction
+        }
+
+        $product = Products::create($data);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Product created successfully',
+            'data' => $product
+        ], 201);
+    } catch (\Exception $e) {
+        // Delete the uploaded file if product creation fails
+        if (isset($path) && Storage::disk('public')->exists($path)) {
+            Storage::disk('public')->delete($path);
+        }
+
+        return response()->json([
+            'status' => false,
+            'message' => 'Error creating product',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
     /**
      * Display the specified resource.
      */

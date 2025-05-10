@@ -29,6 +29,6 @@ class DatabaseSeeder extends Seeder
         $this->call(BendFileExtensionSeeder::class);
         $this->call(PmpSeeder::class);
         $this->call(MaterialsSeeder::class);
-        $this->call(ProductSeeder::class);
+        // $this->call(ProductSeeder::class);
     }
 }

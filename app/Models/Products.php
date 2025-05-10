@@ -15,4 +15,9 @@ class Products extends Model
         'image',
         'price'
     ];
+
+    public function getImageAttribute($value)
+    {
+        return $value ? asset($value) : null;
+    }
 }
