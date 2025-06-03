@@ -93,7 +93,7 @@ class EngineerController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Store a newly create dresource in storage.
      */
 
     public function getFilesForFactoryAndOrder($factoryId, $orderId): JsonResponse

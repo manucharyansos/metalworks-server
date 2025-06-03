@@ -22,6 +22,7 @@ use App\Http\Controllers\Api\Workers\WorkersController;
 use App\Http\Controllers\ContactController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\VisitorController;
+use App\Http\Controllers\BasketController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
@@ -93,6 +94,9 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::resource('/roles', RoleController::class);
 
         Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
+
+        Route::apiResource('baskets', BasketController::class);
+        Route::delete('baskets/{basket}/items', [BasketController::class, 'removeItem'])->name('baskets.removeItem');
     });
 
 
