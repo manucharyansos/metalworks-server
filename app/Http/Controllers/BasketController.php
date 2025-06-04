@@ -11,20 +11,14 @@ class BasketController extends Controller
 {
     public function index()
     {
-        Log::info('Basket Index Request', [
-            'headers' => request()->headers->all(),
-            'user' => Auth::user() ? Auth::user()->toArray() : null,
-        ]);
 
         $user = Auth::user();
         if (!$user) {
-            Log::error('No authenticated user for basket request');
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $basket = $user->basket;
         if (!$basket) {
-            Log::info('Creating new basket for user', ['user_id' => $user->id]);
             $basket = Basket::create([
                 'user_id' => $user->id,
                 'items' => [],
@@ -36,15 +30,9 @@ class BasketController extends Controller
 
     public function store(Request $request)
     {
-        Log::info('Basket Store Request', [
-            'headers' => request()->headers->all(),
-            'user' => Auth::user() ? Auth::user()->toArray() : null,
-            'input' => $request->all(),
-        ]);
 
         $user = Auth::user();
         if (!$user) {
-            Log::error('No authenticated user for basket store');
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
@@ -73,19 +61,14 @@ class BasketController extends Controller
 
     public function show()
     {
-        Log::info('Basket Show Request', [
-            'user_id' => Auth::id(),
-        ]);
 
         $user = Auth::user();
         if (!$user) {
-            Log::error('No authenticated user for basket show');
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $basket = $user->basket;
         if (!$basket) {
-            Log::info('Creating new basket for user', ['user_id' => $user->id]);
             $basket = Basket::create([
                 'user_id' => $user->id,
                 'items' => [],
@@ -97,20 +80,14 @@ class BasketController extends Controller
 
     public function update(Request $request)
     {
-        Log::info('Basket Update Request', [
-            'user_id' => Auth::id(),
-            'input' => $request->all(),
-        ]);
 
         $user = Auth::user();
         if (!$user) {
-            Log::error('No authenticated user for basket update');
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $basket = $user->basket;
         if (!$basket) {
-            Log::info('Creating new basket for user', ['user_id' => $user->id]);
             $basket = Basket::create([
                 'user_id' => $user->id,
                 'items' => [],
@@ -138,13 +115,9 @@ class BasketController extends Controller
 
     public function destroy()
     {
-        Log::info('Basket Destroy Request', [
-            'user_id' => Auth::id(),
-        ]);
 
         $user = Auth::user();
         if (!$user) {
-            Log::error('No authenticated user for basket destroy');
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
@@ -159,20 +132,14 @@ class BasketController extends Controller
 
     public function removeItem(Request $request)
     {
-        Log::info('Basket Remove Item Request', [
-            'user_id' => Auth::id(),
-            'product_id' => $request->input('product_id'),
-        ]);
 
         $user = Auth::user();
         if (!$user) {
-            Log::error('No authenticated user for basket remove item');
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $basket = $user->basket;
         if (!$basket) {
-            Log::error('No basket found for user', ['user_id' => $user->id]);
             return response()->json(['message' => 'Basket not found'], 404);
         }
 
