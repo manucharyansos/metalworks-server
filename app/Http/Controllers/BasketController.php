@@ -53,7 +53,8 @@ class BasketController extends Controller
 
     public function show(Basket $basket)
     {
-        if ($basket->user_id !== Auth::id()) {
+        $user = Auth::user();
+        if ($basket->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -62,7 +63,8 @@ class BasketController extends Controller
 
     public function update(Request $request, Basket $basket)
     {
-        if ($basket->user_id !== Auth::id()) {
+        $user = Auth::user();
+        if ($basket->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -87,7 +89,8 @@ class BasketController extends Controller
 
     public function destroy(Basket $basket)
     {
-        if ($basket->user_id !== Auth::id()) {
+        $user = Auth::user();
+        if ($basket->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
@@ -99,7 +102,8 @@ class BasketController extends Controller
     // Նոր մեթոդ՝ առանձին ապրանք ջնջելու համար
     public function removeItem(Request $request, Basket $basket)
     {
-        if ($basket->user_id !== Auth::id()) {
+        $user = Auth::user();
+        if ($basket->user_id !== $user->id) {
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
