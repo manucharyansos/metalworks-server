@@ -35,36 +35,33 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::get('user', [AuthController::class, 'me']);
         Route::post('logout', [AuthController::class, 'logout']);
 
-        Route::group(['prefix'=>'admin', 'middleware' => 'admin'],function (){
+        Route::group(['prefix' => 'admin', 'middleware' => 'admin'], function () {
             Route::resource('/', AdminController::class);
             Route::resource('order', OrderController::class);
             Route::post('orders/update/{order}', [OrderController::class, 'update'])->name('orders.update');
             Route::resource('file-extensions', FileExtensionController::class);
             Route::resource('laser-file-extension', LaserFileExtensionController::class);
             Route::resource('bend-file-extension', BendFileExtensionController::class);
-
-
-
         });
 
-        Route::group(['prefix'=>'orders', 'middleware' => 'check.order'], function () {
+        Route::group(['prefix' => 'orders', 'middleware' => 'check.order'], function () {
             Route::resource('order', OrderController::class);
         });
 
-        Route::group(['prefix'=>'users'], function () {
+        Route::group(['prefix' => 'users'], function () {
             Route::resource('/', UserController::class);
             Route::get('getWorkers', [UserController::class, 'getWorkers']);
         });
 
-        Route::group(['prefix'=>'clients'], function () {
+        Route::group(['prefix' => 'clients'], function () {
             Route::resource('client', ClientController::class);
         });
-        Route::group(['prefix'=>'workers'], function () {
+        Route::group(['prefix' => 'workers'], function () {
             Route::apiResource('/', WorkersController::class);
             Route::put('/{worker}', [WorkersController::class, 'update']);
         });
 
-        Route::group(['prefix'=>'factories'], function () {
+        Route::group(['prefix' => 'factories'], function () {
             Route::apiResource('factory', FactoryController::class);
             Route::get('getFile/{path}', [FactoryController::class, 'getFile'])->where('path', '.*');
             Route::get('/download/{path}', [FactoryController::class, 'downloadFile'])->where('path', '.*');
@@ -72,17 +69,16 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
             Route::put('/updateOrder/{order}', [FactoryController::class, 'updateOrder']);
             Route::put('/confirmOrderStatus/{id}', [FactoryController::class, 'confirmOrderStatus']);
             Route::get('/getStatus', [FactoryController::class, 'getStatus']);
-
         });
 
-        Route::group(['prefix'=>'engineers', 'middleware' => 'engineer'], function () {
-//            Route::apiResource('factory-engineer', EngineerController::class);
+        Route::group(['prefix' => 'engineers', 'middleware' => 'engineer'], function () {
+            //            Route::apiResource('factory-engineer', EngineerController::class);
             Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder']);
             Route::post('storeWithFiles', [EngineerController::class, 'storeWithFiles']);
             Route::resource('/engineer', EngineerController::class);
             Route::post('/upload', [EngineerController::class, 'upload']);
             Route::apiResource('pmps', PmpController::class);
-//            Route::post('addPmpGroup', [PmpController::class, 'addPmpGroup']);
+            //            Route::post('addPmpGroup', [PmpController::class, 'addPmpGroup']);
             Route::post('pmps/remoteNumber/{id}', [PmpController::class, 'remoteNumber']);
             Route::post('/pmps/check-group', [PmpController::class, 'checkGroup']);
             Route::post('/pmps/check-group-name', [PmpController::class, 'checkGroupName']);
@@ -95,27 +91,39 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
         Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
 
-        Route::apiResource('baskets', BasketController::class);
-        Route::delete('baskets/{basket}/items', [BasketController::class, 'removeItem'])->name('baskets.removeItem');
+        Route::get('baskets/current', [BasketController::class, 'current'])
+            ->name('baskets.current');
+
+        // Standard basket resource routes
+        Route::apiResource('baskets', BasketController::class)->except(['create', 'edit']);
+
+        // Basket items routes
+        // Route::post('baskets/items', [BasketController::class, 'store']) // Ավելացնել POST մեթոդ
+        //     ->name('baskets.items.add');
+
+        Route::put('baskets/items/{itemId}', [BasketController::class, 'update'])
+            ->name('baskets.items.update');
+
+        Route::delete('baskets/items/{itemId}', [BasketController::class, 'removeItem'])
+            ->name('baskets.items.remove');
     });
 
 
-    Route::group(['prefix'=>'contacts'],function (){
+    Route::group(['prefix' => 'contacts'], function () {
         Route::get('/', [ContactController::class, 'index']);
         Route::post('/', [ContactController::class, 'store']);
     });
-
 });
-Route::group(['prefix'=>'categories'],function (){
+Route::group(['prefix' => 'categories'], function () {
     Route::resource('/materialGroup', MaterialGroupController::class);
     Route::resource('/materialCategories', MaterialCategoryController::class);
 });
 
-Route::group(['prefix'=>'materials'],function (){
+Route::group(['prefix' => 'materials'], function () {
     Route::resource('/', MaterialController::class);
 });
 
-Route::group(['prefix'=>'products'],function (){
-    Route::resource('/', ProductController::class);
+Route::group(['prefix' => 'products'], function () {
+    Route::resource('/', ProductController::class, ['parameters' => ['' => 'id']]);
 });
 Route::middleware('auth:sanctum')->get('/visitor-stats', [VisitorController::class, 'getDeviceStats']);

@@ -57,10 +57,10 @@ class AdminController extends Controller
         }
     }
 
-    public function index(): JsonResponse
-    {
-        return response()->json(Service::all());
-    }
+    // public function index(): JsonResponse
+    // {
+    //     return response()->json(Service::all());
+    // }
 
     public function show($id): JsonResponse
     {
