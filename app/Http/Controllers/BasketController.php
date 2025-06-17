@@ -63,7 +63,7 @@ class BasketController extends Controller
             $items[$existingIndex]['quantity'] += $quantity;
         } else {
             $product = Products::findOrFail($productId);
-            
+
             $items[] = [
                 'id' => $product->id,
                 'name' => $product->name,
@@ -96,10 +96,10 @@ class BasketController extends Controller
         if (!$user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
-$validator = Validator::make($request->all(), [
-    'quantity' => 'required_if:action,set|integer|min:1',
-    'action' => 'sometimes|in:increase,decrease,set'
-]);
+        $validator = Validator::make($request->all(), [
+            'quantity' => 'required_if:action,set|integer|min:1',
+            'action' => 'sometimes|in:increase,decrease,set'
+        ]);
 
         if ($validator->fails()) {
             return response()->json(['errors' => $validator->errors()], 422);
@@ -120,14 +120,14 @@ $validator = Validator::make($request->all(), [
             case 'increase':
                 $items[$itemIndex]['quantity'] += 1;
                 break;
-                
+
             case 'decrease':
                 if ($items[$itemIndex]['quantity'] <= 1) {
                     return response()->json(['message' => 'Quantity cannot be less than 1'], 422);
                 }
                 $items[$itemIndex]['quantity'] -= 1;
                 break;
-                
+
             case 'set':
                 $items[$itemIndex]['quantity'] = $request->input('quantity');
                 break;
@@ -150,33 +150,33 @@ $validator = Validator::make($request->all(), [
      * Remove item from basket
      */
     public function removeItem(Request $request, $itemId)
-{
-    $user = Auth::user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $basket = $user->basket()->firstOrFail();
+        $items = $basket->items;
+        $itemIndex = $this->findProductIndex($items, $itemId);
+
+        if ($itemIndex === false) {
+            return response()->json(['message' => 'Item not found in basket'], 404);
+        }
+
+        array_splice($items, $itemIndex, 1);
+        $basket->update(['items' => $items]);
+
+        return response()->json([
+            'message' => 'Item removed from basket',
+            'basket' => [
+                'id' => $basket->id,
+                'items' => $this->formatItems($items),
+                'item_count' => count($items),
+                'total' => $this->calculateTotal($items)
+            ]
+        ]);
     }
-
-    $basket = $user->basket()->firstOrFail();
-    $items = $basket->items;
-    $itemIndex = $this->findProductIndex($items, $itemId);
-
-    if ($itemIndex === false) {
-        return response()->json(['message' => 'Item not found in basket'], 404);
-    }
-
-    array_splice($items, $itemIndex, 1);
-    $basket->update(['items' => $items]);
-
-    return response()->json([
-        'message' => 'Item removed from basket',
-        'basket' => [
-            'id' => $basket->id,
-            'items' => $this->formatItems($items),
-            'item_count' => count($items),
-            'total' => $this->calculateTotal($items)
-        ]
-    ]);
-}
 
 
     /**
@@ -221,7 +221,7 @@ $validator = Validator::make($request->all(), [
      */
     private function calculateTotal(array $items)
     {
-        return array_reduce($items, function($total, $item) {
+        return array_reduce($items, function ($total, $item) {
             return $total + ($item['price'] * $item['quantity']);
         }, 0);
     }
@@ -230,20 +230,20 @@ $validator = Validator::make($request->all(), [
      * Format items for response
      */
     private function formatItems(array $items)
-{
-    if (empty($items)) return [];
-    
-    return array_map(function($item) {
-        return [
-            'id' => $item['id'] ?? null,
-            'name' => $item['name'] ?? 'Անհայտ ապրանք',
-            'price' => (float) ($item['price'] ?? 0),
-            'image' => $item['image'] ?? '/images/placeholder.jpg',
-            'quantity' => (int) ($item['quantity'] ?? 1),
-            'total' => (float) (($item['price'] ?? 0) * ($item['quantity'] ?? 1))
-        ];
-    }, $items);
-}
+    {
+        if (empty($items)) return [];
+
+        return array_map(function ($item) {
+            return [
+                'id' => $item['id'] ?? null,
+                'name' => $item['name'] ?? 'Անհայտ ապրանք',
+                'price' => (float) ($item['price'] ?? 0),
+                'image' => $item['image'] ?? '/images/placeholder.jpg',
+                'quantity' => (int) ($item['quantity'] ?? 1),
+                'total' => (float) (($item['price'] ?? 0) * ($item['quantity'] ?? 1))
+            ];
+        }, $items);
+    }
 
     public function current()
     {

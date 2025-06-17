@@ -23,6 +23,7 @@ use App\Http\Controllers\ContactController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\VisitorController;
 use App\Http\Controllers\BasketController;
+use App\Http\Controllers\CheckoutController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
@@ -106,6 +107,9 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
         Route::delete('baskets/items/{itemId}', [BasketController::class, 'removeItem'])
             ->name('baskets.items.remove');
+
+        Route::get('/checkout', [CheckoutController::class, 'index']);
+        Route::post('/checkout', [CheckoutController::class, 'store']);
     });
 
 
