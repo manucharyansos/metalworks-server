@@ -60,7 +60,7 @@ class ProductsFactory extends Factory
                 $material,
                 $use
             ),
-            'image' => 'products/' . $this->faker->image('public/storage/products', 640, 480, null, false),
+            'image' => $this->storeFakeImage(),
             'price' => $this->faker->numberBetween(
                 $categories[$category]['price_range'][0],
                 $categories[$category]['price_range'][1]
@@ -68,5 +68,12 @@ class ProductsFactory extends Factory
             'created_at' => now(),
             'updated_at' => now(),
         ];
+    }
+
+    public function storeFakeImage()
+    {
+        $fakeImagePath = $this->faker->image(storage_path('app/public/Products'), 640, 480, null, false);
+
+        return '/storage/Products/' . basename($fakeImagePath);
     }
 }
