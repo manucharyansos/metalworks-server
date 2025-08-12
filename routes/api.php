@@ -51,7 +51,6 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
         Route::group(['prefix' => 'users'], function () {
             Route::resource('/', UserController::class);
-            Route::get('getWorkers', [UserController::class, 'getWorkers']);
         });
 
         Route::group(['prefix' => 'clients'], function () {
@@ -75,11 +74,8 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::group(['prefix' => 'engineers', 'middleware' => 'engineer'], function () {
             //            Route::apiResource('factory-engineer', EngineerController::class);
             Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder']);
-            Route::post('storeWithFiles', [EngineerController::class, 'storeWithFiles']);
             Route::resource('/engineer', EngineerController::class);
-            Route::post('/upload', [EngineerController::class, 'upload']);
             Route::apiResource('pmps', PmpController::class);
-            //            Route::post('addPmpGroup', [PmpController::class, 'addPmpGroup']);
             Route::post('pmps/remoteNumber/{id}', [PmpController::class, 'remoteNumber']);
             Route::post('/pmps/check-group', [PmpController::class, 'checkGroup']);
             Route::post('/pmps/check-group-name', [PmpController::class, 'checkGroupName']);
@@ -97,10 +93,6 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
         // Standard basket resource routes
         Route::apiResource('baskets', BasketController::class)->except(['create', 'edit']);
-
-        // Basket items routes
-        // Route::post('baskets/items', [BasketController::class, 'store']) // Ավելացնել POST մեթոդ
-        //     ->name('baskets.items.add');
 
         Route::put('baskets/items/{itemId}', [BasketController::class, 'update'])
             ->name('baskets.items.update');
