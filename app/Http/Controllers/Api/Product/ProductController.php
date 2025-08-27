@@ -4,201 +4,182 @@ namespace App\Http\Controllers\Api\Product;
 
 use App\Http\Controllers\Controller;
 use App\Models\Products;
-use App\Models\ProductImage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
+use App\Http\Resources\ProductResource;
 
 class ProductController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index(Request $request): JsonResponse
     {
-        $perPage = $request->input('per_page', 10);
-        $search = $request->input('search');
+        $perPage = (int) $request->input('per_page', 10);
+        $search  = $request->input('search');
 
-        $query = Products::with('images');
-
-        if ($search) {
-            $query->where('name', 'like', "%{$search}%")
-                ->orWhere('description', 'like', "%{$search}%");
-        }
-
-        $query->orderBy('created_at', 'desc');
+        $query = Products::with('images')->orderBy('created_at', 'desc');
 
         if ($search) {
-            $products = $query->get();
-            return $this->jsonResponse(true, 'Products retrieved successfully', $products);
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('description', 'like', "%{$search}%");
+            });
+            $items = $query->get();
+            return $this->jsonResponse(true, 'Products retrieved successfully',
+                ProductResource::collection($items)
+            );
         }
 
         $products = $query->paginate($perPage);
-        return $this->jsonResponse(true, 'Products retrieved successfully', $products->items(), [
-            'current_page' => $products->currentPage(),
-            'last_page' => $products->lastPage(),
-            'per_page' => $products->perPage(),
-            'total' => $products->total(),
-            'next_page_url' => $products->nextPageUrl(),
-            'prev_page_url' => $products->previousPageUrl()
-        ]);
+
+        return $this->jsonResponse(
+            true,
+            'Products retrieved successfully',
+            ProductResource::collection($products->items()),
+            [
+                'current_page'  => $products->currentPage(),
+                'last_page'     => $products->lastPage(),
+                'per_page'      => $products->perPage(),
+                'total'         => $products->total(),
+                'next_page_url' => $products->nextPageUrl(),
+                'prev_page_url' => $products->previousPageUrl(),
+            ]
+        );
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255',
+        $v = Validator::make($request->all(), [
+            'name'        => 'required|string|max:255',
             'description' => 'required|string',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
-            'gallery' => 'nullable|array',
-            'gallery.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:2048',
-            'price' => 'required|numeric|min:0'
+            'image'       => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
+            'gallery'     => 'nullable|array',
+            'gallery.*'   => 'image|mimes:jpeg,png,jpg,gif,webp|max:4096',
+            'price'       => 'required|numeric|min:0',
         ]);
-
-        if ($validator->fails()) {
-            return $this->jsonResponse(false, 'Validation error', null, null, 422, $validator->errors());
+        if ($v->fails()) {
+            return $this->jsonResponse(false, 'Validation error', null, null, 422, $v->errors());
         }
 
         try {
-            $data = $request->only(['name', 'description', 'price']);
-            $product = new Products($data);
+            $product = DB::transaction(function () use ($request) {
+                $data = $request->only(['name','description','price']);
+                $p = new Products($data);
 
-            // Main image handling
-            if ($request->hasFile('image')) {
-                $product->image = $this->storeImage($request->file('image'), 'products/main');
-            }
-
-            $product->save();
-
-            // Gallery images handling
-            if ($request->hasFile('gallery')) {
-                foreach ($request->file('gallery') as $image) {
-                    $path = $this->storeImage($image, 'products/gallery');
-                    $product->images()->create(['path' => $path]);
+                if ($request->hasFile('image')) {
+                    $p->image = $this->storeImage($request->file('image'), 'products/main');
                 }
-            }
-            return $this->jsonResponse(true, 'Product created successfully', $product->load('images'), null, 201);
+                $p->save();
+
+                if ($request->hasFile('gallery')) {
+                    foreach ($request->file('gallery') as $image) {
+                        $path = $this->storeImage($image, 'products/gallery');
+                        $p->images()->create(['path' => $path]);
+                    }
+                }
+                return $p->load('images');
+            });
+
+            return $this->jsonResponse(true, 'Product created successfully',
+                new ProductResource($product), null, 201
+            );
         } catch (\Exception $e) {
-            return $this->jsonResponse(false, 'Error creating product', null, ['error' => $e->getMessage()], 500);
+            return $this->jsonResponse(false, 'Error creating product', null, null, 500, ['error' => $e->getMessage()]);
         }
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show(string $id): JsonResponse
     {
         try {
             $product = Products::with('images')->findOrFail($id);
-            return $this->jsonResponse(true, 'Product retrieved successfully', $product);
+            return $this->jsonResponse(true, 'Product retrieved successfully',
+                new ProductResource($product)
+            );
         } catch (\Exception $e) {
-            return $this->jsonResponse(false, 'Product not found', null, ['error' => $e->getMessage()], 404);
+            return $this->jsonResponse(false, 'Product not found', null, null, 404, ['error' => $e->getMessage()]);
         }
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, string $id): JsonResponse
     {
-        $validator = Validator::make($request->all(), [
-            'name' => 'sometimes|required|string|max:255',
-            'description' => 'sometimes|required|string',
-            'image' => 'sometimes|image|mimes:jpeg,png,jpg,gif,webp|max:2048',
-            'gallery' => 'nullable|array',
-            'gallery.*' => 'image|mimes:jpeg,png,jpg,gif,webp|max:2048',
-            'price' => 'sometimes|required|numeric|min:0',
-            'deleted_gallery_images' => 'nullable|array',
-            'deleted_gallery_images.*' => 'integer'
+        $v = Validator::make($request->all(), [
+            'name'                    => 'sometimes|required|string|max:255',
+            'description'             => 'sometimes|required|string',
+            'image'                   => 'sometimes|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
+            'gallery'                 => 'nullable|array',
+            'gallery.*'               => 'image|mimes:jpeg,png,jpg,gif,webp|max:4096',
+            'price'                   => 'sometimes|required|numeric|min:0',
+            'deleted_gallery_images'  => 'nullable|array',
+            'deleted_gallery_images.*'=> 'integer',
         ]);
-
-        if ($validator->fails()) {
-            return $this->jsonResponse(false, 'Validation error', null, null, 422, $validator->errors());
+        if ($v->fails()) {
+            return $this->jsonResponse(false, 'Validation error', null, null, 422, $v->errors());
         }
 
         try {
-            $product = Products::with('images')->findOrFail($id);
-            $data = $request->only(['name', 'description', 'price']);
+            $product = DB::transaction(function () use ($request, $id) {
+                $p = Products::with('images')->findOrFail($id);
+                $data = $request->only(['name','description','price']);
 
-            // Main image update
-            if ($request->hasFile('image')) {
-                // Delete old image
-                if ($product->image) {
-                    $this->deleteImage($product->image);
+                if ($request->hasFile('image')) {
+                    if ($p->image) $this->deleteImage($p->image);
+                    $data['image'] = $this->storeImage($request->file('image'), 'products/main');
                 }
-                $data['image'] = $this->storeImage($request->file('image'), 'products/main');
-            }
+                $p->update($data);
 
-            $product->update($data);
-
-            // Handle gallery images
-            if ($request->hasFile('gallery')) {
-                foreach ($request->file('gallery') as $image) {
-                    $path = $this->storeImage($image, 'products/gallery');
-                    $product->images()->create(['path' => $path]);
+                if ($request->hasFile('gallery')) {
+                    foreach ($request->file('gallery') as $image) {
+                        $path = $this->storeImage($image, 'products/gallery');
+                        $p->images()->create(['path' => $path]);
+                    }
                 }
-            }
 
-            // Delete requested gallery images
-            if ($request->has('deleted_gallery_images')) {
-                $imagesToDelete = $product->images()
-                    ->whereIn('id', $request->deleted_gallery_images)
-                    ->get();
-
-                foreach ($imagesToDelete as $image) {
-                    $this->deleteImage($image->path);
-                    $image->delete();
+                if ($request->filled('deleted_gallery_images')) {
+                    $imagesToDelete = $p->images()->whereIn('id', $request->deleted_gallery_images)->get();
+                    foreach ($imagesToDelete as $img) {
+                        $this->deleteImage($img->path);
+                        $img->delete();
+                    }
                 }
-            }
-            return $this->jsonResponse(true, 'Product updated successfully', $product->load('images'));
+
+                return $p->load('images');
+            });
+
+            return $this->jsonResponse(true, 'Product updated successfully',
+                new ProductResource($product)
+            );
         } catch (\Exception $e) {
-            return $this->jsonResponse(false, 'Error updating product', null, ['error' => $e->getMessage()], 500);
+            return $this->jsonResponse(false, 'Error updating product', null, null, 500, ['error' => $e->getMessage()]);
         }
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(string $id): JsonResponse
     {
         try {
-            $product = Products::with('images')->findOrFail($id);
+            DB::transaction(function () use ($id) {
+                $p = Products::with('images')->findOrFail($id);
 
-            // Delete main image
-            if ($product->image) {
-                $this->deleteImage($product->image);
-            }
+                if ($p->image) $this->deleteImage($p->image);
+                foreach ($p->images as $img) {
+                    $this->deleteImage($img->path);
+                    $img->delete();
+                }
+                $p->delete();
+            });
 
-            // Delete gallery images
-            foreach ($product->images as $image) {
-                $this->deleteImage($image->path);
-                $image->delete();
-            }
-
-            $product->delete();
             return $this->jsonResponse(true, 'Product deleted successfully');
         } catch (\Exception $e) {
-            return $this->jsonResponse(false, 'Error deleting product', null, ['error' => $e->getMessage()], 500);
+            return $this->jsonResponse(false, 'Error deleting product', null, null, 500, ['error' => $e->getMessage()]);
         }
     }
 
-    /**
-     * Helper method to store images
-     */
     private function storeImage($file, $directory): string
     {
         $uniqueName = uniqid() . '_' . $file->getClientOriginalName();
         return $file->storeAs($directory, $uniqueName, 'public');
     }
 
-    /**
-     * Helper method to delete images
-     */
     private function deleteImage($storedPath): void
     {
         if ($storedPath && Storage::disk('public')->exists($storedPath)) {
@@ -206,9 +187,6 @@ class ProductController extends Controller
         }
     }
 
-    /**
-     * Helper method for JSON responses
-     */
     private function jsonResponse(
         bool $status,
         string $message,
@@ -217,20 +195,9 @@ class ProductController extends Controller
         int $statusCode = 200,
         $errors = null
     ): JsonResponse {
-        $response = [
-            'status' => $status,
-            'message' => $message,
-            'data' => $data,
-        ];
-
-        if ($pagination !== null) {
-            $response['pagination'] = $pagination;
-        }
-
-        if ($errors !== null) {
-            $response['errors'] = $errors;
-        }
-
+        $response = ['status'=>$status, 'message'=>$message, 'data'=>$data];
+        if ($pagination !== null) $response['pagination'] = $pagination;
+        if ($errors !== null) $response['errors'] = $errors;
         return response()->json($response, $statusCode);
     }
 }

@@ -18,8 +18,6 @@ class Products extends Model
         'price'
     ];
 
-    protected $appends = ['image_url'];
-
     public function images(): HasMany
     {
         return $this->hasMany(ProductImage::class, 'product_id');

@@ -12,7 +12,6 @@ class ProductImage extends Model
     use HasFactory;
 
     protected $fillable = ['product_id', 'path'];
-    protected $appends = ['url'];
 
     public function product(): BelongsTo
     {
