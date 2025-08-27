@@ -193,18 +193,16 @@ class ProductController extends Controller
     private function storeImage($file, $directory): string
     {
         $uniqueName = uniqid() . '_' . $file->getClientOriginalName();
-        $path = $file->storeAs($directory, $uniqueName, 'public');
-        return '/storage/' . $path;
+        return $file->storeAs($directory, $uniqueName, 'public');
     }
 
     /**
      * Helper method to delete images
      */
-    private function deleteImage($path): void
+    private function deleteImage($storedPath): void
     {
-        $relativePath = str_replace('/storage/', '', $path);
-        if (Storage::disk('public')->exists($relativePath)) {
-            Storage::disk('public')->delete($relativePath);
+        if ($storedPath && Storage::disk('public')->exists($storedPath)) {
+            Storage::disk('public')->delete($storedPath);
         }
     }
 

@@ -5,20 +5,21 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Facades\Storage;
 
 class ProductImage extends Model
 {
     use HasFactory;
 
     protected $fillable = ['product_id', 'path'];
+    protected $appends = ['url'];
 
     public function product(): BelongsTo
     {
         return $this->belongsTo(Products::class);
     }
-
-    public function getPathAttribute($value)
+    public function getUrlAttribute(): ?string
     {
-        return $value ? asset($value) : null;
+        return $this->path ? Storage::disk('public')->url($this->path) : null;
     }
 }

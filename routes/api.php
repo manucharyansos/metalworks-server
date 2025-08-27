@@ -17,6 +17,7 @@ use App\Http\Controllers\Api\Order\OrderController;
 use App\Http\Controllers\Api\PMP\PmpController;
 use App\Http\Controllers\Api\PMP\PmpFilesController;
 use App\Http\Controllers\Api\Product\ProductController;
+use App\Http\Controllers\Api\Service\ServiceController;
 use App\Http\Controllers\Api\Users\UserController;
 use App\Http\Controllers\Api\Workers\WorkersController;
 use App\Http\Controllers\ContactController;
@@ -103,6 +104,8 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::get('/checkout', [CheckoutController::class, 'index']);
         Route::post('/checkout', [CheckoutController::class, 'store']);
     });
+
+    Route::apiResource('services', ServiceController::class);
 
 
     Route::group(['prefix' => 'contacts'], function () {

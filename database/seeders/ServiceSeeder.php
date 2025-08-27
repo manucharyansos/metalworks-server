@@ -12,31 +12,12 @@ class ServiceSeeder extends Seeder
      */
     public function run(): void
     {
-        Service::create([
-            'name' => 'Materials',
-            'description' => 'Full-stack web development services.'
-        ]);
-
-        Service::create([
-            'name' => 'Services',
-            'description' => 'Search engine optimization to increase visibility.'
-        ]);
-
-        Service::create([
-            'name' => 'Resources',
-            'description' => 'Creative design solutions for your brand.'
-        ]);
-
-        Service::create([
-            'name' => 'Examples',
-            'description' => 'Creative design solutions for your brand.'
-        ]);
-
-        Service::create([
-            'name' => 'Contact',
-            'description' => 'Creative design solutions for your brand.'
-        ]);
-
-        // You can add more sample data here as needed
+        $items = [
+            ['title'=>'Laser', 'slug'=>'laser', 'description'=>'Թիթեղավոր մետաղների ...', 'image'=>'services/laser.jpg', 'sort'=>1],
+            ['title'=>'Bend',  'slug'=>'bend',  'description'=>'Մետաղական թիթեղների ...', 'image'=>'services/bend.jpg',  'sort'=>2],
+            ['title'=>'Welding','slug'=>'welding','description'=>'Զոդման տարբեր մեթոդներ ...', 'image'=>'services/robot.jpg','sort'=>3],
+            ['title'=>'Powder Coating','slug'=>'powder-coating','description'=>'Փոշեներկում ... WAGNER ...', 'image'=>'services/catt.jpg','sort'=>4],
+        ];
+        foreach ($items as $i) Service::updateOrCreate(['slug'=>$i['slug']], $i);
     }
 }
