@@ -12,7 +12,6 @@ class WorkSeeder extends Seeder
 {
     public function run(): void
     {
-        // ծագման նկարների ուղիները՝ 그대로 services/…-ից
         $items = [
             ['title'=>'Laser — ցուցադրական աշխատանք',   'cover'=>'services/laser.jpg',  'desc'=>'Թիթեղավոր մետաղների ...'],
             ['title'=>'Bend — ցուցադրական աշխատանք',    'cover'=>'services/bend.jpg',   'desc'=>'Մետաղական թիթեղների ...'],
@@ -31,13 +30,12 @@ class WorkSeeder extends Seeder
                 [
                     'title'         => $i['title'],
                     'description'   => $i['desc'],
-                    'image'         => $source,       // cover image
+                    'image'         => $source,
                     'is_published'  => true,
                     'sort_order'    => 100,
                 ]
             );
 
-            // gallery՝ նույն նկարը 3 օրինակով աշխ․ գեղ․ ցուցադրության համար
             for ($g = 1; $g <= 3; $g++) {
                 $target = "works/gallery/{$slug}-{$g}.jpg";
                 $this->copyOrPlaceholder($source, $target);
