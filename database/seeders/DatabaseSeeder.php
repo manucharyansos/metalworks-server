@@ -30,5 +30,7 @@ class DatabaseSeeder extends Seeder
 //         $this->call(PmpSeeder::class);
         $this->call(MaterialsSeeder::class);
 //         $this->call(ProductSeeder::class);
+        $this->call(ServiceSeeder::class);
+        $this->call(WorkSeeder::class,);
     }
 }

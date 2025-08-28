@@ -13,7 +13,6 @@ class ProductSeeder extends Seeder
      */
     public function run(): void
     {
-        // Create 30 sample furniture products
         Products::factory()->count(30)->create();
     }
 }
