@@ -113,9 +113,9 @@ class WorkController extends Controller
         $work = Work::with(['images'])->findOrFail($id);
 
         $v = Validator::make($request->all(), [
-            'title'       => 'sometimes|required|string|max:255',
-            'slug'        => 'sometimes|required|string|max:255|unique:works,slug,'.$work->id,
-            'description' => 'nullable|string',
+            'title'       => 'sometimes|nullable|string|max:255',
+            'slug'        => 'sometimes|nullable|string|max:255|unique:works,slug,'.$work->id,
+            'description' => 'sometimes|nullable|string',
             'image'       => 'sometimes|image|mimes:jpeg,png,jpg,gif,webp|max:4096',
             'gallery'     => 'nullable|array',
             'gallery.*'   => 'image|mimes:jpeg,png,jpg,gif,webp|max:4096',

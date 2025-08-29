@@ -32,8 +32,8 @@ class Work extends Model
         return $this->hasMany(WorkImage::class, 'work_id');
     }
 
-    public function getImageUrlAttribute(): ?string
+    public function getUrlAttribute(): ?string
     {
-        return $this->image ? Storage::disk('public')->url($this->image) : null;
+        return $this->path ? Storage::disk('public')->url($this->path) : null;
     }
 }
