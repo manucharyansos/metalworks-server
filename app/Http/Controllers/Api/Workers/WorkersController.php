@@ -3,121 +3,125 @@
 namespace App\Http\Controllers\Api\Workers;
 
 use App\Http\Controllers\Controller;
-use App\Models\Client;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\Rule;
 
 class WorkersController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index(): JsonResponse
     {
-        $users = User::whereIn('role_id', [5, 6, 8])->with('client')->get();
+        $users = User::whereIn('role_id', [5, 6, 8])
+            ->with('client')
+            ->orderBy('id','desc')
+            ->get();
 
-        if ($users->isEmpty()) {
-            return response()->json([
-                'message' => 'No users found with role_id 3 or 6'
-            ], 404);
-        }
-
-        return response()->json($users);
+        return response()->json([
+            'status' => true,
+            'message' => 'Workers fetched',
+            'data' => $users,
+        ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request): JsonResponse
     {
-        $validatedUserData = $request->validate([
-            'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:6|confirmed',
-            'role_id' => 'required|exists:roles,id'
+        $request->validate([
+            'email'     => ['required','email','unique:users,email'],
+            'password'  => ['required','string','min:6','confirmed'],
+            'role_id'   => ['required','exists:roles,id'],
+            'name'      => ['required','string'],
+            'type'      => ['required','string'],
+            'phone'     => ['required','string'],
+            'last_name' => ['nullable','string'],
+            'second_phone' => ['nullable','string'],
+            'address'   => ['nullable','string'],
         ]);
-        $validatedClientData = $this->getArr($request);
+
         $user = User::create([
-            'name' => $validatedClientData['name'],
-            'email' => $validatedUserData['email'],
-            'password' => bcrypt($validatedUserData['password']),
-            'role_id' => $validatedUserData['role_id']
+            'name'     => $request->string('name'),
+            'email'    => $request->string('email'),
+            'password' => Hash::make($request->string('password')),
+            'role_id'  => $request->integer('role_id'),
         ]);
-        $client = $user->client()->create($validatedClientData);
 
-        return response()->json($client, 201);
+        $clientData = [
+            'type'          => $request->string('type'),
+            'name'          => $request->string('name'),
+            'last_name'     => $request->string('last_name'),
+            'phone'         => $request->string('phone'),
+            'second_phone'  => $request->string('second_phone'),
+            'address'       => $request->string('address'),
+        ];
+        $user->client()->create($clientData);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Worker created',
+            'data' => $user->load('client'),
+        ], 201);
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, $id): JsonResponse
     {
-        $validatedData = $this->getArr($request);
+        $user = User::with('client')->findOrFail($id);
 
-        $user = User::findOrFail($id);
-        $user->update([
-            'name' => $validatedData['name'],
-            'email' => $validatedData['email']
+        $request->validate([
+            'email'     => ['required','email', Rule::unique('users','email')->ignore($user->id)],
+            'role_id'   => ['required','exists:roles,id'],
+            'name'      => ['required','string'],
+            'type'      => ['required','string'],
+            'phone'     => ['required','string'],
+            'last_name' => ['nullable','string'],
+            'second_phone' => ['nullable','string'],
+            'address'   => ['nullable','string'],
+            // optional password change
+            'password'  => ['nullable','string','min:6','confirmed'],
         ]);
+
+        $user->update([
+            'name'    => $request->string('name'),
+            'email'   => $request->string('email'),
+            'role_id' => $request->integer('role_id'),
+        ]);
+
+        if ($request->filled('password')) {
+            $user->update([
+                'password' => Hash::make($request->string('password')),
+            ]);
+        }
+
+        $clientData = [
+            'type'          => $request->string('type'),
+            'name'          => $request->string('name'),
+            'last_name'     => $request->string('last_name'),
+            'phone'         => $request->string('phone'),
+            'second_phone'  => $request->string('second_phone'),
+            'address'       => $request->string('address'),
+        ];
+
         $user->client()->updateOrCreate(
             ['user_id' => $user->id],
-            $validatedData
+            $clientData
         );
 
         return response()->json([
-            'user' => $user->load('client'),
-            'message' => 'Հաճախորդը հաջողությամբ թարմացվեց',
-        ], 200, [], JSON_UNESCAPED_UNICODE);
-    }
-
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
-    }
-
-    public function getArr(Request $request): array
-    {
-        $validatedClientData = $request->validate([
-            'type' => 'required|string',
-            'email' => 'required|email|unique:users,email',
-            'name' => 'required|string',
-            'last_name' => 'nullable|string',
-            'phone' => 'required|string',
-            'second_phone' => 'nullable|string',
-            'address' => 'nullable|string',
+            'status' => true,
+            'message' => 'Worker updated',
+            'data' => $user->fresh()->load('client'),
         ]);
-
-        return $validatedClientData;
     }
 
+    public function destroy($id): JsonResponse
+    {
+        $user = User::with('client')->findOrFail($id);
+        if ($user->client) $user->client->delete();
+        $user->delete();
 
+        return response()->json([
+            'status' => true,
+            'message' => 'Worker deleted',
+        ]);
+    }
 }

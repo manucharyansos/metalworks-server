@@ -23,7 +23,7 @@ class WorkSeeder extends Seeder
             $source = $i['cover'];
             $this->ensureFileOrPlaceholder($source);
 
-            $slug = Str::slug(Str::before($i['title'], ' —')) . '-' . Str::random(5);
+            $slug = Str::slug(Str::before($i['title'], ' —'));
 
             $work = Work::updateOrCreate(
                 ['slug' => $slug],
@@ -51,8 +51,14 @@ class WorkSeeder extends Seeder
     protected function ensureFileOrPlaceholder(?string $path): void
     {
         if (!$path) return;
+
         if (!Storage::disk('public')->exists($path)) {
-            $this->putPlaceholder($path);
+            $fromPublic = public_path($path);
+            if (is_file($fromPublic)) {
+                $this->putFromFilesystem($fromPublic, $path);
+            } else {
+                $this->putPlaceholder($path);
+            }
         }
     }
 
@@ -65,9 +71,24 @@ class WorkSeeder extends Seeder
 
         if (Storage::disk('public')->exists($from)) {
             Storage::disk('public')->put($to, Storage::disk('public')->get($from));
+            return;
+        }
+
+        $fromPublic = public_path($from);
+        if (is_file($fromPublic)) {
+            $this->putFromFilesystem($fromPublic, $to);
         } else {
             $this->putPlaceholder($to);
         }
+    }
+
+    protected function putFromFilesystem(string $absolute, string $destPath): void
+    {
+        $dir = dirname($destPath);
+        if (!Storage::disk('public')->exists($dir)) {
+            Storage::disk('public')->makeDirectory($dir);
+        }
+        Storage::disk('public')->put($destPath, file_get_contents($absolute));
     }
 
     protected function putPlaceholder(string $path): void
