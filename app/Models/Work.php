@@ -24,7 +24,6 @@ class Work extends Model
         'is_published' => 'boolean',
     ];
 
-    protected $appends = ['image_url'];
 
 
     public function images(): HasMany
@@ -32,8 +31,4 @@ class Work extends Model
         return $this->hasMany(WorkImage::class, 'work_id');
     }
 
-    public function getUrlAttribute(): ?string
-    {
-        return $this->path ? Storage::disk('public')->url($this->path) : null;
-    }
 }
