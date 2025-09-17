@@ -106,7 +106,8 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::post('/checkout', [CheckoutController::class, 'store']);
     });
 
-    Route::apiResource('services', ServiceController::class);
+    Route::apiResource('services', ServiceController::class)->middleware(['setlocale']);
+    Route::get('services/slug/{slug}', [ServiceController::class, 'showBySlug'])->middleware('setlocale');
 
     Route::apiResource('works', WorkController::class);
 

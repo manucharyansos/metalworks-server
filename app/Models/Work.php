@@ -25,7 +25,6 @@ class Work extends Model
     ];
 
 
-
     public function images(): HasMany
     {
         return $this->hasMany(WorkImage::class, 'work_id');

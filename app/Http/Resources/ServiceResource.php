@@ -14,8 +14,6 @@ class ServiceResource extends JsonResource
             'title'           => $this->title,
             'slug'            => $this->slug,
             'description'     => $this->description,
-            'sort'            => $this->sort,
-            'is_active'       => $this->is_active,
             'image'           => $this->image,
             'image_url'       => $this->image_url,
             'video'           => $this->video,
@@ -24,13 +22,6 @@ class ServiceResource extends JsonResource
             'video_poster_url'=> $this->video_poster_url,
             'created_at'      => $this->created_at,
             'updated_at'      => $this->updated_at,
-            'works' => $this->whenLoaded('works', fn () =>
-            $this->works->map(fn ($w) => [
-                'id'    => $w->id,
-                'title' => $w->title,
-                'image_url' => $w->image_url ?? null,
-            ])
-            ),
         ];
     }
 }
