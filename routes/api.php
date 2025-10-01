@@ -29,10 +29,20 @@ use App\Http\Controllers\CheckoutController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
-Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function () {
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+| Լեզուն (locale) now applies GLOBALLY via 'setlocale'.
+*/
+
+Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->group(function () {
+
+    // Auth (public)
     Route::post('login', [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
 
+    // Authenticated area
     Route::middleware(['auth:sanctum', 'detect.device'])->group(function () {
 
         Route::get('user', [AuthController::class, 'me']);
@@ -58,6 +68,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         Route::group(['prefix' => 'clients'], function () {
             Route::resource('client', ClientController::class);
         });
+
         Route::group(['prefix' => 'workers'], function () {
             Route::apiResource('/', WorkersController::class);
             Route::put('/{worker}', [WorkersController::class, 'update']);
@@ -74,7 +85,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
         });
 
         Route::group(['prefix' => 'engineers', 'middleware' => 'engineer'], function () {
-            //            Route::apiResource('factory-engineer', EngineerController::class);
+            // Route::apiResource('factory-engineer', EngineerController::class);
             Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder']);
             Route::resource('/engineer', EngineerController::class);
             Route::apiResource('pmps', PmpController::class);
@@ -90,43 +101,46 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class])->group(function ()
 
         Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
 
-        Route::get('baskets/current', [BasketController::class, 'current'])
-            ->name('baskets.current');
-
-        // Standard basket resource routes
+        // Basket / Checkout
+        Route::get('baskets/current', [BasketController::class, 'current'])->name('baskets.current');
         Route::apiResource('baskets', BasketController::class)->except(['create', 'edit']);
-
-        Route::put('baskets/items/{itemId}', [BasketController::class, 'update'])
-            ->name('baskets.items.update');
-
-        Route::delete('baskets/items/{itemId}', [BasketController::class, 'removeItem'])
-            ->name('baskets.items.remove');
+        Route::put('baskets/items/{itemId}', [BasketController::class, 'update'])->name('baskets.items.update');
+        Route::delete('baskets/items/{itemId}', [BasketController::class, 'removeItem'])->name('baskets.items.remove');
 
         Route::get('/checkout', [CheckoutController::class, 'index']);
         Route::post('/checkout', [CheckoutController::class, 'store']);
     });
 
-    Route::apiResource('services', ServiceController::class)->middleware(['setlocale']);
-    Route::get('services/slug/{slug}', [ServiceController::class, 'showBySlug'])->middleware('setlocale');
+    // Public API under global setlocale
+    Route::apiResource('services', ServiceController::class);
+    Route::get('services/slug/{slug}', [ServiceController::class, 'showBySlug']);
 
     Route::apiResource('works', WorkController::class);
-
 
     Route::group(['prefix' => 'contacts'], function () {
         Route::get('/', [ContactController::class, 'index']);
         Route::post('/', [ContactController::class, 'store']);
     });
 });
-Route::group(['prefix' => 'categories'], function () {
-    Route::resource('/materialGroup', MaterialGroupController::class);
-    Route::resource('/materialCategories', MaterialCategoryController::class);
+
+// Outside groups → also respect locale
+Route::middleware('setlocale')->group(function () {
+
+    Route::group(['prefix' => 'categories'], function () {
+        Route::resource('/materialGroup', MaterialGroupController::class);
+        Route::resource('/materialCategories', MaterialCategoryController::class);
+    });
+
+    Route::group(['prefix' => 'materials'], function () {
+        Route::resource('/', MaterialController::class);
+    });
+
+    Route::group(['prefix' => 'products'], function () {
+        Route::resource('/', ProductController::class, ['parameters' => ['' => 'id']]);
+    });
+
 });
 
-Route::group(['prefix' => 'materials'], function () {
-    Route::resource('/', MaterialController::class);
-});
-
-Route::group(['prefix' => 'products'], function () {
-    Route::resource('/', ProductController::class, ['parameters' => ['' => 'id']]);
-});
-Route::middleware('auth:sanctum')->get('/visitor-stats', [VisitorController::class, 'getDeviceStats']);
+// Auth-protected visitor stats + locale
+Route::middleware(['auth:sanctum', 'setlocale'])
+    ->get('/visitor-stats', [VisitorController::class, 'getDeviceStats']);

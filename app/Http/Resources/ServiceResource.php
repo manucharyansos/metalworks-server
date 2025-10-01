@@ -2,35 +2,40 @@
 
 namespace App\Http\Resources;
 
-use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Storage;
 
 class ServiceResource extends JsonResource
 {
-    public function toArray($request): array
+    public function toArray($request)
     {
-        return [
-            'id'            => $this->id,
-            'title'         => $this->title,
-            'slug'          => $this->slug,
-            'description'   => $this->description,
-            'image'         => $this->image,
-            'image_url'     => $this->image_url,
-            'video'         => $this->video,
-            'video_url'     => $this->video_url,
-            'video_poster'  => $this->video_poster,
-            'video_poster_url' => $this->video_poster_url,
-            'created_at'    => $this->created_at,
-            'updated_at'    => $this->updated_at,
+        $loc = app()->getLocale();
+        $fallback = function(array $arr) use ($loc) {
+            return $arr[$loc] ?? $arr['hy'] ?? $arr['ru'] ?? $arr['en'] ?? null;
+        };
 
-            'translations'  => $this->when(
-                $request->boolean('full'),
-                [
-                    'title'       => $this->getTranslations('title'),
-                    'slug'        => $this->getTranslations('slug'),
-                    'description' => $this->getTranslations('description'),
-                ]
-            ),
+        $titleAll = $this->getTranslations('title') ?? [];
+        $descAll  = $this->getTranslations('description') ?? [];
+        $slugAll  = $this->getTranslations('slug') ?? [];
+
+        return [
+            'id'          => $this->id,
+            'title'       => $fallback($titleAll),
+            'title_all'   => $titleAll,
+            'description' => $fallback($descAll),
+            'description_all' => $descAll,
+            'slug'        => $fallback($slugAll),
+            'slug_all'    => $slugAll,
+
+            'price_from'  => $this->price_from,
+            'lead_time'   => $this->lead_time,
+            'lead_time_days' => $this->lead_time_days,
+            'is_new'      => (bool) ($this->is_new ?? false),
+
+            'image_url'        => $this->image ? Storage::disk('public')->url($this->image) : null,
+            'video_url'        => $this->video ? Storage::disk('public')->url($this->video) : null,
+            'video_poster_url' => $this->video_poster ? Storage::disk('public')->url($this->video_poster) : null,
+
         ];
     }
 }

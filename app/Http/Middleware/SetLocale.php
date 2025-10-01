@@ -3,24 +3,19 @@
 namespace App\Http\Middleware;
 
 use Closure;
-use Illuminate\Support\Facades\App;
+use Illuminate\Http\Request;
 
 class SetLocale
 {
-    public function handle($request, Closure $next)
+    public function handle(Request $request, Closure $next)
     {
-        $locale = $request->header('X-Locale')
-            // 2) կամ query-ից ?lang=hy
-            ?? $request->query('lang')
-            // 3) կամ session-ից / default-ից
-            ?? session('locale', config('app.locale', 'hy'));
+        $loc = $request->header('X-Locale')
+            ?: $request->query('locale')
+                ?: $request->query('lang')
+                    ?: config('app.locale');
 
-        $allowed = ['hy','ru','en'];
-        if (! in_array($locale, $allowed, true)) {
-            $locale = config('app.fallback_locale', 'hy');
-        }
-
-        App::setLocale($locale);
+        $loc = in_array($loc, ['hy','ru','en']) ? $loc : config('app.locale');
+        app()->setLocale($loc);
 
         return $next($request);
     }
