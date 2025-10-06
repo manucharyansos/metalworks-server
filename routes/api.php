@@ -38,11 +38,9 @@ use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->group(function () {
 
-    // Auth (public)
     Route::post('login', [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
 
-    // Authenticated area
     Route::middleware(['auth:sanctum', 'detect.device'])->group(function () {
 
         Route::get('user', [AuthController::class, 'me']);
@@ -85,7 +83,6 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
         });
 
         Route::group(['prefix' => 'engineers', 'middleware' => 'engineer'], function () {
-            // Route::apiResource('factory-engineer', EngineerController::class);
             Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder']);
             Route::resource('/engineer', EngineerController::class);
             Route::apiResource('pmps', PmpController::class);
@@ -101,7 +98,6 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
 
         Route::get('/orders/{id}', [OrderController::class, 'show'])->name('orders.show');
 
-        // Basket / Checkout
         Route::get('baskets/current', [BasketController::class, 'current'])->name('baskets.current');
         Route::apiResource('baskets', BasketController::class)->except(['create', 'edit']);
         Route::put('baskets/items/{itemId}', [BasketController::class, 'update'])->name('baskets.items.update');
@@ -111,11 +107,12 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
         Route::post('/checkout', [CheckoutController::class, 'store']);
     });
 
-    // Public API under global setlocale
     Route::apiResource('services', ServiceController::class);
     Route::get('services/slug/{slug}', [ServiceController::class, 'showBySlug']);
 
     Route::apiResource('works', WorkController::class);
+    Route::get('works/slug/{slug}', [WorkController::class, 'showBySlug']);
+
 
     Route::group(['prefix' => 'contacts'], function () {
         Route::get('/', [ContactController::class, 'index']);
@@ -123,7 +120,6 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
     });
 });
 
-// Outside groups → also respect locale
 Route::middleware('setlocale')->group(function () {
 
     Route::group(['prefix' => 'categories'], function () {
@@ -141,6 +137,5 @@ Route::middleware('setlocale')->group(function () {
 
 });
 
-// Auth-protected visitor stats + locale
 Route::middleware(['auth:sanctum', 'setlocale'])
     ->get('/visitor-stats', [VisitorController::class, 'getDeviceStats']);

@@ -13,9 +13,9 @@ return new class extends Migration
     {
         Schema::create('works', function (Blueprint $table) {
             $table->id();
-            $table->string('title');
-            $table->string('slug')->unique();
-            $table->text('description')->nullable();
+            $table->json('title');
+            $table->json('slug');
+            $table->json('description')->nullable();
             $table->string('image')->nullable();
             $table->json('tags')->nullable();
             $table->boolean('is_published')->default(true)->index();
