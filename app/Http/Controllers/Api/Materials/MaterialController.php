@@ -10,11 +10,47 @@ use Illuminate\Support\Facades\Storage;
 
 class MaterialController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $materials = Material::paginate();
+        $perPage     = (int) $request->input('per_page', 10);
+        $search      = trim((string) $request->input('search', ''));
+        $categoryId  = $request->input('category_id');
 
-        return response()->json($materials);
+        $q = Material::query()->orderByDesc('created_at');
+
+        if ($categoryId) {
+            $q->where('material_category_id', $categoryId);
+        }
+
+        if ($search !== '') {
+            $q->where(function ($qq) use ($search) {
+                $qq->where('description', 'like', "%{$search}%")
+                    // թույլ տանք թվային դաշտերով «պարանային» համընկնում
+                    ->orWhereRaw('CAST(width AS CHAR) LIKE ?', ["%{$search}%"])
+                    ->orWhereRaw('CAST(length AS CHAR) LIKE ?', ["%{$search}%"])
+                    ->orWhereRaw('CAST(height AS CHAR) LIKE ?', ["%{$search}%"])
+                    ->orWhereRaw('CAST(thickness AS CHAR) LIKE ?', ["%{$search}%"]);
+            });
+        }
+
+        $p = $q->paginate($perPage);
+
+        return response()->json([
+            'data' => $p->items(),
+            'pagination' => [
+                'current_page' => $p->currentPage(),
+                'last_page'    => $p->lastPage(),
+                'per_page'     => $p->perPage(),
+                'total'        => $p->total(),
+                'next_page_url'=> $p->nextPageUrl(),
+                'prev_page_url'=> $p->previousPageUrl(),
+            ],
+        ]);
+    }
+
+    public function show(Material $material): JsonResponse
+    {
+        return response()->json($material);
     }
 
     public function store(Request $request): JsonResponse

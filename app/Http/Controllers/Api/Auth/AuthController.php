@@ -24,6 +24,8 @@ class AuthController extends Controller
 
             $user = User::create($validatedData);
 
+            $user->load('role');
+
             $accessToken = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json(['user' => $user, 'access_token' => $accessToken]);
@@ -45,7 +47,7 @@ class AuthController extends Controller
             ]);
 
             if (Auth::attempt($credentials)) {
-                $user = User::where('email', $credentials['email'])->first();
+                $user = User::with('role')->where('email', $credentials['email'])->first();
                 $accessToken = $user->createToken('auth_token')->plainTextToken;
 
                 return response()->json(['user' => $user, 'access_token' => $accessToken]);
@@ -71,9 +73,8 @@ class AuthController extends Controller
             $user->load('role');
 
             return response()->json($user, 200);
-        } else {
-            return response()->json(['error' => 'Unauthorized'], 401);
         }
+        return response()->json(['error' => 'Unauthorized'], 401);
     }
 
 }

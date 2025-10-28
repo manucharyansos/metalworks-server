@@ -12,12 +12,16 @@ return new class extends Migration
             $table->engine = 'InnoDB';
             $table->id();
             $table->string('name');
-            $table->text('description');
+            $table->text('description')->nullable();
             $table->string('status')->default('pending');
             $table->boolean('link_existing_files')->default(false);
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->string('creator_id');
-            $table->string('remote_number_id');
+            $table->foreignId('creator_id')
+                ->constrained('users')
+                ->cascadeOnDelete()
+                ->index();
+            $table->unsignedBigInteger('remote_number_id')->nullable();
+
             $table->timestamps();
         });
     }

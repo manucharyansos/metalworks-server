@@ -28,10 +28,12 @@ class EngineerController extends Controller
     public function index(Request $request): JsonResponse
     {
         try {
-            $perPage = $request->query('per_page', 10);
-            $search = $request->query('search', '');
+            $perPage = (int) $request->query('per_page', 10);
+            $search  = trim((string) $request->query('search', ''));
 
-            $query = Order::with([
+            $user = $request->user();
+
+            $q = Order::with([
                 'orderNumber',
                 'prefixCode',
                 'dates',
@@ -39,38 +41,43 @@ class EngineerController extends Controller
                 'factoryOrders.files',
                 'selectedFiles.pmpFile',
                 'user',
-            ])->where('creator_id', auth()->id());
+                'creator:id,name',
+            ])->visibleTo($user);
 
-            if ($search) {
-                $query->where(function ($q) use ($search) {
-                    $q->where('name', 'like', "%{$search}%")
-                      ->orWhere('description', 'like', "%{$search}%")
-                      ->orWhereHas('orderNumber', function ($q) use ($search) {
-                          $q->where('number', 'like', "%{$search}%");
-                      })
-                      ->orWhereHas('prefixCode', function ($q) use ($search) {
-                          $q->where('code', 'like', "%{$search}%");
-                      });
+            $isAdmin = optional($user->role)->name === 'admin';
+            if (!$isAdmin) {
+                $q->where('creator_id', $user->id);
+            }
+
+            if ($search !== '') {
+                $q->where(function ($qq) use ($search) {
+                    $qq->where('name', 'like', "%{$search}%")
+                        ->orWhere('description', 'like', "%{$search}%")
+                        ->orWhereHas('orderNumber', fn($w) => $w->where('number', 'like', "%{$search}%"))
+                        ->orWhereHas('prefixCode', fn($w) => $w->where('code', 'like', "%{$search}%"));
                 });
             }
 
-            $orders = $query->paginate($perPage);
+            $p = $q->orderByDesc('created_at')->paginate($perPage);
 
             return response()->json([
-                'orders' => $orders->items(),
+                'orders' => $p->items(),
                 'pagination' => [
-                    'current_page' => $orders->currentPage(),
-                    'total' => $orders->total(),
-                    'per_page' => $orders->perPage(),
-                    'last_page' => $orders->lastPage(),
-                    'from' => $orders->firstItem(),
-                    'to' => $orders->lastItem(),
+                    'current_page' => $p->currentPage(),
+                    'total'        => $p->total(),
+                    'per_page'     => $p->perPage(),
+                    'last_page'    => $p->lastPage(),
+                    'from'         => $p->firstItem(),
+                    'to'           => $p->lastItem(),
+                    'next_page_url'=> $p->nextPageUrl(),
+                    'prev_page_url'=> $p->previousPageUrl(),
                 ],
             ], 200);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
 
     /**
      * Show the form for creating a new resource.
@@ -221,23 +228,21 @@ class EngineerController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $id): JsonResponse
+    public function show(Request $request, Order $order): JsonResponse
     {
-        try {
-            $order = Order::with([
-                'orderNumber',
-                'prefixCode',
-                'dates',
-                'factoryOrders.factory',
-                'factoryOrders.files',
-                'selectedFiles.pmpFile',
-                'user',
-            ])->findOrFail($id);
+        $user = $request->user();
 
-            return response()->json(['order' => $order], 200);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 404);
+        if (!$user->hasRole('admin') && $order->creator_id !== $user->id) {
+            abort(403, 'Forbidden');
         }
+
+        $order->load([
+            'orderNumber','prefixCode','dates',
+            'factoryOrders.factory','factoryOrders.files',
+            'selectedFiles.pmpFile','user',
+        ]);
+
+        return response()->json(['order' => $order], 200);
     }
 
     /**

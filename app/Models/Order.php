@@ -19,9 +19,15 @@ class Order extends Model
     protected $casts = [
         'link_existing_files' => 'boolean',
     ];
-    public function creator()
+    public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'creator_id');
+    }
+
+    public function scopeVisibleTo($q, User $user)
+    {
+        $isAdmin = optional($user->role)->name === 'admin';
+        return $isAdmin ? $q : $q->where('creator_id', $user->id);
     }
 
     public function selectedFiles(): HasMany
@@ -63,7 +69,7 @@ class Order extends Model
 
     public function user(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(User::class, 'user_id');
     }
 
     public function factoryOrders(): HasMany

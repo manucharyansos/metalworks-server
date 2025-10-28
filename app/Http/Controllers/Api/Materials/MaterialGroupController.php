@@ -33,7 +33,7 @@ class MaterialGroupController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Material group created successfully',
-            $materialGroups
+            'data'    => $materialGroups,
         ], 201);
     }
 
