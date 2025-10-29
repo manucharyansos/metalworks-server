@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api\PMP;
 
 use App\Http\Controllers\Controller;
 use App\Models\Factory;
-use App\Models\FactoryOrder;
 use App\Models\Pmp;
 use App\Models\RemoteNumber;
 use Illuminate\Http\JsonResponse;
@@ -13,129 +12,84 @@ use Illuminate\Support\Facades\Storage;
 
 class PmpController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index(): JsonResponse
     {
         $pmp = Pmp::with('remoteNumber', 'files')->get();
         return response()->json(['pmp' => $pmp]);
     }
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
-    }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-
-
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request): JsonResponse
     {
-        $validatedData = $request->validate([
-            'group' => 'required|string|size:3',
-            'group_name' => 'required|string',
-            'remote_number' => 'required|string',
-            'remote_number_name' => 'required|string',
+        $validated = $request->validate([
+            'group'              => 'required|string|size:3',
+            'group_name'         => 'required|string',
             'admin_confirmation' => 'required|boolean',
+            'remote_number'      => 'sometimes|nullable|string|size:2',
+            'remote_number_name' => 'sometimes|nullable|string',
         ]);
 
-        $pmp = Pmp::where('group', $validatedData['group'])->first();
+        $group = str_pad($validated['group'], 3, '0', STR_PAD_LEFT);
 
-        if (!$pmp) {
-            $pmp = Pmp::create([
-                'group' => $validatedData['group'],
-                'group_name' => $validatedData['group_name'],
-                'admin_confirmation' => $validatedData['admin_confirmation'],
-            ]);
+        $pmp = Pmp::firstOrCreate(
+            ['group' => $group],
+            [
+                'group_name'         => $validated['group_name'],
+                'admin_confirmation' => $validated['admin_confirmation'],
+            ]
+        );
 
+        if ($pmp->wasRecentlyCreated) {
             $factories = Factory::all();
             foreach ($factories as $factory) {
-                $factoryName = str_replace(' ', '_', $factory->value);
+                $factoryName   = str_replace(' ', '_', $factory->value);
                 $directoryPath = "MetalWorks/PMP_{$factoryName}";
                 Storage::disk('public')->makeDirectory($directoryPath);
             }
+        } else {
+            $pmp->update([
+                'group_name'         => $validated['group_name'],
+                'admin_confirmation' => $validated['admin_confirmation'],
+            ]);
         }
 
-        RemoteNumber::create([
-            'pmp_id' => $pmp->id,
-            'remote_number' => $validatedData['remote_number'],
-            'remote_number_name' => $validatedData['remote_number_name'],
-        ]);
+        if (!empty($validated['remote_number']) && !empty($validated['remote_number_name'])) {
+            $remoteNumber = str_pad($validated['remote_number'], 2, '0', STR_PAD_LEFT);
+
+            $exists = RemoteNumber::where('pmp_id', $pmp->id)
+                ->where(function ($q) use ($remoteNumber, $validated) {
+                    $q->where('remote_number', $remoteNumber)
+                        ->orWhere('remote_number_name', $validated['remote_number_name']);
+                })->exists();
+
+            if ($exists) {
+                return response()->json([
+                    'message' => 'This remote number or name already exists for the selected group.',
+                    'errors'  => [
+                        'remote_number'      => ['Already taken for this group.'],
+                        'remote_number_name' => ['Already taken for this group.'],
+                    ],
+                ], 422);
+            }
+
+            RemoteNumber::create([
+                'pmp_id'             => $pmp->id,
+                'remote_number'      => $remoteNumber,
+                'remote_number_name' => $validated['remote_number_name'],
+            ]);
+        }
 
         return response()->json($pmp->load('remoteNumber'), 201);
-
     }
 
-    public function uploadFiles(Request $request): JsonResponse
-    {
-        try {
-            $validatedData = $request->validate([
-                'pmp_id' => 'required|exists:pmps,id',
-                'factories' => 'required|array',
-                'factories.*.id' => 'required|exists:factories,id',
-                'factories.*.files' => 'required|array',
-                'factories.*.files.*' => 'required|file|max:10240',
-            ]);
-            $pmp = Pmp::findOrFail($validatedData['pmp_id']);
-            foreach ($validatedData['factories'] as $factoryData) {
-                $factory = Factory::findOrFail($factoryData['id']);
-                $factoryName = str_replace(' ', '_', $factory->value);
-                $factoryOrder = FactoryOrder::firstOrCreate(
-                    [
-                        'pmp_id' => $pmp->id,
-                        'factory_id' => $factory->id
-                    ],
-                );
-                $directoryPath = "MetalWorks/PMP_/{$factoryName}";
-                Storage::disk('public')->makeDirectory($directoryPath);
-                foreach ($factoryData['files'] as $file) {
-                    $originalName = $file->getClientOriginalName();
-                    $fileName = pathinfo($originalName, PATHINFO_FILENAME) . '_' . uniqid() . '.' . $file->getClientOriginalExtension();
-
-                    $path = $file->storeAs(
-                        $directoryPath,
-                        $fileName,
-                        'public'
-                    );
-
-                    $factoryOrder->files()->create([
-                        'path' => $path,
-                        'original_name' => $originalName,
-                    ]);
-                }
-            }
-
-            return response()->json(['message' => 'Files uploaded successfully'], 200);
-        } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
-        }
-    }
-
-    /**
-     * Display the specified resource.
-     */
+    // show($id) — RemoteNumber ID ըստ քո լոգիկայի
     public function show($id): JsonResponse
     {
-        $remoteNumber = RemoteNumber::findOrFail($id);
+        $remote = RemoteNumber::findOrFail($id);
 
         $pmp = Pmp::with([
-            'remoteNumber' => function($query) use ($id) {
-                $query->where('id', $id);
-            },
-            'files' => function($query) use ($id) {
-                $query->where('remote_number_id', $id);
-            }
-        ])
-        ->where('id', $remoteNumber->pmp_id)
-        ->first();
+            'remoteNumber' => fn($q) => $q->where('id', $remote->id),
+            'files'        => fn($q) => $q->where('remote_number_id', $remote->id),
+        ])->where('id', $remote->pmp_id)->first();
 
         if (!$pmp) {
             return response()->json(['error' => 'PMP not found.'], 404);
@@ -144,61 +98,55 @@ class PmpController extends Controller
         return response()->json(['pmp' => $pmp]);
     }
 
-
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
+    public function showByRemoteNumber($id): JsonResponse
     {
-        //
-    }
+        $remote = RemoteNumber::findOrFail($id);
 
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, $id)
-    {
-        //
+        $pmp = Pmp::with([
+            'remoteNumber' => fn($q) => $q->where('id', $remote->id),
+            'files'        => fn($q) => $q->where('remote_number_id', $remote->id),
+        ])->where('id', $remote->pmp_id)->first();
+
+        if (!$pmp) {
+            return response()->json(['error' => 'PMP not found.'], 404);
+        }
+
+        return response()->json(['pmp' => $pmp]);
     }
 
     public function remoteNumber(Request $request, $id): JsonResponse
     {
         $pmp = Pmp::findOrFail($id);
 
-        $validatedData = $request->validate([
-            'group' => 'required|string|unique:pmps,group,' . $id,
-            'group_name' => 'required|string',
-            'remote_number' => 'required|string|unique:remote_numbers,remote_number,NULL,id,pmp_id,' . $pmp->id,
-            'remote_number_name' => 'required|string|unique:remote_numbers,remote_number_name,NULL,id,pmp_id,' . $pmp->id,
+        $validated = $request->validate([
+            'group'               => 'required|string|unique:pmps,group,' . $id,
+            'group_name'          => 'required|string',
+            'remote_number'       => 'required|string|size:2|unique:remote_numbers,remote_number,NULL,id,pmp_id,' . $pmp->id,
+            'remote_number_name'  => 'required|string|unique:remote_numbers,remote_number_name,NULL,id,pmp_id,' . $pmp->id,
         ]);
 
         $pmp->update([
-            'group' => $validatedData['group'],
-            'group_name' => $validatedData['group_name'],
+            'group'      => str_pad($validated['group'], 3, '0', STR_PAD_LEFT),
+            'group_name' => $validated['group_name'],
         ]);
 
         RemoteNumber::create([
-            'pmp_id' => $pmp->id,
-            'remote_number' => $validatedData['remote_number'],
-            'remote_number_name' => $validatedData['remote_number_name'],
+            'pmp_id'             => $pmp->id,
+            'remote_number'      => str_pad($validated['remote_number'], 2, '0', STR_PAD_LEFT),
+            'remote_number_name' => $validated['remote_number_name'],
         ]);
 
         return response()->json($pmp->load('remoteNumber'));
     }
 
-
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy($id): JsonResponse
     {
         $pmp = Pmp::findOrFail($id);
         $pmp->delete();
-
         return response()->json(['message' => 'Pmp deleted successfully']);
     }
 
+    // Checks
     public function checkGroup(Request $request): JsonResponse
     {
         $group = $request->input('group');
@@ -207,57 +155,51 @@ class PmpController extends Controller
         }
 
         $pmp = Pmp::with(['remoteNumber', 'files'])
-            ->where('group', $group)
+            ->where('group', str_pad($group, 3, '0', STR_PAD_LEFT))
             ->first();
 
-        if ($pmp) {
-            return response()->json([
-                'exists' => true,
-                'pmp' => $pmp,
-            ]);
-        } else {
-            return response()->json(['exists' => false]);
-        }
+        return $pmp
+            ? response()->json(['exists' => true, 'pmp' => $pmp])
+            : response()->json(['exists' => false]);
     }
-
 
     public function checkGroupName(Request $request): JsonResponse
     {
-        $group = $request->input('group_name');
-        if (!$group) {
+        $groupName = $request->input('group_name');
+        if (!$groupName) {
             return response()->json(['error' => 'Group parameter is required'], 400);
         }
 
         $pmp = Pmp::with(['remoteNumber', 'files'])
-            ->where('group_name', $group)
+            ->where('group_name', $groupName)
             ->first();
 
-        if ($pmp) {
-            return response()->json([
-                'exists' => true,
-                'pmp' => $pmp,
-            ]);
-        } else {
-            return response()->json(['exists' => false]);
-        }
+        return $pmp
+            ? response()->json(['exists' => true, 'pmp' => $pmp])
+            : response()->json(['exists' => false]);
     }
 
     public function checkPmpByRemoteNumber(Request $request, $id): JsonResponse
     {
-       $pmp = Pmp::with(['remoteNumber', 'files'])
-           ->where('id', $id)
-           ->first();
+        $pmp = Pmp::with(['remoteNumber', 'files'])->where('id', $id)->first();
 
-       if ($pmp) {
-           return response()->json([
-               'exists' => true,
-               'pmp' => $pmp,
-           ]);
-       }
+        return $pmp
+            ? response()->json(['exists' => true, 'pmp' => $pmp])
+            : response()->json(['exists' => false, 'message' => 'PMP with the given ID not found.']);
+    }
 
-       return response()->json([
-           'exists' => false,
-           'message' => 'PMP with the given ID not found.',
-       ]);
+    // Օգնական՝ առաջարկել հաջորդ ազատ 01..99
+    public function nextRemoteNumber($pmpId): JsonResponse
+    {
+        $pmp = Pmp::with('remoteNumber')->findOrFail($pmpId);
+        $taken = $pmp->remoteNumber->pluck('remote_number')->toArray();
+
+        for ($i = 1; $i <= 99; $i++) {
+            $num = str_pad((string)$i, 2, '0', STR_PAD_LEFT);
+            if (!in_array($num, $taken, true)) {
+                return response()->json(['next' => $num]);
+            }
+        }
+        return response()->json(['next' => null]);
     }
-    }
+}

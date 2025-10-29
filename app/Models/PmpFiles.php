@@ -11,8 +11,6 @@ class PmpFiles extends Model
 {
     use HasFactory;
 
-    use HasFactory;
-
     protected $fillable = [
         'pmp_id',
         'remote_number_id',
@@ -42,12 +40,5 @@ class PmpFiles extends Model
     public function selectedFiles(): HasMany
     {
         return $this->hasMany(SelectedFile::class, 'pmp_file_id');
-    }
-
-    public function factoryOrders()
-    {
-        return $this->belongsToMany(FactoryOrder::class, 'factory_order_files')
-                    ->withPivot(['quantity', 'material_type', 'thickness'])
-                    ->withTimestamps();
     }
 }

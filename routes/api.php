@@ -75,24 +75,44 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
 //            Route::get('/getStatus', [FactoryController::class, 'getStatus']);
         });
 
+//        Route::group(['prefix' => 'engineers', 'middleware' => 'engineer'], function () {
+//            Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder']);
+//            Route::resource('/engineer', EngineerController::class);
+////            Route::apiResource('pmps', PmpController::class);
+////            Route::post('pmps/remoteNumber/{id}', [PmpController::class, 'remoteNumber']);
+////            Route::post('/pmps/check-group', [PmpController::class, 'checkGroup']);
+////            Route::post('/pmps/check-group-name', [PmpController::class, 'checkGroupName']);
+////            Route::post('/pmps/check-pmp-by-remote-number/{id}', [PmpController::class, 'checkPmpByRemoteNumber']);
+//            Route::apiResource('pmpFiles', PmpFilesController::class);
+//            Route::post('uploadPmpFile', [PmpFilesController::class, 'upload']);
+//
+//            Route::apiResource('pmps', \App\Http\Controllers\Api\PMP\PmpController::class);
+//            Route::post('pmps/{id}/remote-number', [\App\Http\Controllers\Api\PMP\PmpController::class, 'remoteNumber']);
+//            Route::get('pmps/{id}/next-remote-number', [\App\Http\Controllers\Api\PMP\PmpController::class, 'nextRemoteNumber']);
+//
+//            Route::post('pmps/check-group', [\App\Http\Controllers\Api\PMP\PmpController::class, 'checkGroup']);
+//            Route::post('pmps/check-group-name', [\App\Http\Controllers\Api\PMP\PmpController::class, 'checkGroupName']);
+//            Route::post('pmps/check-pmp-by-remote-number/{id}', [\App\Http\Controllers\Api\PMP\PmpController::class, 'checkPmpByRemoteNumber']);
+//        });
         Route::group(['prefix' => 'engineers', 'middleware' => 'engineer'], function () {
-            Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder']);
             Route::resource('/engineer', EngineerController::class);
-//            Route::apiResource('pmps', PmpController::class);
-//            Route::post('pmps/remoteNumber/{id}', [PmpController::class, 'remoteNumber']);
-//            Route::post('/pmps/check-group', [PmpController::class, 'checkGroup']);
-//            Route::post('/pmps/check-group-name', [PmpController::class, 'checkGroupName']);
-//            Route::post('/pmps/check-pmp-by-remote-number/{id}', [PmpController::class, 'checkPmpByRemoteNumber']);
-            Route::apiResource('pmpFiles', PmpFilesController::class);
+
+            // PMP
+            Route::apiResource('pmps', PmpController::class);
+            Route::post('pmps/{id}/remote-number',       [PmpController::class, 'remoteNumber']);
+            Route::get('pmps/{id}/next-remote-number',   [PmpController::class, 'nextRemoteNumber']);
+
+            Route::post('pmps/check-group',                      [PmpController::class, 'checkGroup']);
+            Route::post('pmps/check-group-name',                 [PmpController::class, 'checkGroupName']);
+            Route::post('pmps/check-pmp-by-remote-number/{id}',  [PmpController::class, 'checkPmpByRemoteNumber']);
+
+            // PMP Files
+            Route::apiResource('pmpFiles', PmpFilesController::class)->only(['destroy', 'index', 'show']);
             Route::post('uploadPmpFile', [PmpFilesController::class, 'upload']);
 
-            Route::apiResource('pmps', \App\Http\Controllers\Api\PMP\PmpController::class);
-            Route::post('pmps/{id}/remote-number', [\App\Http\Controllers\Api\PMP\PmpController::class, 'remoteNumber']);
-            Route::get('pmps/{id}/next-remote-number', [\App\Http\Controllers\Api\PMP\PmpController::class, 'nextRemoteNumber']);
-
-            Route::post('pmps/check-group', [\App\Http\Controllers\Api\PMP\PmpController::class, 'checkGroup']);
-            Route::post('pmps/check-group-name', [\App\Http\Controllers\Api\PMP\PmpController::class, 'checkGroupName']);
-            Route::post('pmps/check-pmp-by-remote-number/{id}', [\App\Http\Controllers\Api\PMP\PmpController::class, 'checkPmpByRemoteNumber']);
+            // Optional: files by factory+order viewer
+            Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder']);
+            Route::get('pmps/remote-number/{id}', [PmpController::class, 'showByRemoteNumber']);
         });
 
         Route::resource('/roles', RoleController::class);
