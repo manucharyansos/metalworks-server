@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Client;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\ClientResource;
 use App\Models\Client;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -15,8 +16,9 @@ class ClientController extends Controller
      */
     public function index(): JsonResponse
     {
-        $clients = Client::all();
-        return response()->json($clients);
+        $clients = Client::with(['user:id,name,email'])->get();
+
+        return ClientResource::collection($clients)->response();
     }
 
 

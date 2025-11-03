@@ -43,10 +43,6 @@ class User extends Authenticatable
         return $this->hasOne(Client::class, 'user_id');
     }
 
-    public function basket(): HasOne
-    {
-        return $this->hasOne(Basket::class, 'user_id');
-    }
 
     /**
      * @throws \Exception
