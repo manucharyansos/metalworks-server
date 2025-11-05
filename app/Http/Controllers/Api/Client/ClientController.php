@@ -16,7 +16,10 @@ class ClientController extends Controller
      */
     public function index(): JsonResponse
     {
-        $clients = Client::with(['user:id,name,email'])->get();
+        $clients = Client::with(['user:id,name,email'])
+            ->whereIn('type', ['physPerson', 'legalEntity'])
+            ->orderByDesc('id')
+            ->get();
 
         return ClientResource::collection($clients)->response();
     }
@@ -61,19 +64,22 @@ class ClientController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, $id): JsonResponse
+    public function update(Request $request, Client $client): JsonResponse
     {
         $validatedData = $this->getArr($request);
 
-        $user = User::findOrFail($id);
-        $user->update(['name' => $validatedData['name']]);
-        $user->client()->updateOrCreate(
-            ['user_id' => $user->id],
-            $validatedData
-        );
+        // կապած user-ը
+        $user = $client->user;
+
+        if ($user) {
+            $user->update(['name' => $validatedData['name']]);
+        }
+
+        $client->update($validatedData);
 
         return response()->json([
-            'user' => $user->load('client'),
+            'user'    => $user ? $user->load('client') : null,
+            'client'  => $client,
             'message' => 'Հաճախորդը հաջողությամբ թարմացվեց',
         ], 200, [], JSON_UNESCAPED_UNICODE);
     }

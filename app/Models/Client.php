@@ -19,7 +19,7 @@ class Client extends Model
         'phone',
         'second_phone',
         'address',
-        'company_name'
+        'company_name',
     ];
 
     public function user(): BelongsTo

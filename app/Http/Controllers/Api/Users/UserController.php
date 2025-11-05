@@ -14,15 +14,11 @@ class UserController extends Controller
      */
     public function index(): JsonResponse
     {
-        $users = User::where('role_id', 3)->with('client')->get();
+        $users = User::with(['role', 'client'])->get();
 
-        if ($users->isEmpty()) {
-            return response()->json([
-                'message' => 'No users found with role_id 3'
-            ], 404);
-        }
-
-        return response()->json($users);
+        return response()->json([
+            'data' => $users,
+        ]);
     }
 
     /**
@@ -44,9 +40,11 @@ class UserController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(string $id)
+    public function show(User $user): JsonResponse
     {
-        //
+        $user->load(['role', 'client']);
+
+        return response()->json($user);
     }
 
     /**

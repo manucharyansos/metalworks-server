@@ -13,15 +13,15 @@ class WorkersController extends Controller
 {
     public function index(): JsonResponse
     {
-        $users = User::whereIn('role_id', [5, 6, 8])
+        $users = User::whereIn('role_id', [4, 5, 6, 7, 8])
             ->with('client')
-            ->orderBy('id','desc')
+            ->orderByDesc('id')
             ->get();
 
         return response()->json([
-            'status' => true,
+            'status'  => true,
             'message' => 'Workers fetched',
-            'data' => $users,
+            'data'    => $users,
         ]);
     }
 

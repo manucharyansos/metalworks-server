@@ -77,5 +77,6 @@ class Kernel extends HttpKernel
         'detect.device' => \App\Http\Middleware\DetectDeviceMiddleware::class,
         'engineer' => \App\Http\Middleware\EngineerMiddleware::class,
         'setlocale' => \App\Http\Middleware\SetLocale::class,
+        'permission' => \App\Http\Middleware\CheckPermission::class,
     ];
 }
