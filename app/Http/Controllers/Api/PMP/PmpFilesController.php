@@ -7,159 +7,132 @@ use App\Models\Factory;
 use App\Models\Pmp;
 use App\Models\PmpFiles;
 use App\Models\RemoteNumber;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\JsonResponse;
 use App\Models\BendFileExtension;
 use App\Models\LaserFileExtension;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\JsonResponse;
 
 class PmpFilesController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * Display all files (optional filtering)
      */
-    public function index()
+    public function index(): JsonResponse
     {
-        //
+        $files = PmpFiles::with(['factory', 'pmp', 'remoteNumber'])->get();
+        return response()->json(['files' => $files]);
     }
 
     /**
-     * Show the form for creating a new resource.
+     * Show a specific file
      */
-    public function create()
+    public function show($id): JsonResponse
     {
-        //
+        $file = PmpFiles::with(['factory', 'pmp', 'remoteNumber'])->find($id);
+
+        return $file
+            ? response()->json(['file' => $file])
+            : response()->json(['error' => 'File not found'], 404);
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Upload new PMP file
      */
-    public function store(Request $request)
+    public function upload(Request $request): JsonResponse
     {
-        //
+        try {
+            $rules = [
+                'pmp_id'          => 'required|exists:pmps,id',
+                'remote_number_id'=> 'required|exists:remote_numbers,id',
+                'factory_id'      => 'required|exists:factories,id',
+                'file'            => 'required|file|max:10240',
+            ];
+
+            $factory = Factory::findOrFail($request->input('factory_id'));
+
+            if ($factory->value === 'DXF') {
+                $rules['quantity']      = 'required|integer|min:1';
+                $rules['material_type'] = 'required|string|max:255';
+                $rules['thickness']     = 'required|numeric|min:0';
+            }
+
+            $validated = $request->validate($rules);
+            $file = $validated['file'];
+            $originalName = $file->getClientOriginalName();
+            $extension = strtolower($file->getClientOriginalExtension());
+
+            $allowed = $this->getAllowedExtensions($factory->value);
+            if (!in_array($extension, $allowed)) {
+                return response()->json(['error' => "Ֆայլի տեսակը թույլատրված չէ։ Թույլատրելի են՝ " . implode(', ', $allowed)], 422);
+            }
+
+            $pmp = Pmp::findOrFail($validated['pmp_id']);
+            $remote = RemoteNumber::findOrFail($validated['remote_number_id']);
+
+            if (PmpFiles::where('pmp_id', $pmp->id)
+                ->where('factory_id', $factory->id)
+                ->where('original_name', $originalName)
+                ->exists()) {
+                return response()->json(['error' => 'Այս անունով ֆայլ արդեն գոյություն ունի'], 409);
+            }
+
+            $path = "MetalWorks/PMP_{$pmp->group}.{$remote->remote_number}/{$factory->value}";
+            Storage::disk('public')->makeDirectory($path);
+
+            $uniqueName = pathinfo($originalName, PATHINFO_FILENAME) . '_' . $extension;
+            $storedPath = $file->storeAs($path, $uniqueName, 'public');
+
+            $record = PmpFiles::create([
+                'pmp_id'          => $pmp->id,
+                'remote_number_id'=> $remote->id,
+                'factory_id'      => $factory->id,
+                'path'            => $storedPath,
+                'original_name'   => $originalName,
+                'file_type'       => $extension,
+                'quantity'        => $validated['quantity'] ?? null,
+                'material_type'   => $validated['material_type'] ?? null,
+                'thickness'       => $validated['thickness'] ?? null,
+            ]);
+
+            return response()->json(['message' => 'Ֆայլը հաջողությամբ վերբեռնվեց', 'file' => $record], 201);
+
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
     }
 
     /**
-     * Display the specified resource.
+     * Delete a file physically + from DB
      */
-    public function show(PmpFiles $pmpFiles)
+    public function destroy($id): JsonResponse
     {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(PmpFiles $pmpFiles)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-
-public function upload(Request $request): JsonResponse
-{
-    try {
-        $rules = [
-            'pmp_id' => 'required|exists:pmps,id',
-            'remote_number_id' => 'required|exists:remote_numbers,id',
-            'factory_id' => 'required|exists:factories,id',
-            'file' => 'required|file|max:10240',
-        ];
-
-        $factory = Factory::findOrFail($request->input('factory_id'));
-        if ($factory->value === 'DXF') {
-            $rules['quantity'] = 'required|integer|min:1';
-            $rules['material_type'] = 'required|string|max:255';
-            $rules['thickness'] = 'required|numeric|min:0';
-        } else {
-            $rules['quantity'] = 'nullable|integer|min:1';
-            $rules['material_type'] = 'nullable|string|max:255';
-            $rules['thickness'] = 'nullable|numeric|min:0';
+        $file = PmpFiles::find($id);
+        if (!$file) {
+            return response()->json(['error' => 'File not found'], 404);
         }
 
-        $validatedData = $request->validate($rules);
-
-        $pmp = Pmp::findOrFail($validatedData['pmp_id']);
-        $remoteNumber = RemoteNumber::findOrFail($validatedData['remote_number_id']);
-
-        $file = $validatedData['file'];
-        $originalName = $file->getClientOriginalName();
-        $extension = $file->getClientOriginalExtension();
-
-        $allowedExtensions = $this->getAllowedExtensions($factory->value);
-        if (!in_array(strtolower($extension), $allowedExtensions)) {
-            throw new \Exception("Այս գործարանը ընդունում է միայն: " . implode(', ', $allowedExtensions));
+        if (Storage::disk('public')->exists($file->path)) {
+            Storage::disk('public')->delete($file->path);
         }
 
-        if (PmpFiles::where('pmp_id', $pmp->id)
-            ->where('factory_id', $factory->id)
-            ->where('original_name', $originalName)
-            ->exists()) {
-            throw new \Exception("Այս անունով ֆայլ արդեն գոյություն ունի այս գործարանում");
-        }
-
-        $baseDirectoryPath = "MetalWorks/PMP_{$pmp->group}.{$remoteNumber->remote_number}/{$factory->value}";
-        Storage::disk('public')->makeDirectory($baseDirectoryPath);
-
-        $uniqueName = pathinfo($originalName, PATHINFO_FILENAME) . '_' . $extension;
-        $path = $file->storeAs($baseDirectoryPath, $uniqueName, 'public');
-
-        PmpFiles::create([
-            'pmp_id' => $pmp->id,
-            'remote_number_id' => $remoteNumber->id,
-            'factory_id' => $factory->id,
-            'path' => $path,
-            'original_name' => $originalName,
-            'file_type' => $extension,
-            'quantity' => $validatedData['quantity'] ?? null,
-            'material_type' => $validatedData['material_type'] ?? null,
-            'thickness' => $validatedData['thickness'] ?? null,
-        ]);
-
-        return response()->json(['message' => 'Ֆայլը հաջողությամբ վերբեռնվեց'], 200);
-    } catch (\Exception $e) {
-        return response()->json(['error' => $e->getMessage()], 500);
+        $file->delete();
+        return response()->json(['message' => 'File deleted successfully']);
     }
-}
-
-private function getAllowedExtensions(string $factoryType): array
-{
-    switch ($factoryType) {
-        case 'SW': return ['sldprt', 'sldasm', 'slddrw'];
-        case 'DLD': return BendFileExtension::pluck('extension')->toArray();
-        case 'DXF': return LaserFileExtension::pluck('extension')->toArray();
-        case 'IQS': return ['iqs'];
-        case 'INFO': return ['txt', 'csv'];
-        case 'PDF': return ['pdf'];
-        default: throw new \Exception("Ֆայլի տեսակի սահմանափակումներ չեն սահմանված այս գործարանի համար");
-    }
-}
 
     /**
-     * Delete a DXF file.
-     *
-     * @param  \App\Models\PmpFiles  $pmpFiles
-     * @return \Illuminate\Http\JsonResponse
+     * Allowed extensions by factory type
      */
-    public function destroy($id): \Illuminate\Http\JsonResponse
+    private function getAllowedExtensions(string $factoryType): array
     {
-        $pmpFile = PmpFiles::find($id);
-        if (!$pmpFile) {
-            return response()->json([
-                'error' => 'File not found!',
-            ], 404);
-        }
-        $filePath = public_path("storage/" . $pmpFile->path);
-        if (file_exists($filePath)) {
-            unlink($filePath);
-        }
-        $pmpFile->delete();
-        return response()->json([
-            'message' => 'File deleted successfully',
-        ], 200);
+        return match ($factoryType) {
+            'SW'   => ['sldprt', 'sldasm', 'slddrw'],
+            'DLD'  => BendFileExtension::pluck('extension')->toArray(),
+            'DXF'  => LaserFileExtension::pluck('extension')->toArray(),
+            'IQS'  => ['iqs'],
+            'INFO' => ['txt', 'csv'],
+            'PDF'  => ['pdf'],
+            default => throw new \Exception("Ֆայլի տեսակը չի սահմանված այս գործարանի համար"),
+        };
     }
-
 }

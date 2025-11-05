@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\File;
 
 use App\Http\Controllers\Controller;
+use App\Models\FileExtension;
 use App\Models\LaserFileExtension;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,5 +43,20 @@ class LaserFileExtensionController extends Controller
         $laserFileExtension->delete();
 
         return response()->json(['message' => 'Resource deleted successfully.']);
+    }
+
+    public function create()
+    {
+
+    }
+
+    public function show(FileExtension $fileExtension)
+    {
+
+    }
+
+    public function edit(FileExtension $fileExtension)
+    {
+
     }
 }

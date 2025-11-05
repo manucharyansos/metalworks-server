@@ -124,4 +124,9 @@ class WorkersController extends Controller
             'message' => 'Worker deleted',
         ]);
     }
+
+    public function show(string $worker)
+    {
+
+    }
 }

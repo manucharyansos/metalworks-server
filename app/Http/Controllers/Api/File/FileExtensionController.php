@@ -71,4 +71,9 @@ class FileExtensionController extends Controller
 
         return response()->json(['message' => 'Resource deleted successfully.']);
     }
+
+    public function create()
+    {
+
+    }
 }

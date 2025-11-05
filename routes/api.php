@@ -43,20 +43,61 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::resource('/', AdminController::class);
 
             // Orders (admin panel)
-            Route::resource('order', OrderController::class)
-                ->middleware('permission:orders.view');
+            Route::resource('order', OrderController::class);
 
             Route::post('orders/update/{order}', [OrderController::class, 'update'])
-                ->name('orders.update')
-                ->middleware('permission:orders.update');
+                ->name('orders.update');
 
             // File extensions
-            Route::resource('file-extensions', FileExtensionController::class)
-                ->middleware('permission:file_extensions.manage');
-            Route::resource('laser-file-extension', LaserFileExtensionController::class)
-                ->middleware('permission:file_extensions.manage');
-            Route::resource('bend-file-extension', BendFileExtensionController::class)
-                ->middleware('permission:file_extensions.manage');
+//            Route::resource('file-extensions', FileExtensionController::class);
+            Route::get('file-extensions', [FileExtensionController::class, 'index'])
+                ->middleware('permission:file_extensions.view');
+            Route::get('file-extensions/create', [FileExtensionController::class, 'create'])
+                ->middleware('permission:file_extensions.create');
+            Route::post('file-extensions', [FileExtensionController::class, 'store'])
+                ->middleware('permission:file_extensions.create');
+            Route::get('file-extensions/{fileExtension}', [FileExtensionController::class, 'show'])
+                ->middleware('permission:file_extensions.view');
+            Route::get('file-extensions/{fileExtension}/edit', [FileExtensionController::class, 'edit'])
+                ->middleware('permission:file_extensions.update');
+            Route::put('file-extensions/{fileExtension}',      [FileExtensionController::class, 'update'])
+                ->middleware('permission:file_extensions.update');
+            Route::delete('file-extensions/{fileExtension}',   [FileExtensionController::class, 'destroy'])
+                ->middleware('permission:file_extensions.delete');
+//            Route::resource('laser-file-extension', LaserFileExtensionController::class);
+
+            Route::get('laser-file-extension',              [LaserFileExtensionController::class, 'index'])
+                ->middleware('permission:file_extensions.view');
+            Route::get('laser-file-extension/create',       [LaserFileExtensionController::class, 'create'])
+                ->middleware('permission:file_extensions.create');
+            Route::post('laser-file-extension',             [LaserFileExtensionController::class, 'store'])
+                ->middleware('permission:file_extensions.create');
+            Route::get('laser-file-extension/{fileExtension}', [LaserFileExtensionController::class, 'show'])
+                ->middleware('permission:file_extensions.view');
+            Route::get('laser-file-extension/{fileExtension}/edit', [LaserFileExtensionController::class, 'edit'])
+                ->middleware('permission:file_extensions.update');
+            Route::put('laser-file-extension/{fileExtension}',      [LaserFileExtensionController::class, 'update'])
+                ->middleware('permission:file_extensions.update');
+            Route::delete('laser-file-extension/{fileExtension}',   [LaserFileExtensionController::class, 'destroy'])
+                ->middleware('permission:file_extensions.delete');
+
+//            Route::resource('bend-file-extension', BendFileExtensionController::class);
+
+            Route::get('bend-file-extension',              [BendFileExtensionController::class, 'index'])
+                ->middleware('permission:file_extensions.view');
+            Route::get('bend-file-extension/create',       [BendFileExtensionController::class, 'create'])
+                ->middleware('permission:file_extensions.create');
+            Route::post('bend-file-extension',             [BendFileExtensionController::class, 'store'])
+                ->middleware('permission:file_extensions.create');
+            Route::get('bend-file-extension/{fileExtension}', [BendFileExtensionController::class, 'show'])
+                ->middleware('permission:file_extensions.view');
+            Route::get('bend-file-extension/{fileExtension}/edit', [BendFileExtensionController::class, 'edit'])
+                ->middleware('permission:file_extensions.update');
+            Route::put('bend-file-extension/{fileExtension}',      [BendFileExtensionController::class, 'update'])
+                ->middleware('permission:file_extensions.update');
+            Route::delete('bend-file-extension/{fileExtension}',   [BendFileExtensionController::class, 'destroy'])
+                ->middleware('permission:file_extensions.delete');
+
         });
 
         /**
@@ -80,9 +121,12 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
         /**
          * ─── USERS & USER PERMISSIONS ─────────────────────────
          */
-        Route::group(['prefix' => 'users', 'middleware' => ['admin', 'permission:users.view']], function () {
+        Route::group(['prefix' => 'users'], function () {
             Route::get('/', [UserController::class, 'index']);
-            Route::get('/{user}', [UserController::class, 'show']);
+            Route::post('/', [UserController::class, 'store'])
+                ->middleware('permission:users.create');
+            Route::get('/{user}', [UserController::class, 'show'])
+                ->middleware('permission:users.view');
             Route::put('/{user}', [UserController::class, 'update'])
                 ->middleware('permission:users.update');
             Route::patch('/{user}', [UserController::class, 'update'])
@@ -168,29 +212,69 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
          * ─── ENGINEERS + PMP ───────────────────────────────────
          */
         Route::group(['prefix' => 'engineers', 'middleware' => 'engineer'], function () {
-            Route::resource('engineer', EngineerController::class)
+            Route::get('engineer', [EngineerController::class, 'index'])
                 ->middleware('permission:engineers.view');
 
-            Route::group(['middleware' => 'permission:pmps'], function () {
-                Route::apiResource('pmps', PmpController::class);
-                Route::apiResource('pmpFiles', PmpFilesController::class)
-                    ->only(['index', 'show', 'destroy']);
-                Route::post('uploadPmpFile', [PmpFilesController::class, 'upload']);
-            });
+            Route::get('engineer/create', [EngineerController::class, 'create'])
+                ->middleware('permission:engineers.create');
+
+            Route::post('engineer', [EngineerController::class, 'store'])
+                ->middleware('permission:engineers.create');
+
+            Route::get('engineer/{engineer}', [EngineerController::class, 'show'])
+                ->middleware('permission:engineers.view');
+
+            Route::get('engineer/{engineer}/edit', [EngineerController::class, 'edit'])
+                ->middleware('permission:engineers.update');
+
+            Route::put('engineer/{engineer}', [EngineerController::class, 'update'])
+                ->middleware('permission:engineers.update');
+
+            Route::delete('engineer/{engineer}', [EngineerController::class, 'destroy'])
+                ->middleware('permission:engineers.delete');
+
+
+            Route::get('pmps', [PmpController::class, 'index'])
+                ->middleware('permission:pmps.view');
+            Route::post('pmps', [PmpController::class, 'store'])
+                ->middleware('permission:pmps.create');
+            Route::get('pmps/{pmp}', [PmpController::class, 'show'])
+                ->middleware('permission:pmps.view');
+            Route::put('pmps/{pmp}', [PmpController::class, 'update'])
+                ->middleware('permission:pmps.update');
+            Route::delete('pmps/{pmp}', [PmpController::class, 'destroy'])
+                ->middleware('permission:pmps.delete');
+
+
+            Route::get('pmpFiles', [PmpFilesController::class, 'index'])
+                ->middleware('permission:pmps.view');
+            Route::get('pmpFiles/{file}', [PmpFilesController::class, 'show'])
+                ->middleware('permission:pmps.view');
+            Route::post('uploadPmpFile', [PmpFilesController::class, 'upload'])
+                ->middleware('permission:pmps.create');
+            Route::delete('pmpFiles/{file}', [PmpFilesController::class, 'destroy'])
+                ->middleware('permission:pmps.delete');
+
 
             Route::post('pmps/{id}/remote-number', [PmpController::class, 'remoteNumber'])
                 ->middleware('permission:pmps.update');
+
             Route::get('pmps/{id}/next-remote-number', [PmpController::class, 'nextRemoteNumber'])
                 ->middleware('permission:pmps.view');
+
             Route::post('pmps/check-group', [PmpController::class, 'checkGroup'])
                 ->middleware('permission:pmps.view');
+
             Route::post('pmps/check-group-name', [PmpController::class, 'checkGroupName'])
                 ->middleware('permission:pmps.view');
+
             Route::post('pmps/check-pmp-by-remote-number/{id}', [PmpController::class, 'checkPmpByRemoteNumber'])
                 ->middleware('permission:pmps.view');
-            Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder'])
-                ->middleware('permission:pmps.view');
+
             Route::get('pmps/remote-number/{id}', [PmpController::class, 'showByRemoteNumber'])
+                ->middleware('permission:pmps.view');
+
+            Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder'])
                 ->middleware('permission:pmps.view');
         });
 
