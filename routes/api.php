@@ -29,12 +29,13 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
     /**
      * ─── AUTH ────────────────────────────────────────────────
      */
-    Route::post('login', [AuthController::class, 'login']);
+    Route::post('login',    [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
 
     Route::middleware(['auth:sanctum', 'detect.device'])->group(function () {
-        Route::get('user', [AuthController::class, 'me']);
-        Route::post('logout', [AuthController::class, 'logout']);
+
+        Route::get('user',   [AuthController::class, 'me']);
+        Route::post('logout',[AuthController::class, 'logout']);
 
         /**
          * ─── ADMIN DASHBOARD ─────────────────────────────────
@@ -42,67 +43,44 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
         Route::group(['prefix' => 'admin', 'middleware' => 'admin'], function () {
             Route::resource('/', AdminController::class);
 
-            // Orders (admin panel)
-            Route::resource('order', OrderController::class);
+            // Manager side դը օգտագործում է GET /api/admin/order
+            Route::get('order', [OrderController::class, 'index'])
+                ->middleware('permission:orders.view');
+
+            Route::post('order',            [OrderController::class, 'store']);
+            Route::get('order/{order}',     [OrderController::class, 'show']);
+            Route::put('order/{order}',     [OrderController::class, 'update']);
+            Route::patch('order/{order}',   [OrderController::class, 'update']);
+            Route::delete('order/{order}',  [OrderController::class, 'destroy']);
 
             Route::post('orders/update/{order}', [OrderController::class, 'update'])
                 ->name('orders.update');
 
-            // File extensions
-//            Route::resource('file-extensions', FileExtensionController::class);
-            Route::get('file-extensions', [FileExtensionController::class, 'index'])
-                ->middleware('permission:file_extensions.view');
-            Route::get('file-extensions/create', [FileExtensionController::class, 'create'])
-                ->middleware('permission:file_extensions.create');
-            Route::post('file-extensions', [FileExtensionController::class, 'store'])
-                ->middleware('permission:file_extensions.create');
-            Route::get('file-extensions/{fileExtension}', [FileExtensionController::class, 'show'])
-                ->middleware('permission:file_extensions.view');
-            Route::get('file-extensions/{fileExtension}/edit', [FileExtensionController::class, 'edit'])
-                ->middleware('permission:file_extensions.update');
-            Route::put('file-extensions/{fileExtension}',      [FileExtensionController::class, 'update'])
-                ->middleware('permission:file_extensions.update');
-            Route::delete('file-extensions/{fileExtension}',   [FileExtensionController::class, 'destroy'])
-                ->middleware('permission:file_extensions.delete');
-//            Route::resource('laser-file-extension', LaserFileExtensionController::class);
+            Route::get('file-extensions', [FileExtensionController::class, 'index']);
+            Route::get('file-extensions/create', [FileExtensionController::class, 'create']);
+            Route::post('file-extensions', [FileExtensionController::class, 'store']);
+            Route::get('file-extensions/{fileExtension}', [FileExtensionController::class, 'show']);
+            Route::get('file-extensions/{fileExtension}/edit', [FileExtensionController::class, 'edit']);
+            Route::put('file-extensions/{fileExtension}', [FileExtensionController::class, 'update']);
+            Route::delete('file-extensions/{fileExtension}', [FileExtensionController::class, 'destroy']);
 
-            Route::get('laser-file-extension',              [LaserFileExtensionController::class, 'index'])
-                ->middleware('permission:file_extensions.view');
-            Route::get('laser-file-extension/create',       [LaserFileExtensionController::class, 'create'])
-                ->middleware('permission:file_extensions.create');
-            Route::post('laser-file-extension',             [LaserFileExtensionController::class, 'store'])
-                ->middleware('permission:file_extensions.create');
-            Route::get('laser-file-extension/{fileExtension}', [LaserFileExtensionController::class, 'show'])
-                ->middleware('permission:file_extensions.view');
-            Route::get('laser-file-extension/{fileExtension}/edit', [LaserFileExtensionController::class, 'edit'])
-                ->middleware('permission:file_extensions.update');
-            Route::put('laser-file-extension/{fileExtension}',      [LaserFileExtensionController::class, 'update'])
-                ->middleware('permission:file_extensions.update');
-            Route::delete('laser-file-extension/{fileExtension}',   [LaserFileExtensionController::class, 'destroy'])
-                ->middleware('permission:file_extensions.delete');
+            Route::get('laser-file-extension', [LaserFileExtensionController::class, 'index']);
+            Route::get('laser-file-extension/create', [LaserFileExtensionController::class, 'create']);
+            Route::post('laser-file-extension', [LaserFileExtensionController::class, 'store']);
+            Route::get('laser-file-extension/{fileExtension}', [LaserFileExtensionController::class, 'show']);
+            Route::get('laser-file-extension/{fileExtension}/edit', [LaserFileExtensionController::class, 'edit']);
+            Route::put('laser-file-extension/{fileExtension}', [LaserFileExtensionController::class, 'update']);
+            Route::delete('laser-file-extension/{fileExtension}', [LaserFileExtensionController::class, 'destroy']);
 
-//            Route::resource('bend-file-extension', BendFileExtensionController::class);
-
-            Route::get('bend-file-extension',              [BendFileExtensionController::class, 'index'])
-                ->middleware('permission:file_extensions.view');
-            Route::get('bend-file-extension/create',       [BendFileExtensionController::class, 'create'])
-                ->middleware('permission:file_extensions.create');
-            Route::post('bend-file-extension',             [BendFileExtensionController::class, 'store'])
-                ->middleware('permission:file_extensions.create');
-            Route::get('bend-file-extension/{fileExtension}', [BendFileExtensionController::class, 'show'])
-                ->middleware('permission:file_extensions.view');
-            Route::get('bend-file-extension/{fileExtension}/edit', [BendFileExtensionController::class, 'edit'])
-                ->middleware('permission:file_extensions.update');
-            Route::put('bend-file-extension/{fileExtension}',      [BendFileExtensionController::class, 'update'])
-                ->middleware('permission:file_extensions.update');
-            Route::delete('bend-file-extension/{fileExtension}',   [BendFileExtensionController::class, 'destroy'])
-                ->middleware('permission:file_extensions.delete');
-
+            Route::get('bend-file-extension', [BendFileExtensionController::class, 'index']);
+            Route::get('bend-file-extension/create', [BendFileExtensionController::class, 'create']);
+            Route::post('bend-file-extension', [BendFileExtensionController::class, 'store']);
+            Route::get('bend-file-extension/{fileExtension}', [BendFileExtensionController::class, 'show']);
+            Route::get('bend-file-extension/{fileExtension}/edit', [BendFileExtensionController::class, 'edit']);
+            Route::put('bend-file-extension/{fileExtension}', [BendFileExtensionController::class, 'update']);
+            Route::delete('bend-file-extension/{fileExtension}', [BendFileExtensionController::class, 'destroy']);
         });
 
-        /**
-         * ─── ORDERS (Manager / Staff) ─────────────────────────
-         */
         Route::group(['prefix' => 'orders', 'middleware' => ['check.order']], function () {
             Route::get('order', [OrderController::class, 'index'])
                 ->middleware('permission:orders.view');
@@ -118,32 +96,18 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
                 ->middleware('permission:orders.delete');
         });
 
-        /**
-         * ─── USERS & USER PERMISSIONS ─────────────────────────
-         */
-        Route::group(['prefix' => 'users'], function () {
-            Route::get('/', [UserController::class, 'index']);
-            Route::post('/', [UserController::class, 'store'])
-                ->middleware('permission:users.create');
-            Route::get('/{user}', [UserController::class, 'show'])
-                ->middleware('permission:users.view');
-            Route::put('/{user}', [UserController::class, 'update'])
-                ->middleware('permission:users.update');
-            Route::patch('/{user}', [UserController::class, 'update'])
-                ->middleware('permission:users.update');
-            Route::delete('/{user}', [UserController::class, 'destroy'])
-                ->middleware('permission:users.delete');
+        Route::group(['prefix' => 'users', 'middleware' => 'admin'], function () {
+            Route::get('/',       [UserController::class, 'index']);
+            Route::post('/',      [UserController::class, 'store']);
+            Route::get('/{user}', [UserController::class, 'show']);
+            Route::put('/{user}', [UserController::class, 'update']);
+            Route::patch('/{user}', [UserController::class, 'update']);
+            Route::delete('/{user}', [UserController::class, 'destroy']);
 
-            // User-specific permissions
-            Route::get('/{user}/permissions', [UserPermissionController::class, 'show'])
-                ->middleware('permission:users.update');
-            Route::put('/{user}/permissions', [UserPermissionController::class, 'update'])
-                ->middleware('permission:users.update');
+            Route::get('/{user}/permissions', [UserPermissionController::class, 'show']);
+            Route::put('/{user}/permissions', [UserPermissionController::class, 'update']);
         });
 
-        /**
-         * ─── CLIENTS ───────────────────────────────────────────
-         */
         Route::group(['prefix' => 'clients'], function () {
             Route::get('client', [ClientController::class, 'index'])
                 ->middleware('permission:clients.view');
@@ -159,9 +123,6 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
                 ->middleware('permission:clients.delete');
         });
 
-        /**
-         * ─── WORKERS ───────────────────────────────────────────
-         */
         Route::group(['prefix' => 'workers'], function () {
             Route::get('/', [WorkersController::class, 'index'])
                 ->middleware('permission:workers.view');
@@ -177,115 +138,143 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
                 ->middleware('permission:workers.delete');
         });
 
-        /**
-         * ─── FACTORIES ─────────────────────────────────────────
-         */
+        Route::group(['prefix' => 'materials'], function () {
+            Route::get('/', [MaterialController::class, 'index'])
+                ->middleware('permission:materials.view');
+            Route::get('/{material}', [MaterialController::class, 'show'])
+                ->middleware('permission:materials.view');
+
+            Route::post('/', [MaterialController::class, 'store'])
+                ->middleware('permission:materials.create');
+
+            // frontend–դ POST–ով ա անում update
+            Route::post('/{material}', [MaterialController::class, 'update'])
+                ->middleware('permission:materials.update');
+
+            Route::put('/{material}', [MaterialController::class, 'update'])
+                ->middleware('permission:materials.update');
+            Route::patch('/{material}', [MaterialController::class, 'update'])
+                ->middleware('permission:materials.update');
+
+            Route::delete('/{material}', [MaterialController::class, 'destroy'])
+                ->middleware('permission:materials.delete');
+        });
+
         Route::group(['prefix' => 'factories'], function () {
+
             Route::get('factory', [FactoryController::class, 'index'])
-                ->middleware('permission:factories.view');
-            Route::post('factory', [FactoryController::class, 'store'])
-                ->middleware('permission:factories.create');
+                ->middleware('permission:factory.view');
+
             Route::get('factory/{factory}', [FactoryController::class, 'show'])
-                ->middleware('permission:factories.view');
-            Route::put('factory/{factory}', [FactoryController::class, 'update'])
-                ->middleware('permission:factories.update');
-            Route::patch('factory/{factory}', [FactoryController::class, 'update'])
-                ->middleware('permission:factories.update');
-            Route::delete('factory/{factory}', [FactoryController::class, 'destroy'])
-                ->middleware('permission:factories.delete');
+                ->middleware('permission:factory.view');
+
+            Route::post('factory', [FactoryController::class, 'store']);
+            Route::put('factory/{factory}', [FactoryController::class, 'update']);
+            Route::patch('factory/{factory}', [FactoryController::class, 'update']);
+            Route::delete('factory/{factory}', [FactoryController::class, 'destroy']);
 
             Route::get('getFile/{path}', [FactoryController::class, 'getFile'])
                 ->where('path', '.*')
-                ->middleware('permission:factories.view');
+                ->middleware('permission:factory.download');
+
             Route::get('download/{path}', [FactoryController::class, 'downloadFile'])
                 ->where('path', '.*')
-                ->middleware('permission:factories.view');
-            Route::get('getOrdersByFactories', [FactoryController::class, 'getOrdersByFactories'])
-                ->middleware('permission:factories.view');
+                ->middleware('permission:factory.download');
+
             Route::put('updateOrder/{order}', [FactoryController::class, 'updateOrder'])
-                ->middleware('permission:factories.update');
-            Route::put('confirmOrderStatus/{id}', [FactoryController::class, 'confirmOrderStatus'])
-                ->middleware('permission:factories.update');
+                ->middleware('permission:factory.order_update');
+
+            Route::get('getOrdersByFactories', [FactoryController::class, 'getOrdersByFactories']);
+            Route::put('confirmOrderStatus/{id}', [FactoryController::class, 'confirmOrderStatus']);
         });
 
-        /**
-         * ─── ENGINEERS + PMP ───────────────────────────────────
-         */
         Route::group(['prefix' => 'engineers', 'middleware' => 'engineer'], function () {
-            Route::get('engineer', [EngineerController::class, 'index'])
-                ->middleware('permission:engineers.view');
 
-            Route::get('engineer/create', [EngineerController::class, 'create'])
-                ->middleware('permission:engineers.create');
-
-            Route::post('engineer', [EngineerController::class, 'store'])
-                ->middleware('permission:engineers.create');
-
-            Route::get('engineer/{engineer}', [EngineerController::class, 'show'])
-                ->middleware('permission:engineers.view');
-
-            Route::get('engineer/{engineer}/edit', [EngineerController::class, 'edit'])
-                ->middleware('permission:engineers.update');
-
-            Route::put('engineer/{engineer}', [EngineerController::class, 'update'])
-                ->middleware('permission:engineers.update');
-
-            Route::delete('engineer/{engineer}', [EngineerController::class, 'destroy'])
-                ->middleware('permission:engineers.delete');
-
+            // EngineerController – էստեղ permission չենք տալիս, ըստ քո ասածի
+            Route::get('engineer',            [EngineerController::class, 'index']);
+            Route::get('engineer/create',     [EngineerController::class, 'create']);
+            Route::post('engineer',           [EngineerController::class, 'store']); // <- frontend
+            Route::get('engineer/{engineer}', [EngineerController::class, 'show']);
+            Route::get('engineer/{engineer}/edit', [EngineerController::class, 'edit']);
+            Route::put('engineer/{engineer}',      [EngineerController::class, 'update']);
+            Route::delete('engineer/{engineer}',   [EngineerController::class, 'destroy']);
 
             Route::get('pmps', [PmpController::class, 'index'])
-                ->middleware('permission:pmps.view');
+                ->middleware('permission:engineer_pmps.view');
+
             Route::post('pmps', [PmpController::class, 'store'])
-                ->middleware('permission:pmps.create');
+                ->middleware('permission:engineer_pmps.create');
+
             Route::get('pmps/{pmp}', [PmpController::class, 'show'])
-                ->middleware('permission:pmps.view');
+                ->middleware('permission:engineer_pmps.view');
+
             Route::put('pmps/{pmp}', [PmpController::class, 'update'])
-                ->middleware('permission:pmps.update');
+                ->middleware('permission:engineer_pmps.update');
+
             Route::delete('pmps/{pmp}', [PmpController::class, 'destroy'])
-                ->middleware('permission:pmps.delete');
-
-
-            Route::get('pmpFiles', [PmpFilesController::class, 'index'])
-                ->middleware('permission:pmps.view');
-            Route::get('pmpFiles/{file}', [PmpFilesController::class, 'show'])
-                ->middleware('permission:pmps.view');
-            Route::post('uploadPmpFile', [PmpFilesController::class, 'upload'])
-                ->middleware('permission:pmps.create');
-            Route::delete('pmpFiles/{file}', [PmpFilesController::class, 'destroy'])
-                ->middleware('permission:pmps.delete');
-
+                ->middleware('permission:engineer_pmps.update');
 
             Route::post('pmps/{id}/remote-number', [PmpController::class, 'remoteNumber'])
-                ->middleware('permission:pmps.update');
+                ->middleware('permission:engineer_pmps.create');
 
-            Route::get('pmps/{id}/next-remote-number', [PmpController::class, 'nextRemoteNumber'])
-                ->middleware('permission:pmps.view');
 
+            // POST /api/engineers/pmps/check-group
             Route::post('pmps/check-group', [PmpController::class, 'checkGroup'])
-                ->middleware('permission:pmps.view');
+                ->middleware('permission:engineer_pmps.check_group');
 
+            // POST /api/engineers/pmps/check-group-name
             Route::post('pmps/check-group-name', [PmpController::class, 'checkGroupName'])
-                ->middleware('permission:pmps.view');
+                ->middleware('permission:engineer_pmps.check_group_name');
 
+            // POST /api/engineers/pmps/check-pmp-by-remote-number/{id}
             Route::post('pmps/check-pmp-by-remote-number/{id}', [PmpController::class, 'checkPmpByRemoteNumber'])
-                ->middleware('permission:pmps.view');
+                ->middleware('permission:engineer_pmps.check_remote_number');
 
+            // GET helper–ներ – թողնենք view permission–ով
+            Route::get('pmps/{id}/next-remote-number', [PmpController::class, 'nextRemoteNumber'])
+                ->middleware('permission:engineer_pmps.view');
             Route::get('pmps/remote-number/{id}', [PmpController::class, 'showByRemoteNumber'])
-                ->middleware('permission:pmps.view');
+                ->middleware('permission:engineer_pmps.view');
 
+            // === PMP FILES (pmp_files.*) ===
+
+            Route::get('pmpFiles', [PmpFilesController::class, 'index'])
+                ->middleware('permission:pmp_files.view');
+            Route::get('pmpFiles/{file}', [PmpFilesController::class, 'show'])
+                ->middleware('permission:pmp_files.view');
+
+            // POST /api/engineers/uploadPmpFile
+            Route::post('uploadPmpFile', [PmpFilesController::class, 'upload'])
+                ->middleware('permission:pmp_files.upload');
+
+            // DELETE /api/engineers/pmpFiles/{fileId}
+            Route::delete('pmpFiles/{file}', [PmpFilesController::class, 'destroy'])
+                ->middleware('permission:pmp_files.delete');
+
+            // Files for factory+order (engineer UI) – մեկ է, PMP–ի մաս է, view permission
             Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder'])
-                ->middleware('permission:pmps.view');
+                ->middleware('permission:engineer_pmps.view');
         });
 
         /**
          * ─── ROLES ──────────────────────────────────────────────
+         * Front:
+         *   get('/api/roles')
          */
-        Route::resource('roles', RoleController::class)
-            ->middleware(['admin', 'permission:roles.manage']);
+        Route::get('roles', [RoleController::class, 'index'])
+            ->middleware('permission:roles.view');
+
+        // Մնացած roles մանիպուլյացիա (create/update) թողնում ենք admin-only
+        Route::group(['prefix' => 'roles', 'middleware' => 'admin'], function () {
+            Route::post('/',         [RoleController::class, 'store']);
+            Route::get('/{role}',   [RoleController::class, 'show']);
+            Route::put('/{role}',   [RoleController::class, 'update']);
+            Route::patch('/{role}', [RoleController::class, 'update']);
+            Route::delete('/{role}',[RoleController::class, 'destroy']);
+        });
 
         /**
-         * ─── SINGLE ORDER (shared access) ───────────────────────
+         * ─── SINGLE ORDER (shared access for mail link) ────────
          */
         Route::get('orders/{id}', [OrderController::class, 'show'])
             ->name('orders.show')
@@ -294,38 +283,42 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
 });
 
 /**
- * ─── PUBLIC / MATERIALS ────────────────────────────────────────────────
+ * ─── PUBLIC / MATERIALS & CATEGORIES ─────────────────────────
  */
 Route::middleware('setlocale')->group(function () {
+
     Route::group(['prefix' => 'categories'], function () {
-        Route::resource('materialGroup', MaterialGroupController::class);
+        Route::resource('materialGroup',      MaterialGroupController::class);
         Route::resource('materialCategories', MaterialCategoryController::class);
     });
 
-    Route::apiResource('material-groups', MaterialGroupController::class);
-    Route::apiResource('material-categories', MaterialCategoryController::class);
-    Route::apiResource('materials', MaterialController::class);
+    // Front: get('/api/material-categories')
+    Route::get('material-categories', [MaterialCategoryController::class, 'index'])
+        ->middleware('auth:sanctum', 'permission:material_categories.view');
+
+    // Եթե դու դեռ պետք ես ունենաս apiResource–ները public, թողնում եմ առանց permission
+    Route::apiResource('material-groups',     MaterialGroupController::class);
+    // արդեն վերևում index–ը փակել ենք permission–ով, մնացածներն կարող են լինել միայն admin–ով, եթե ուզես, կարող ես փակել routes–ից հետո
 });
 
 /**
- * ─── VISITOR STATS ─────────────────────────────────────────────────────
+ * ─── VISITOR STATS ───────────────────────────────────────────
  */
 Route::middleware(['auth:sanctum', 'setlocale'])
     ->get('/visitor-stats', [VisitorController::class, 'getDeviceStats']);
 
 /**
- * ─── PERMISSIONS (Admin only, final correct version) ───────────────────
+ * ─── PERMISSIONS (Admin only, առանց permission group, քանի որ config–ում չկա) ─
  */
 Route::middleware(['auth:sanctum', 'setlocale', 'admin'])
     ->prefix('permissions')
     ->group(function () {
-        Route::get('/', [PermissionController::class, 'index']);
-        Route::get('/{permission}', [PermissionController::class, 'show']);
-        Route::put('/{permission}', [PermissionController::class, 'update']);
+        Route::get('/',               [PermissionController::class, 'index']);
+        Route::get('/{permission}',   [PermissionController::class, 'show']);
+        Route::put('/{permission}',   [PermissionController::class, 'update']);
         Route::patch('/{permission}', [PermissionController::class, 'update']);
-        Route::delete('/{permission}', [PermissionController::class, 'destroy']);
+        Route::delete('/{permission}',[PermissionController::class, 'destroy']);
 
-        // Frontend permission map
         Route::get('/map/all', function () {
             return response()->json(PermissionMap::all());
         });

@@ -105,7 +105,6 @@ class EngineerController extends Controller
 
     public function getFilesForFactoryAndOrder($factoryId, $orderId): JsonResponse
     {
-        // Ստուգել, եթե տվյալ ֆայլերը կան տվյալ գործարանից ու պատվերից
         $files = FactoryOrderFile::with('factory', 'order')
             ->where('factory_id', $factoryId)
             ->where('order_id', $orderId)
@@ -131,34 +130,28 @@ class EngineerController extends Controller
             'selected_files.*.quantity' => 'required_with:selected_files|integer|min:1',
         ]);
 
-        // Ստեղծել պատվեր
         $order = Order::create($validatedData);
 
-        // Ստեղծել կապված ռեկորդներ
         $order->orderNumber()->create(['number' => $this->generateOrderNumber()]);
         $order->prefixCode()->create(['code' => $this->generateUniquePrefixCode()]);
         $order->dates()->create(['finish_date' => $validatedData['finish_date']]);
 
         $pmp = Pmp::with('files.factory')->findOrFail($validatedData['pmp_id']);
 
-        // Եթե link_existing_files=false (առանց խմբագրման), ապա վերցնել ԲՈԼՈՐ ֆայլերը
         if (!$validatedData['link_existing_files']) {
             $selectedFiles = $pmp->files->map(function($file) {
                 return [
                     'id' => $file->id,
-                    'quantity' => 1 // Լռությամբ քանակը 1
+                    'quantity' => 1
                 ];
             })->toArray();
         }
-        // Հակառակ դեպքում (խմբագրման ռեժիմ) օգտագործել ընտրված ֆայլերը
         else {
             $selectedFiles = $validatedData['selected_files'] ?? [];
         }
 
-        // Մշակել ֆայլերը միայն եթե կան
         if (!empty($selectedFiles)) {
             foreach ($selectedFiles as $selectedFile) {
-                // Վալիդացնել որ ֆայլը պատկանում է PMP-ին
                 $pmpFile = $pmp->files->firstWhere('id', $selectedFile['id']);
                 if (!$pmpFile) {
                     return response()->json(
@@ -167,14 +160,12 @@ class EngineerController extends Controller
                     );
                 }
 
-                // Ստեղծել SelectedFile ռեկորդ
                 SelectedFile::create([
                     'order_id' => $order->id,
                     'pmp_file_id' => $selectedFile['id'],
                     'quantity' => $selectedFile['quantity'],
                 ]);
 
-                // Ստեղծել կամ ստանալ FactoryOrder
                 $factoryOrder = FactoryOrder::firstOrCreate(
                     [
                         'order_id' => $order->id,
@@ -190,7 +181,6 @@ class EngineerController extends Controller
                     ]
                 );
 
-                // Կցել ֆայլը FactoryOrder-ին
                 $factoryOrder->files()->attach($pmpFile->id, [
                     'quantity' => $selectedFile['quantity'],
                     'material_type' => $pmpFile->material_type,
@@ -199,7 +189,6 @@ class EngineerController extends Controller
             }
         }
 
-        // Ուղարկել email ծանուցում
         $userEmail = User::find($validatedData['user_id'])->email;
         $orderUrl = route('orders.show', ['id' => $order->id]);
         Mail::to($userEmail)->send(new OrderCreated($order, $orderUrl));
@@ -300,22 +289,18 @@ class EngineerController extends Controller
                 $order = Order::findOrFail($id);
                 $order->update($validatedData);
 
-                // Update dates
                 $order->dates()->update(['finish_date' => $validatedData['finish_date']]);
 
-                // Handle selected files
                 if ($request->link_existing_files && !empty($validatedData['selected_files'])) {
                     $pmp = Pmp::with('files.factory')->findOrFail($validatedData['pmp_id']);
                     $selectedFiles = $request->input('selected_files', []);
 
-                    // Remove existing selected files and factory order files
                     $order->selectedFiles()->delete();
                     foreach ($order->factoryOrders as $factoryOrder) {
                         $factoryOrder->files()->detach();
                     }
 
                     foreach ($selectedFiles as $selectedFile) {
-                        // Validate file belongs to PMP
                         $pmpFile = $pmp->files->firstWhere('id', $selectedFile['id']);
                         if (!$pmpFile) {
                             return response()->json(
@@ -324,14 +309,12 @@ class EngineerController extends Controller
                             );
                         }
 
-                        // Create SelectedFile record
                         SelectedFile::create([
                             'order_id' => $order->id,
                             'pmp_file_id' => $selectedFile['id'],
                             'quantity' => $selectedFile['quantity'],
                         ]);
 
-                        // Create or get FactoryOrder
                         $factoryOrder = FactoryOrder::firstOrCreate(
                             [
                                 'order_id' => $order->id,
@@ -347,7 +330,6 @@ class EngineerController extends Controller
                             ]
                         );
 
-                        // Attach file to FactoryOrder
                         $factoryOrder->files()->syncWithoutDetaching([
                             $pmpFile->id => [
                                 'material_type' => $pmpFile->material_type,
@@ -385,7 +367,6 @@ class EngineerController extends Controller
         try {
                 $order = Order::findOrFail($id);
 
-                // Delete related records
                 $order->selectedFiles()->delete();
                 $order->factoryOrders()->each(function ($factoryOrder) {
                     $factoryOrder->files()->detach();

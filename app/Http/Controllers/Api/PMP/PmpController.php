@@ -117,18 +117,25 @@ class PmpController extends Controller
     {
         $pmp = Pmp::findOrFail($id);
 
-        $validated = $request->validate([
-            'remote_number'       => 'required|string|size:2|unique:remote_numbers,remote_number,NULL,id,pmp_id,' . $pmp->id,
-            'remote_number_name'  => 'required|string|unique:remote_numbers,remote_number_name,NULL,id,pmp_id,' . $pmp->id,
+        $validatedData = $request->validate([
+            'group' => 'required|string|unique:pmps,group,' . $id,
+            'group_name' => 'required|string',
+            'remote_number' => 'required|string|unique:remote_numbers,remote_number,NULL,id,pmp_id,' . $pmp->id,
+            'remote_number_name' => 'required|string|unique:remote_numbers,remote_number_name,NULL,id,pmp_id,' . $pmp->id,
+        ]);
+
+        $pmp->update([
+            'group' => $validatedData['group'],
+            'group_name' => $validatedData['group_name'],
         ]);
 
         RemoteNumber::create([
-            'pmp_id'             => $pmp->id,
-            'remote_number'      => str_pad($validated['remote_number'], 2, '0', STR_PAD_LEFT),
-            'remote_number_name' => $validated['remote_number_name'],
+            'pmp_id' => $pmp->id,
+            'remote_number' => $validatedData['remote_number'],
+            'remote_number_name' => $validatedData['remote_number_name'],
         ]);
 
-        return response()->json(['message' => 'Remote number added', 'pmp' => $pmp->load('remoteNumber')]);
+        return response()->json($pmp->load('remoteNumber'));
     }
 
     /**
@@ -201,6 +208,13 @@ class PmpController extends Controller
 
     public function showByRemoteNumber(string $id)
     {
+        $remoteNumber = RemoteNumber::findOrFail($id);
 
+        $pmp = Pmp::with([
+            'remoteNumber' => fn($q) => $q->where('id', $remoteNumber->id),
+            'files' => fn($q) => $q->where('remote_number_id', $remoteNumber->id),
+        ])->findOrFail($remoteNumber->pmp_id);
+
+        return response()->json(['pmp' => $pmp]);
     }
 }

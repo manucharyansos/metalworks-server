@@ -12,8 +12,6 @@ class UserSeeder extends Seeder
     public function run(): void
     {
         $adminRole = Role::where('name', 'admin')->first();
-        $guestUserRole = Role::where('name', 'guestUser')->first();
-        $authenticatedUserRole = Role::where('name', 'authenticatedUser')->first();
         $managerRole = Role::where('name', 'manager')->first();
         $laserRole = Role::where('name', 'laser')->first();
         $bendRole = Role::where('name', 'bend')->first();
@@ -28,52 +26,17 @@ class UserSeeder extends Seeder
         ]);
 
         User::create([
-            'name' => 'Guest User',
-            'email' => 'guest@example.com',
-            'password' => Hash::make('password'),
-            'role_id' => $guestUserRole->id,
-        ]);
-
-        User::create([
-            'name' => 'Authenticated User',
-            'email' => 'authenticated@example.com',
-            'password' => Hash::make('password'),
-            'role_id' => $authenticatedUserRole->id,
-        ]);
-
-        User::create([
-            'name' => 'Mnager User',
-            'email' => 'manager@example.com',
+            'name' => 'Manager 1',
+            'email' => 'manager@metalworks.am',
             'password' => Hash::make('password'),
             'role_id' => $managerRole->id,
         ]);
 
         User::create([
-            'name' => 'Bend User',
-            'email' => 'bend@example.com',
+            'name' => 'Manager 2',
+            'email' => 'manager2@metalworks.am',
             'password' => Hash::make('password'),
-            'role_id' => $bendRole->id,
-        ]);
-
-        User::create([
-            'name' => 'Catting User',
-            'email' => 'catting@example.com',
-            'password' => Hash::make('password'),
-            'role_id' => $cattingRole->id,
-        ]);
-
-        User::create([
-            'name' => 'Laser 1',
-            'email' => 'laser1@metalworks.am',
-            'password' => Hash::make('password'),
-            'role_id' => $laserRole->id,
-        ]);
-
-        User::create([
-            'name' => 'Laser 2',
-            'email' => 'laser2@metalworks.am',
-            'password' => Hash::make('u;KrS)I$.Oxl'),
-            'role_id' => $laserRole->id,
+            'role_id' => $managerRole->id,
         ]);
 
         User::create([
@@ -81,6 +44,55 @@ class UserSeeder extends Seeder
             'email' => 'engineering@metalworks.am',
             'password' => Hash::make('password'),
             'role_id' => $engineerRole->id,
+        ]);
+
+        User::create([
+            'name' => 'Engineer 2',
+            'email' => 'engineer2@metalworks.am',
+            'password' => Hash::make('password'),
+            'role_id' => $engineerRole->id,
+        ]);
+
+        User::create([
+            'name' => 'Bend 1',
+            'email' => 'bend@metalworks.am',
+            'password' => Hash::make('password'),
+            'role_id' => $bendRole->id,
+        ]);
+
+        User::create([
+            'name' => 'Bend 2',
+            'email' => 'bend2@metalworks.am',
+            'password' => Hash::make('password'),
+            'role_id' => $bendRole->id,
+        ]);
+
+        User::create([
+            'name' => 'Catting 1',
+            'email' => 'catting@metalworks.am',
+            'password' => Hash::make('password'),
+            'role_id' => $cattingRole->id,
+        ]);
+
+        User::create([
+            'name' => 'Catting 2',
+            'email' => 'catting2@metalworks.am',
+            'password' => Hash::make('password'),
+            'role_id' => $cattingRole->id,
+        ]);
+
+        User::create([
+            'name' => 'Laser 1',
+            'email' => 'laser@metalworks.am',
+            'password' => Hash::make('password'),
+            'role_id' => $laserRole->id,
+        ]);
+
+        User::create([
+            'name' => 'Laser 2',
+            'email' => 'laser2@metalworks.am',
+            'password' => Hash::make('password'),
+            'role_id' => $laserRole->id,
         ]);
     }
 }
