@@ -124,7 +124,7 @@ class EngineerController extends Controller
             'finish_date' => 'required|date',
             'remote_number_id' => 'nullable|exists:remote_numbers,id',
             'pmp_id' => 'required|exists:pmps,id',
-            'link_existing_files' => 'required|boolean', // Պարտադիր դարձնենք
+            'link_existing_files' => 'required|boolean',
             'selected_files' => 'sometimes|array',
             'selected_files.*.id' => 'required_with:selected_files|exists:pmp_files,id',
             'selected_files.*.quantity' => 'required_with:selected_files|integer|min:1',

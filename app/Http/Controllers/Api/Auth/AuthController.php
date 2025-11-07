@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Permission;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -68,13 +69,35 @@ class AuthController extends Controller
 
     public function me(Request $request): JsonResponse
     {
-        if (auth()->check()) {
-            $user = auth()->user();
-            $user->load('role');
-
-            return response()->json($user, 200);
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['error' => 'Unauthorized'], 401);
         }
-        return response()->json(['error' => 'Unauthorized'], 401);
+        $user->load(['role', 'permissions', 'role.permissions']);
+        if ($user->role && $user->role->name === 'admin') {
+            $permissions = Permission::pluck('slug');
+        } else {
+            $userPermissions = $user->permissions->pluck('slug');
+            $rolePermissions = $user->role
+                ? $user->role->permissions->pluck('slug')
+                : collect();
+
+            $permissions = $userPermissions
+                ->merge($rolePermissions)
+                ->unique()
+                ->values();
+        }
+
+        return response()->json([
+            'id'    => $user->id,
+            'name'  => $user->name,
+            'email' => $user->email,
+            'role'  => $user->role ? [
+                'id'   => $user->role->id,
+                'name' => $user->role->name,
+            ] : null,
+            'permissions' => $permissions,
+        ], 200);
     }
 
 }

@@ -1,13 +1,14 @@
 <?php
-// config/permission.php
 
 return [
 
-    // === ENGINEER (PMP + Orders) ===
-    'engineer_pmps' => [
+    'pmp' => [
         'view'   => 'PMP դիտել',
         'create' => 'PMP ստեղծել',
         'update' => 'PMP թարմացնել',
+    ],
+
+    'pmp_group' => [
         'check_group' => 'PMP խումբ ստուգել',
         'check_group_name' => 'PMP խմբի անուն ստուգել',
         'check_remote_number' => 'Հեռակա համարով PMP ստուգել',

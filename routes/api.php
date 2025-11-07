@@ -43,7 +43,6 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
         Route::group(['prefix' => 'admin', 'middleware' => 'admin'], function () {
             Route::resource('/', AdminController::class);
 
-            // Manager side դը օգտագործում է GET /api/admin/order
             Route::get('order', [OrderController::class, 'index'])
                 ->middleware('permission:orders.view');
 
@@ -147,7 +146,6 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::post('/', [MaterialController::class, 'store'])
                 ->middleware('permission:materials.create');
 
-            // frontend–դ POST–ով ա անում update
             Route::post('/{material}', [MaterialController::class, 'update'])
                 ->middleware('permission:materials.update');
 
@@ -190,70 +188,59 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
 
         Route::group(['prefix' => 'engineers', 'middleware' => 'engineer'], function () {
 
-            // EngineerController – էստեղ permission չենք տալիս, ըստ քո ասածի
-            Route::get('engineer',            [EngineerController::class, 'index']);
-            Route::get('engineer/create',     [EngineerController::class, 'create']);
-            Route::post('engineer',           [EngineerController::class, 'store']); // <- frontend
-            Route::get('engineer/{engineer}', [EngineerController::class, 'show']);
-            Route::get('engineer/{engineer}/edit', [EngineerController::class, 'edit']);
-            Route::put('engineer/{engineer}',      [EngineerController::class, 'update']);
-            Route::delete('engineer/{engineer}',   [EngineerController::class, 'destroy']);
+            Route::get('engineer',            [EngineerController::class, 'index'])->middleware('permission:orders.view');
+            Route::get('engineer/create',     [EngineerController::class, 'create'])->middleware('permission:orders.create');
+            Route::post('engineer',           [EngineerController::class, 'store'])->middleware('permission:orders.create');
+            Route::get('engineer/{engineer}', [EngineerController::class, 'show'])->middleware('permission:orders.view');
+            Route::get('engineer/{engineer}/edit', [EngineerController::class, 'edit'])->middleware('permission:orders.view');
+            Route::put('engineer/{engineer}',      [EngineerController::class, 'update'])->middleware('permission:orders.update');
+            Route::delete('engineer/{engineer}',   [EngineerController::class, 'destroy'])->middleware('permission:orders.delete');
 
             Route::get('pmps', [PmpController::class, 'index'])
-                ->middleware('permission:engineer_pmps.view');
+                ->middleware('permission:pmp.view');
 
             Route::post('pmps', [PmpController::class, 'store'])
-                ->middleware('permission:engineer_pmps.create');
+                ->middleware('permission:pmp.create');
 
             Route::get('pmps/{pmp}', [PmpController::class, 'show'])
-                ->middleware('permission:engineer_pmps.view');
+                ->middleware('permission:pmp.view');
 
             Route::put('pmps/{pmp}', [PmpController::class, 'update'])
-                ->middleware('permission:engineer_pmps.update');
+                ->middleware('permission:pmp.update');
 
             Route::delete('pmps/{pmp}', [PmpController::class, 'destroy'])
-                ->middleware('permission:engineer_pmps.update');
+                ->middleware('permission:pmp.update');
 
             Route::post('pmps/{id}/remote-number', [PmpController::class, 'remoteNumber'])
-                ->middleware('permission:engineer_pmps.create');
+                ->middleware('permission:pmp.create');
 
-
-            // POST /api/engineers/pmps/check-group
             Route::post('pmps/check-group', [PmpController::class, 'checkGroup'])
-                ->middleware('permission:engineer_pmps.check_group');
+                ->middleware('permission:pmp_group.check_group');
 
-            // POST /api/engineers/pmps/check-group-name
             Route::post('pmps/check-group-name', [PmpController::class, 'checkGroupName'])
-                ->middleware('permission:engineer_pmps.check_group_name');
+                ->middleware('permission:pmp_group.check_group_name');
 
-            // POST /api/engineers/pmps/check-pmp-by-remote-number/{id}
             Route::post('pmps/check-pmp-by-remote-number/{id}', [PmpController::class, 'checkPmpByRemoteNumber'])
-                ->middleware('permission:engineer_pmps.check_remote_number');
+                ->middleware('permission:pmp_group.check_remote_number');
 
-            // GET helper–ներ – թողնենք view permission–ով
             Route::get('pmps/{id}/next-remote-number', [PmpController::class, 'nextRemoteNumber'])
-                ->middleware('permission:engineer_pmps.view');
+                ->middleware('permission:pmp.view');
             Route::get('pmps/remote-number/{id}', [PmpController::class, 'showByRemoteNumber'])
-                ->middleware('permission:engineer_pmps.view');
-
-            // === PMP FILES (pmp_files.*) ===
+                ->middleware('permission:pmp.view');
 
             Route::get('pmpFiles', [PmpFilesController::class, 'index'])
                 ->middleware('permission:pmp_files.view');
             Route::get('pmpFiles/{file}', [PmpFilesController::class, 'show'])
                 ->middleware('permission:pmp_files.view');
 
-            // POST /api/engineers/uploadPmpFile
             Route::post('uploadPmpFile', [PmpFilesController::class, 'upload'])
                 ->middleware('permission:pmp_files.upload');
 
-            // DELETE /api/engineers/pmpFiles/{fileId}
             Route::delete('pmpFiles/{file}', [PmpFilesController::class, 'destroy'])
                 ->middleware('permission:pmp_files.delete');
 
-            // Files for factory+order (engineer UI) – մեկ է, PMP–ի մաս է, view permission
             Route::get('factories/{factoryId}/orders/{orderId}/files', [EngineerController::class, 'getFilesForFactoryAndOrder'])
-                ->middleware('permission:engineer_pmps.view');
+                ->middleware('permission:pmp.view');
         });
 
         /**
@@ -264,7 +251,6 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
         Route::get('roles', [RoleController::class, 'index'])
             ->middleware('permission:roles.view');
 
-        // Մնացած roles մանիպուլյացիա (create/update) թողնում ենք admin-only
         Route::group(['prefix' => 'roles', 'middleware' => 'admin'], function () {
             Route::post('/',         [RoleController::class, 'store']);
             Route::get('/{role}',   [RoleController::class, 'show']);
@@ -292,13 +278,10 @@ Route::middleware('setlocale')->group(function () {
         Route::resource('materialCategories', MaterialCategoryController::class);
     });
 
-    // Front: get('/api/material-categories')
     Route::get('material-categories', [MaterialCategoryController::class, 'index'])
         ->middleware('auth:sanctum', 'permission:material_categories.view');
 
-    // Եթե դու դեռ պետք ես ունենաս apiResource–ները public, թողնում եմ առանց permission
     Route::apiResource('material-groups',     MaterialGroupController::class);
-    // արդեն վերևում index–ը փակել ենք permission–ով, մնացածներն կարող են լինել միայն admin–ով, եթե ուզես, կարող ես փակել routes–ից հետո
 });
 
 /**

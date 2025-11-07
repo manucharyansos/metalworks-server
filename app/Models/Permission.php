@@ -11,9 +11,9 @@ class Permission extends Model
     use HasFactory;
 
     protected $fillable = [
-        'name',   // Մարդկային անուն՝ "Տեսնել պատվերները"
-        'slug',   // Կոդ՝ "orders.view_all"
-        'group',  // Խումբ՝ "orders", "clients" և այլն (կամ nullable)
+        'name',
+        'slug',
+        'group',
     ];
 
 
