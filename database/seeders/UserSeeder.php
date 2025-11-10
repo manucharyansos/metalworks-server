@@ -104,7 +104,7 @@ class UserSeeder extends Seeder
             'email' => 'laser2@metalworks.am',
             'password' => Hash::make('password'),
             'role_id' => $laserRole->id,
-            'factory_id' => optional($factoryLaser)->id,
+            'factory_id' => optional($factoryLaserCutting)->id,
         ]);
     }
 }

@@ -13,7 +13,7 @@ class FactorySeeder extends Seeder
      */
     public function run(): void
     {
-        Factory::create(['name' => 'SolidWorks', 'value' => 'SW']);
+        Factory::create(['name' => 'Engineering', 'value' => 'SW']);
         Factory::create(['name' => 'Bend', 'value' => 'DLD']);
         Factory::create(['name' => 'Laser cutting', 'value' => 'DXF']);
         Factory::create(['name' => 'Laser', 'value' => 'IQS']);

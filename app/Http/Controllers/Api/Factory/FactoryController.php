@@ -134,30 +134,39 @@ class FactoryController extends Controller
             'factory_order.operator_finish_date' => 'nullable|date',
             'factory_order.admin_confirmation_date' => 'nullable|date',
         ]);
+
         $order = Order::find($id);
         if (!$order) {
             return response()->json(['error' => 'Order not found'], 404);
         }
-        $factoryOrder = $request->input('factory_order', []);
-        FactoryOrder::updateOrCreate(
-            [
-                'order_id' => $order->id,
-                'factory_id' => $validatedData['factory_id'],
-            ],
-            [
-                'status' => $factoryOrder['status'] ?? null,
-                'canceling' => $factoryOrder['canceling'] ?? '',
-                'cancel_date' => $factoryOrder['cancel_date'] ?? null,
-                'finish_date' => $factoryOrder['finish_date'] ?? null,
-                'operator_finish_date' => $factoryOrder['operator_finish_date'] ?? null,
-                'admin_confirmation_date' => $factoryOrder['admin_confirmation_date'] ?? null,
-            ]
-        );
+
+        $factoryOrderData = $request->input('factory_order', []);
+        $status = $factoryOrderData['status'] ?? null;
+
+        $fo = FactoryOrder::firstOrNew([
+            'order_id'   => $order->id,
+            'factory_id' => $validatedData['factory_id'],
+        ]);
+
+        $fo->status                 = $status;
+        $fo->canceling              = $factoryOrderData['canceling'] ?? '';
+        $fo->cancel_date            = $factoryOrderData['cancel_date'] ?? null;
+        $fo->finish_date            = $factoryOrderData['finish_date'] ?? null;
+        $fo->operator_finish_date   = $factoryOrderData['operator_finish_date'] ?? null;
+        $fo->admin_confirmation_date= $factoryOrderData['admin_confirmation_date'] ?? null;
+
+        if (!$fo->operator_id && $status && $status !== 'pending') {
+            $fo->operator_id = $request->user()->id;
+        }
+
+        $fo->save();
+
         return response()->json(
             $order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates'),
             200
         );
     }
+
 
 
 
