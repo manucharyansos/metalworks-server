@@ -19,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Illuminate\Validation\ValidationException;
 
 class EngineerController extends Controller
 {
@@ -39,6 +40,7 @@ class EngineerController extends Controller
                 'dates',
                 'factoryOrders.factory',
                 'factoryOrders.files',
+                'factoryOrders.operator:id,name',
                 'selectedFiles.pmpFile',
                 'user',
                 'creator:id,name',
@@ -113,103 +115,151 @@ class EngineerController extends Controller
     }
 
     public function store(Request $request): JsonResponse
-{
-    try {
-        $validatedData = $request->validate([
-            'user_id' => 'required|exists:users,id',
-            'description' => 'required|string',
-            'name' => 'required|string',
-            'status' => 'nullable|string',
-            'creator_id' => 'required|exists:users,id',
-            'finish_date' => 'required|date',
-            'remote_number_id' => 'nullable|exists:remote_numbers,id',
-            'pmp_id' => 'required|exists:pmps,id',
-            'link_existing_files' => 'required|boolean',
-            'selected_files' => 'sometimes|array',
-            'selected_files.*.id' => 'required_with:selected_files|exists:pmp_files,id',
-            'selected_files.*.quantity' => 'required_with:selected_files|integer|min:1',
-        ]);
+    {
+        try {
+            $validatedData = $request->validate([
+                'user_id' => 'required|exists:users,id',
+                'description' => 'required|string',
+                'name' => 'required|string',
+                'status' => 'nullable|string',
+                'creator_id' => 'required|exists:users,id',
+                'finish_date' => 'required|date',
+                'remote_number_id' => 'nullable|exists:remote_numbers,id',
+                'pmp_id' => 'required|exists:pmps,id',
+                'link_existing_files' => 'required|boolean',
 
-        $order = Order::create($validatedData);
+                'selected_files' => 'sometimes|array',
+                'selected_files.*.id' => 'required_with:selected_files|exists:pmp_files,id',
+                'selected_files.*.quantity' => 'required_with:selected_files|integer|min:1',
 
-        $order->orderNumber()->create(['number' => $this->generateOrderNumber()]);
-        $order->prefixCode()->create(['code' => $this->generateUniquePrefixCode()]);
-        $order->dates()->create(['finish_date' => $validatedData['finish_date']]);
+                'factory_operators' => 'nullable|array',
+                'factory_operators.*.factory_id' => 'required|exists:factories,id',
+                'factory_operators.*.user_id' => 'required|exists:users,id',
+            ]);
 
-        $pmp = Pmp::with('files.factory')->findOrFail($validatedData['pmp_id']);
+            // պատվերը
+            $order = Order::create($validatedData);
 
-        if (!$validatedData['link_existing_files']) {
-            $selectedFiles = $pmp->files->map(function($file) {
-                return [
-                    'id' => $file->id,
-                    'quantity' => 1
-                ];
-            })->toArray();
-        }
-        else {
-            $selectedFiles = $validatedData['selected_files'] ?? [];
-        }
+            // լրացուցիչ կապված մոդելներ
+            $order->orderNumber()->create(['number' => $this->generateOrderNumber()]);
+            $order->prefixCode()->create(['code' => $this->generateUniquePrefixCode()]);
+            $order->dates()->create(['finish_date' => $validatedData['finish_date']]);
 
-        if (!empty($selectedFiles)) {
-            foreach ($selectedFiles as $selectedFile) {
-                $pmpFile = $pmp->files->firstWhere('id', $selectedFile['id']);
-                if (!$pmpFile) {
-                    return response()->json(
-                        ['error' => "File ID {$selectedFile['id']} does not belong to PMP ID {$validatedData['pmp_id']}"],
-                        422
-                    );
+            // PMP + factory-ներով
+            $pmp = Pmp::with('files.factory')->findOrFail($validatedData['pmp_id']);
+
+            $factoryOperatorsInput = collect($validatedData['factory_operators'] ?? []);
+
+            $factoryOperatorsInput->each(function ($entry) {
+                $operator = User::find($entry['user_id']);
+                if (!$operator || (int) $operator->factory_id !== (int) $entry['factory_id']) {
+                    throw ValidationException::withMessages([
+                        'factory_operators' => 'Ընտրված աշխատակիցը չի պատկանում ընտրված արտադրամասին։',
+                    ]);
                 }
+            });
 
-                SelectedFile::create([
-                    'order_id' => $order->id,
-                    'pmp_file_id' => $selectedFile['id'],
-                    'quantity' => $selectedFile['quantity'],
-                ]);
+            // factory_id → operator info map
+            $factoryOperators = $factoryOperatorsInput
+                ->keyBy('factory_id'); // [factory_id => ['factory_id' => ..., 'user_id' => ...]]
 
-                $factoryOrder = FactoryOrder::firstOrCreate(
-                    [
-                        'order_id' => $order->id,
-                        'factory_id' => $pmpFile->factory_id,
-                    ],
-                    [
-                        'status' => $validatedData['status'] ?? 'pending',
-                        'canceling' => false,
-                        'cancel_date' => null,
-                        'finish_date' => null,
-                        'operator_finish_date' => null,
-                        'admin_confirmation_date' => null,
-                    ]
-                );
-
-                $factoryOrder->files()->attach($pmpFile->id, [
-                    'quantity' => $selectedFile['quantity'],
-                    'material_type' => $pmpFile->material_type,
-                    'thickness' => $pmpFile->thickness,
-                ]);
+            // Որ ֆայլերն են գնում պատվերի մեջ
+            if (!$validatedData['link_existing_files']) {
+                // եթե link_existing_files = false → օգտագործում ենք PMP-ի ֆայլերը (ըստ remote_number_id եթե տրված է)
+                $remoteId = $validatedData['remote_number_id'] ?? null;
+                $filesCol = $pmp->files;
+                if ($remoteId) {
+                    $filesCol = $filesCol->where('remote_number_id', (int) $remoteId);
+                }
+                $selectedFiles = $filesCol->map(function ($file) {
+                    return [
+                        'id' => $file->id,
+                        'quantity' => 1,
+                    ];
+                })->values()->toArray();
+            } else {
+                // եթե true → օգտագործում ենք frontend-ից եկած selected_files
+                $selectedFiles = $validatedData['selected_files'] ?? [];
             }
+
+            if (!empty($selectedFiles)) {
+                foreach ($selectedFiles as $selectedFile) {
+                    $pmpFile = $pmp->files->firstWhere('id', $selectedFile['id']);
+
+                    if (!$pmpFile) {
+                        return response()->json(
+                            ['error' => "File ID {$selectedFile['id']} does not belong to PMP ID {$validatedData['pmp_id']}"],
+                            422
+                        );
+                    }
+
+                    // կապում ենք ֆայլը պատվերի հետ
+                    SelectedFile::create([
+                        'order_id' => $order->id,
+                        'pmp_file_id' => $selectedFile['id'],
+                        'quantity' => $selectedFile['quantity'],
+                    ]);
+
+                    // գտնել օպերատոր այս factory-ի համար
+                    $operatorData = $factoryOperators->get($pmpFile->factory_id); // array կամ null
+                    $operatorId = $operatorData['user_id'] ?? null;
+
+                    // FactoryOrder-ը (մեկ հատ յուրաքանչյուր գործարանի համար)
+                    $factoryOrder = FactoryOrder::firstOrCreate(
+                        [
+                            'order_id' => $order->id,
+                            'factory_id' => $pmpFile->factory_id,
+                        ],
+                        [
+                            'status' => $validatedData['status'] ?? 'pending',
+                            'canceling' => false,
+                            'cancel_date' => null,
+                            'finish_date' => null,
+                            'operator_finish_date' => null,
+                            'admin_confirmation_date' => null,
+                            'operator_id' => $operatorId,
+                        ]
+                    );
+
+                    // եթե արդեն կար FactoryOrder, բայց հիմա ընտրել ենք operator
+                    if ($operatorId && $factoryOrder->operator_id !== $operatorId) {
+                        $factoryOrder->operator_id = $operatorId;
+                        $factoryOrder->save();
+                    }
+
+                    // attach file to factory_order_files pivot
+                    $factoryOrder->files()->attach($pmpFile->id, [
+                        'quantity' => $selectedFile['quantity'],
+                        'material_type' => $pmpFile->material_type,
+                        'thickness' => $pmpFile->thickness,
+                    ]);
+                }
+            }
+
+            // նամակ հաճախորդին
+            $userEmail = User::find($validatedData['user_id'])->email;
+            $orderUrl = route('orders.show', ['id' => $order->id]);
+            Mail::to($userEmail)->send(new OrderCreated($order, $orderUrl));
+
+            return response()->json(
+                [
+                    'message' => 'Order created successfully',
+                    'order' => $order->load([
+                        'orderNumber',
+                        'prefixCode',
+                        'dates',
+                        'factoryOrders.files',
+                        'factoryOrders.operator',
+                        'selectedFiles.pmpFile',
+                    ]),
+                ],
+                201
+            );
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
         }
-
-        $userEmail = User::find($validatedData['user_id'])->email;
-        $orderUrl = route('orders.show', ['id' => $order->id]);
-        Mail::to($userEmail)->send(new OrderCreated($order, $orderUrl));
-
-        return response()->json(
-            [
-                'message' => 'Order created successfully',
-                'order' => $order->load([
-                    'orderNumber',
-                    'prefixCode',
-                    'dates',
-                    'factoryOrders.files',
-                    'selectedFiles.pmpFile',
-                ]),
-            ],
-            201
-        );
-    } catch (\Exception $e) {
-        return response()->json(['error' => $e->getMessage()], 500);
     }
-}
+
 
 
 

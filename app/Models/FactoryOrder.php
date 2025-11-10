@@ -6,7 +6,7 @@ use DateTime;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class FactoryOrder extends Model
 {
@@ -21,6 +21,7 @@ class FactoryOrder extends Model
         'finish_date',
         'operator_finish_date',
         'admin_confirmation_date',
+        'operator_id', // ← ԱՎԵԼԱՑՎԱԾ
     ];
 
     public function order(): BelongsTo
@@ -33,11 +34,16 @@ class FactoryOrder extends Model
         return $this->belongsTo(Factory::class);
     }
 
-    public function files()
+    public function files(): BelongsToMany
     {
         return $this->belongsToMany(PmpFiles::class, 'factory_order_files')
-                    ->withPivot(['quantity', 'material_type', 'thickness'])
-                    ->withTimestamps();
+            ->withPivot(['quantity', 'material_type', 'thickness'])
+            ->withTimestamps();
+    }
+
+    public function operator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'operator_id');
     }
 
     public function getCreatedAtAttribute($value): string

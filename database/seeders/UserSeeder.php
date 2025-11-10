@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Models\Factory;
 use App\Models\Role;
 use Illuminate\Database\Seeder;
 use App\Models\User;
@@ -17,6 +18,11 @@ class UserSeeder extends Seeder
         $bendRole = Role::where('name', 'bend')->first();
         $cattingRole = Role::where('name', 'powder_catting')->first();
         $engineerRole = Role::where('name', 'engineer')->first();
+
+        $factoryBend = Factory::where('name', 'Bend')->first();
+        $factoryLaserCutting = Factory::where('name', 'Laser cutting')->first();
+        $factoryLaser = Factory::where('name', 'Laser')->first();
+        $factoryPowder = Factory::where('name', 'Informal')->first();
 
         User::create([
             'name' => 'Admin User',
@@ -58,6 +64,7 @@ class UserSeeder extends Seeder
             'email' => 'bend@metalworks.am',
             'password' => Hash::make('password'),
             'role_id' => $bendRole->id,
+            'factory_id' => optional($factoryBend)->id,
         ]);
 
         User::create([
@@ -65,6 +72,7 @@ class UserSeeder extends Seeder
             'email' => 'bend2@metalworks.am',
             'password' => Hash::make('password'),
             'role_id' => $bendRole->id,
+            'factory_id' => optional($factoryBend)->id,
         ]);
 
         User::create([
@@ -72,6 +80,7 @@ class UserSeeder extends Seeder
             'email' => 'catting@metalworks.am',
             'password' => Hash::make('password'),
             'role_id' => $cattingRole->id,
+            'factory_id' => optional($factoryPowder)->id,
         ]);
 
         User::create([
@@ -79,6 +88,7 @@ class UserSeeder extends Seeder
             'email' => 'catting2@metalworks.am',
             'password' => Hash::make('password'),
             'role_id' => $cattingRole->id,
+            'factory_id' => optional($factoryPowder)->id,
         ]);
 
         User::create([
@@ -86,6 +96,7 @@ class UserSeeder extends Seeder
             'email' => 'laser@metalworks.am',
             'password' => Hash::make('password'),
             'role_id' => $laserRole->id,
+            'factory_id' => optional($factoryLaserCutting)->id,
         ]);
 
         User::create([
@@ -93,6 +104,7 @@ class UserSeeder extends Seeder
             'email' => 'laser2@metalworks.am',
             'password' => Hash::make('password'),
             'role_id' => $laserRole->id,
+            'factory_id' => optional($factoryLaser)->id,
         ]);
     }
 }

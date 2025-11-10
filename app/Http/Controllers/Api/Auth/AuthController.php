@@ -70,10 +70,14 @@ class AuthController extends Controller
     public function me(Request $request): JsonResponse
     {
         $user = $request->user();
+
         if (!$user) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-        $user->load(['role', 'permissions', 'role.permissions']);
+
+        // добавили factory
+        $user->load(['role', 'permissions', 'role.permissions', 'factory']);
+
         if ($user->role && $user->role->name === 'admin') {
             $permissions = Permission::pluck('slug');
         } else {
@@ -95,6 +99,11 @@ class AuthController extends Controller
             'role'  => $user->role ? [
                 'id'   => $user->role->id,
                 'name' => $user->role->name,
+            ] : null,
+            'factory_id' => $user->factory_id,
+            'factory' => $user->factory ? [
+                'id'   => $user->factory->id,
+                'name' => $user->factory->name,
             ] : null,
             'permissions' => $permissions,
         ], 200);

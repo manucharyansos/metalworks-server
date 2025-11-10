@@ -57,6 +57,12 @@ class User extends Authenticatable
         return $this->belongsTo(Role::class, 'role_id');
     }
 
+    public function factory()
+    {
+        return $this->belongsTo(Factory::class, 'factory_id');
+    }
+
+
 
     public function client(): HasOne
     {

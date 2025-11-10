@@ -23,10 +23,11 @@ class FactoryController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(): JsonResponse
+    public function index()
     {
-        $factory = Factory::all();
-        return response()->json($factory, 200);
+        $factories = Factory::with('operators:id,name,factory_id')->get();
+
+        return response()->json($factories);
     }
 
     /**
@@ -55,23 +56,45 @@ class FactoryController extends Controller
      * Display the specified resource.
      */
 
-     public function show($id): JsonResponse
-     {
-         $factory = Factory::with(['orders' => function ($query) use ($id) {
-             $query->wherePivot('admin_confirmation_date', null)
-                 ->with([
-                     'factoryOrders' => function ($q) use ($id) {
-                         $q->where('factory_id', $id)
-                             ->whereNull('admin_confirmation_date')
-                             ->with('files');
-                     },
-                     'dates',
-                     'creator'
-                 ]);
-         }])->find($id);
+    public function show(Request $request, $id): JsonResponse
+    {
+        $user = $request->user();
 
-         return response()->json($factory);
-     }
+        // Եթե хочешь, կարող ես նաև ստուգում դնել, որ user–ի գործարանը
+        // համընկնի URL–ի factory id–ին.
+        // if ($user->factory_id != $id && $user->role->name !== 'admin') {
+        //     return response()->json(['message' => 'Forbidden'], 403);
+        // }
+
+        $factory = Factory::with(['orders' => function ($query) use ($id, $user) {
+            $query->whereHas('factoryOrders', function ($q) use ($id, $user) {
+                $q->where('factory_id', $id)
+                    ->whereNull('admin_confirmation_date')
+                    ->where(function ($sub) use ($user) {
+                        $sub->whereNull('operator_id')
+                        ->orWhere('operator_id', $user->id);
+                    });
+            })
+                ->with([
+                    'factoryOrders' => function ($q) use ($id, $user) {
+                        $q->where('factory_id', $id)
+                            ->whereNull('admin_confirmation_date')
+                            ->where(function ($sub) use ($user) {
+                                $sub->whereNull('operator_id')
+                                    ->orWhere('operator_id', $user->id);
+                            })
+                            ->with([
+                                'files',
+                                'operator:id,name', // որ անունն էլ ունենանք
+                            ]);
+                    },
+                    'dates',
+                    'creator',
+                ]);
+        }])->find($id);
+
+        return response()->json($factory);
+    }
 
 
 

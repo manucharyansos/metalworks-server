@@ -17,7 +17,7 @@ class PmpController extends Controller
      */
     public function index(): JsonResponse
     {
-        $pmp = Pmp::with('remoteNumber', 'files')->get();
+        $pmp = Pmp::with(['remoteNumber', 'files.factory'])->get();
         return response()->json(['pmp' => $pmp]);
     }
 
@@ -75,7 +75,7 @@ class PmpController extends Controller
             ]);
         }
 
-        return response()->json($pmp->load('remoteNumber'), 201);
+        return response()->json($pmp->load(['remoteNumber', 'files.factory']), 201);
     }
 
     /**
@@ -87,7 +87,9 @@ class PmpController extends Controller
 
         $pmp = Pmp::with([
             'remoteNumber' => fn($q) => $q->where('id', $remote->id),
-            'files'        => fn($q) => $q->where('remote_number_id', $remote->id),
+            'files'        => fn($q) => $q
+                ->where('remote_number_id', $remote->id)
+                ->with('factory'),
         ])->findOrFail($remote->pmp_id);
 
         return response()->json(['pmp' => $pmp]);
@@ -158,7 +160,7 @@ class PmpController extends Controller
             return response()->json(['error' => 'Group parameter is required'], 400);
         }
 
-        $pmp = Pmp::with(['remoteNumber', 'files'])
+        $pmp = Pmp::with(['remoteNumber', 'files.factory'])
             ->where('group', str_pad($group, 3, '0', STR_PAD_LEFT))
             ->first();
 
@@ -172,7 +174,7 @@ class PmpController extends Controller
             return response()->json(['error' => 'Group name is required'], 400);
         }
 
-        $pmp = Pmp::with(['remoteNumber', 'files'])
+        $pmp = Pmp::with(['remoteNumber', 'files.factory'])
             ->where('group_name', $name)
             ->first();
 
@@ -181,7 +183,7 @@ class PmpController extends Controller
 
     public function checkPmpByRemoteNumber(Request $request, $id): JsonResponse
     {
-        $pmp = Pmp::with(['remoteNumber', 'files'])->find($id);
+        $pmp = Pmp::with(['remoteNumber', 'files.factory'])->find($id);
 
         return $pmp
             ? response()->json(['exists' => true, 'pmp' => $pmp])
@@ -212,7 +214,9 @@ class PmpController extends Controller
 
         $pmp = Pmp::with([
             'remoteNumber' => fn($q) => $q->where('id', $remoteNumber->id),
-            'files' => fn($q) => $q->where('remote_number_id', $remoteNumber->id),
+            'files' => fn($q) => $q
+                ->where('remote_number_id', $remoteNumber->id)
+                ->with('factory'),
         ])->findOrFail($remoteNumber->pmp_id);
 
         return response()->json(['pmp' => $pmp]);

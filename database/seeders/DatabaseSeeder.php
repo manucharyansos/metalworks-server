@@ -13,8 +13,8 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             RoleTableSeeder::class,
-            UserSeeder::class,
             FactorySeeder::class,
+            UserSeeder::class,
             FileExtensionSeeder::class,
             LaserFileExtensionSeeder::class,
             BendFileExtensionSeeder::class,

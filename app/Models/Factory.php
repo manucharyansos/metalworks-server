@@ -20,6 +20,11 @@ class Factory extends Model
             ->withTimestamps();
     }
 
+    public function operators()
+    {
+        return $this->hasMany(User::class, 'factory_id');
+    }
+
     public function pmpFiles(): HasMany
     {
         return $this->hasMany(PmpFiles::class, 'factory_id');

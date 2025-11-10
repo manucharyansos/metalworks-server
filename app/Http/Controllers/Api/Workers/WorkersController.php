@@ -31,6 +31,7 @@ class WorkersController extends Controller
             'email'     => ['required','email','unique:users,email'],
             'password'  => ['required','string','min:6','confirmed'],
             'role_id'   => ['required','exists:roles,id'],
+            'factory_id'=> ['nullable','exists:factories,id'],
             'name'      => ['required','string'],
             'type'      => ['required','string'],
             'phone'     => ['required','string'],
@@ -44,6 +45,7 @@ class WorkersController extends Controller
             'email'    => $request->string('email'),
             'password' => Hash::make($request->string('password')),
             'role_id'  => $request->integer('role_id'),
+            'factory_id' => $request->integer('factory_id') ?: null,
         ]);
 
         $clientData = [
@@ -70,6 +72,7 @@ class WorkersController extends Controller
         $request->validate([
             'email'     => ['required','email', Rule::unique('users','email')->ignore($user->id)],
             'role_id'   => ['required','exists:roles,id'],
+            'factory_id'=> ['nullable','exists:factories,id'],
             'name'      => ['required','string'],
             'type'      => ['required','string'],
             'phone'     => ['required','string'],
@@ -84,6 +87,7 @@ class WorkersController extends Controller
             'name'    => $request->string('name'),
             'email'   => $request->string('email'),
             'role_id' => $request->integer('role_id'),
+            'factory_id' => $request->integer('factory_id') ?: null,
         ]);
 
         if ($request->filled('password')) {
