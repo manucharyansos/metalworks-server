@@ -85,11 +85,12 @@ class FactoryController extends Controller
                             })
                             ->with([
                                 'files',
-                                'operator:id,name', // որ անունն էլ ունենանք
+                                'operator:id,name',
                             ]);
                     },
                     'dates',
                     'creator',
+                    'factoryOrders.operator:id,name', 'logs'
                 ]);
         }])->find($id);
 
@@ -148,6 +149,8 @@ class FactoryController extends Controller
             'factory_id' => $validatedData['factory_id'],
         ]);
 
+        $oldStatus = $fo->status; // 👈 պահում ենք հին status–ը
+
         $fo->status                 = $status;
         $fo->canceling              = $factoryOrderData['canceling'] ?? '';
         $fo->cancel_date            = $factoryOrderData['cancel_date'] ?? null;
@@ -161,12 +164,41 @@ class FactoryController extends Controller
 
         $fo->save();
 
+        // 🔹 LOG — factory order status change
+        $user = $request->user();
+        $factoryName = optional($fo->factory)->name ?? ('ID ' . $fo->factory_id);
+
+        \App\Models\OrderLog::create([
+            'order_id' => $order->id,
+            'user_id'  => $user?->id,
+            'action'   => 'factory_order.status_changed',
+            'message'  => sprintf(
+                'Գործարան "%s" կարգավիճակը փոխվել է "%s" → "%s"',
+                $factoryName,
+                $oldStatus ?? '—',
+                $fo->status ?? '—'
+            ),
+            'meta'     => [
+                'factory_id'   => $fo->factory_id,
+                'from_status'  => $oldStatus,
+                'to_status'    => $fo->status,
+            ],
+        ]);
+
         return response()->json(
-            $order->load('orderNumber', 'prefixCode', 'storeLink', 'factories', 'dates'),
+            $order->load(
+                'orderNumber',
+                'prefixCode',
+                'storeLink',
+                'factories',
+                'dates',
+                'factoryOrders.files',
+                'logs.user',
+                'factoryOrders.operator:id,name',
+            ),
             200
         );
     }
-
 
 
 

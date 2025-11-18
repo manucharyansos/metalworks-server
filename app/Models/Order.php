@@ -16,6 +16,11 @@ class Order extends Model
 
     protected $fillable = ['user_id', 'name', 'description', 'status', 'link_existing_files', 'creator_id', 'remote_number_id'];
 
+    public function logs(): HasMany
+    {
+        return $this->hasMany(OrderLog::class)->latest();
+    }
+
     protected $casts = [
         'link_existing_files' => 'boolean',
     ];

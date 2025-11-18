@@ -55,6 +55,9 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::post('orders/update/{order}', [OrderController::class, 'update'])
                 ->name('orders.update');
 
+            Route::post('/factory-orders/{id}/confirm', [OrderController::class, 'confirm']);
+
+
             Route::get('file-extensions', [FileExtensionController::class, 'index']);
             Route::get('file-extensions/create', [FileExtensionController::class, 'create']);
             Route::post('file-extensions', [FileExtensionController::class, 'store']);

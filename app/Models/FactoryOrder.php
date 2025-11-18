@@ -29,10 +29,10 @@ class FactoryOrder extends Model
         return $this->belongsTo(Order::class);
     }
 
-    public function factory(): BelongsTo
-    {
-        return $this->belongsTo(Factory::class);
-    }
+//    public function factory(): BelongsTo
+//    {
+//        return $this->belongsTo(Factory::class);
+//    }
 
     public function files(): BelongsToMany
     {
@@ -44,6 +44,11 @@ class FactoryOrder extends Model
     public function operator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'operator_id');
+    }
+
+    public function factory(): BelongsTo
+    {
+        return $this->belongsTo(Factory::class, 'factory_id');
     }
 
     public function getCreatedAtAttribute($value): string

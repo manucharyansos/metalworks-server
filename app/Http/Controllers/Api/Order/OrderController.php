@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\OrderCreated;
 use App\Models\FileExtension;
 use App\Models\Order;
+use App\Models\OrderLog;
 use App\Models\PrefixCode;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -31,6 +32,9 @@ class OrderController extends Controller
                 'factoryOrders.files',
                 'selectedFiles.pmpFile',
                 'user',
+                'creator:id,name',
+                'logs.user',
+                'factoryOrders.operator:id,name',
             ])->get();
 
             return response()->json(['orders' => $orders], 200);
@@ -118,96 +122,188 @@ class OrderController extends Controller
             'factories',
             'dates',
             'files',
-            'factoryOrders.files'
+            'factoryOrders.files',
+            'creator:id,name',
+            'user',
+            'logs.user',
+            'factoryOrders.operator:id,name',
         ])->findOrFail($id);
 
         return response()->json($order);
     }
 
     public function update(Request $request, $id): JsonResponse
-{
-    try {
-        $validatedData = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'required|string',
-            'status' => 'nullable|string',
-            'factories' => 'required|array|min:1',
-            'factories.*.id' => 'required|exists:factories,id',
-            'store_link.url' => 'nullable|url',
-            'finish_date' => 'nullable|date',
-        ]);
+    {
+        try {
+            $validatedData = $request->validate([
+                'name' => 'required|string|max:255',
+                'description' => 'required|string',
+                'status' => 'nullable|string',
+                'factories' => 'required|array|min:1',
+                'factories.*.id' => 'required|exists:factories,id',
+                'store_link.url' => 'nullable|url',
+                'finish_date' => 'nullable|date',
+            ]);
 
-        $order = Order::findOrFail($id);
-        $order->update([
-            'name' => $validatedData['name'],
-            'description' => $validatedData['description'],
-            'status' => $validatedData['status'] ?? $order->status,
-        ]);
+            /** @var \App\Models\Order $order */
+            $order = Order::findOrFail($id);
 
-        // Handle store_link
-        if (!empty($validatedData['store_link']['url'])) {
-            $order->storeLink()->updateOrCreate(
-                ['order_id' => $order->id],
-                ['url' => $validatedData['store_link']['url']]
+            // ⭐ Հին արժեքներ՝ լոգերի համար
+            $oldStatus      = $order->status;
+            $oldName        = $order->name;
+            $oldDesc        = $order->description;
+            $oldFinishDate  = optional($order->dates)->finish_date;
+            $oldStoreLink   = optional($order->storeLink)->url;
+            $oldFactoryIds  = $order->factories()->pluck('factories.id')->toArray();
+
+            // 1) Հիմնական դաշտեր
+            $order->update([
+                'name'        => $validatedData['name'],
+                'description' => $validatedData['description'],
+                'status'      => $validatedData['status'] ?? $order->status,
+            ]);
+
+            // 2) Store link
+            if (!empty($validatedData['store_link']['url'])) {
+                $order->storeLink()->updateOrCreate(
+                    ['order_id' => $order->id],
+                    ['url' => $validatedData['store_link']['url']]
+                );
+            } else {
+                $order->storeLink()->delete();
+            }
+
+            // 3) Factories + factory_orders
+            if (!empty($validatedData['factories'])) {
+                $factoryIds = array_column($validatedData['factories'], 'id');
+
+                // many-to-many տաբլից sync
+                $order->factories()->sync($factoryIds);
+
+                // FactoryOrder աղյուսակ
+                foreach ($validatedData['factories'] as $factory) {
+                    $order->factoryOrders()->updateOrCreate(
+                        [
+                            'factory_id' => $factory['id'],
+                            'order_id'   => $order->id,
+                        ],
+                        [
+                            'status' => $factory['status'] ?? 'pending',
+                        ]
+                    );
+                }
+            } else {
+                $factoryIds = $oldFactoryIds;
+            }
+
+            // 4) Finish date (OrderDates relation)
+            if (array_key_exists('finish_date', $validatedData)) {
+                if ($validatedData['finish_date']) {
+                    $order->dates()->updateOrCreate(
+                        ['order_id' => $order->id],
+                        ['finish_date' => $validatedData['finish_date']]
+                    );
+                } else {
+                    $order->dates()->delete();
+                }
+            }
+
+            // Թարմ load բոլոր կապերով
+            $order->load(
+                'orderNumber',
+                'prefixCode',
+                'dates',
+                'factoryOrders.factory',
+                'factoryOrders.files',
+                'selectedFiles.pmpFile',
+                'user',
+                'logs.user',
+                'creator:id,name',
+                'factoryOrders.operator:id,name',
+                'storeLink',
+                'factories'
             );
-        } else {
-            $order->storeLink()->delete();
-        }
 
-        // Handle factories
-        if (!empty($validatedData['factories'])) {
-            $factoryIds = array_column($validatedData['factories'], 'id');
-            $order->factories()->sync($factoryIds);
+            // OrderNumber-ը միշտ լինի array տեսքով
+            $order['orderNumber'] = $order->orderNumber
+                ? $order->orderNumber->toArray()
+                : null;
 
-            foreach ($validatedData['factories'] as $factory) {
-                $order->factoryOrders()->updateOrCreate(
-                    ['factory_id' => $factory['id'], 'order_id' => $order->id],
-                    ['status' => $factory['status'] ?? 'pending']
+            // ⭐ LOG — ինչ է փոխվել
+            $user    = $request->user();
+            $changes = [];
+
+            if ($oldName !== $order->name) {
+                $changes[] = 'անվանումը փոխվել է';
+            }
+            if ($oldDesc !== $order->description) {
+                $changes[] = 'նկարագրությունը թարմացվել է';
+            }
+            if ($oldStatus !== $order->status) {
+                $changes[] = sprintf(
+                    'կարգավիճակը "%s" → "%s"',
+                    $oldStatus ?? '—',
+                    $order->status ?? '—'
                 );
             }
+
+            $newFinishDate = optional($order->dates)->finish_date;
+            if ($oldFinishDate != $newFinishDate) {
+                $changes[] = sprintf(
+                    'ավարտի ամսաթիվը "%s" → "%s"',
+                    $oldFinishDate ?? '—',
+                    $newFinishDate ?? '—'
+                );
+            }
+
+            $newStoreLink = optional($order->storeLink)->url;
+            if ($oldStoreLink !== $newStoreLink) {
+                $changes[] = 'արտաքին հղումը փոխվել է';
+            }
+
+            $newFactoryIds = $order->factories()->pluck('factories.id')->toArray();
+            sort($oldFactoryIds);
+            sort($newFactoryIds);
+            if ($oldFactoryIds !== $newFactoryIds) {
+                $changes[] = 'գործարանների ցուցակը թարմացվել է';
+            }
+
+            OrderLog::create([
+                'order_id' => $order->id,
+                'user_id'  => $user?->id,
+                'action'   => 'order.updated',
+                'message'  => $changes
+                    ? 'Պատվերը թարմացվել է (' . implode(', ', $changes) . ')'
+                    : 'Պատվերը թարմացվել է առանց էական փոփոխությունների',
+                'meta'     => [
+                    'from_status'    => $oldStatus,
+                    'to_status'      => $order->status,
+                    'old_finish'     => $oldFinishDate,
+                    'new_finish'     => $newFinishDate,
+                    'old_factories'  => $oldFactoryIds,
+                    'new_factories'  => $newFactoryIds,
+                    'old_store_link' => $oldStoreLink,
+                    'new_store_link' => $newStoreLink,
+                ],
+            ]);
+
+            return response()->json([
+                'order'   => $order,
+                'message' => 'Պատվերը հաջողությամբ թարմացվել է',
+            ], 200);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'message' => 'Վավերացման սխալ',
+                'errors'  => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Սխալ պատվերի թարմացման ընթացքում',
+                'error'   => $e->getMessage(),
+            ], 500);
         }
-
-        // Handle finish_date
-        if (isset($validatedData['finish_date'])) {
-            $order->dates()->updateOrCreate(
-                ['order_id' => $order->id],
-                ['finish_date' => $validatedData['finish_date']]
-            );
-        } else {
-            $order->dates()->delete();
-        }
-
-        // Load relationships
-        $order->load(
-            'orderNumber',
-            'prefixCode',
-            'dates',
-            'factoryOrders.factory',
-            'factoryOrders.files',
-            'selectedFiles.pmpFile',
-            'user'
-        );
-
-        // Ensure orderNumber is always in the response
-        // $orderData = $order->toArray();
-        $order['orderNumber'] = $order->orderNumber ? $order->orderNumber->toArray() : null;
-
-        return response()->json([
-            'order' => $order,
-            'message' => 'Պատվերը հաջողությամբ թարմացվել է',
-        ], 200);
-    } catch (ValidationException $e) {
-        return response()->json([
-            'message' => 'Վավերացման սխալ',
-            'errors' => $e->errors(),
-        ], 422);
-    } catch (\Exception $e) {
-        return response()->json([
-            'message' => 'Սխալ պատվերի թարմացման ընթացքում',
-            'error' => $e->getMessage(),
-        ], 500);
     }
-}
+
 
     public function destroy($id): JsonResponse
     {
