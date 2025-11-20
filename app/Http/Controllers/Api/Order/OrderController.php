@@ -148,7 +148,6 @@ class OrderController extends Controller
             /** @var \App\Models\Order $order */
             $order = Order::findOrFail($id);
 
-            // ⭐ Հին արժեքներ՝ լոգերի համար
             $oldStatus      = $order->status;
             $oldName        = $order->name;
             $oldDesc        = $order->description;
@@ -156,14 +155,12 @@ class OrderController extends Controller
             $oldStoreLink   = optional($order->storeLink)->url;
             $oldFactoryIds  = $order->factories()->pluck('factories.id')->toArray();
 
-            // 1) Հիմնական դաշտեր
             $order->update([
                 'name'        => $validatedData['name'],
                 'description' => $validatedData['description'],
                 'status'      => $validatedData['status'] ?? $order->status,
             ]);
 
-            // 2) Store link
             if (!empty($validatedData['store_link']['url'])) {
                 $order->storeLink()->updateOrCreate(
                     ['order_id' => $order->id],
@@ -173,14 +170,11 @@ class OrderController extends Controller
                 $order->storeLink()->delete();
             }
 
-            // 3) Factories + factory_orders
             if (!empty($validatedData['factories'])) {
                 $factoryIds = array_column($validatedData['factories'], 'id');
 
-                // many-to-many տաբլից sync
                 $order->factories()->sync($factoryIds);
 
-                // FactoryOrder աղյուսակ
                 foreach ($validatedData['factories'] as $factory) {
                     $order->factoryOrders()->updateOrCreate(
                         [

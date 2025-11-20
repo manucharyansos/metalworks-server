@@ -70,11 +70,13 @@ class PmpFilesController extends Controller
             $pmp = Pmp::findOrFail($validated['pmp_id']);
             $remote = RemoteNumber::findOrFail($validated['remote_number_id']);
 
-            if (PmpFiles::where('pmp_id', $pmp->id)
+            if (PmpFiles::where('remote_number_id', $remote->id)
                 ->where('factory_id', $factory->id)
                 ->where('original_name', $originalName)
                 ->exists()) {
-                return response()->json(['error' => 'Այս անունով ֆայլ արդեն գոյություն ունի'], 409);
+                return response()->json([
+                    'error' => 'Ֆայլի այս անունն արդեն օգտագործված է այս գործարանի համար'
+                ], 409);
             }
 
             $path = "MetalWorks/PMP_{$pmp->group}.{$remote->remote_number}/{$factory->value}";

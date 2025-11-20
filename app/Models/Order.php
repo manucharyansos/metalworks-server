@@ -86,4 +86,22 @@ class Order extends Model
     {
         return (new DateTime($value))->format('d/m/Y');
     }
+
+    public function updateStatusIfAllFactoriesAdminConfirmed(): void
+    {
+        $totalFactories = $this->factories()->count();
+        if ($totalFactories === 0) {
+            return;
+        }
+
+        $confirmedFactories = $this->factoryOrders()
+            ->whereNotNull('admin_confirmation_date')
+            ->distinct('factory_id')
+            ->count('factory_id');
+
+        if ($confirmedFactories === $totalFactories && $this->status !== 'finished') {
+            $this->status = 'finished';
+            $this->save();
+        }
+    }
 }

@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\Admin\AdminController;
 use App\Http\Controllers\Api\Auth\AuthController;
 use App\Http\Controllers\Api\Client\ClientController;
 use App\Http\Controllers\Api\Engineer\EngineerController;
+use App\Http\Controllers\Api\Factories\Statusess\FactoryOrderStatusController;
 use App\Http\Controllers\Api\Factory\FactoryController;
 use App\Http\Controllers\Api\File\BendFileExtensionController;
 use App\Http\Controllers\Api\File\FileExtensionController;
@@ -181,6 +182,9 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::get('download/{path}', [FactoryController::class, 'downloadFile'])
                 ->where('path', '.*')
                 ->middleware('permission:factory.download');
+
+            Route::get('/factory-order-actions',   [FactoryOrderStatusController::class, 'actions']);   // modal-ի համար
+            Route::get('/factory-order-filters',   [FactoryOrderStatusController::class, 'filters']);
 
             Route::put('updateOrder/{order}', [FactoryController::class, 'updateOrder'])
                 ->middleware('permission:factory.order_update');

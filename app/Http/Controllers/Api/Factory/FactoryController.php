@@ -240,26 +240,47 @@ class FactoryController extends Controller
 
 
 
-    public function confirmOrderStatus($id): JsonResponse
+    public function confirmOrderStatus(Request $request, $id): JsonResponse
     {
         try {
-            $orderStatus = FactoryOrder::where('order_id', $id)->firstOrFail();
-            $orderStatus->status = 'confirmed';
-            $orderStatus->admin_confirmation_date = now();
-            $orderStatus->save();
+            $factoryId = $request->input('factory_id');
+
+            if (!$factoryId) {
+                return response()->json([
+                    'message' => 'factory_id is required',
+                ], 422);
+            }
+
+            $factoryOrder = FactoryOrder::where('order_id', $id)
+                ->where('factory_id', $factoryId)
+                ->firstOrFail();
+
+            // FactoryOrderStatus-ից վերցնում ենք "confirmed" կոդը (value)
+            $confirmedStatus = FactoryOrderStatus::where('key', 'confirmed')->value('value') ?? 'confirmed';
+
+            $factoryOrder->status = $confirmedStatus;
+            $factoryOrder->admin_confirmation_date = now();
+            $factoryOrder->save();
+
+            $order = $factoryOrder->order;
+            $order->loadMissing('factories', 'factoryOrders');
+            $order->updateStatusIfAllFactoriesAdminConfirmed();
 
             return response()->json([
-                'message' => 'Order status confirmed successfully.',
-                'data' => $orderStatus,
+                'message' => 'Order factory status confirmed successfully.',
+                'data'    => [
+                    'factory_order' => $factoryOrder,
+                    'order'         => $order,
+                ],
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json([
-                'message' => 'Order status not found.',
+                'message' => 'Factory order not found.',
             ], 404);
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'An error occurred while confirming the order status.',
-                'error' => $e->getMessage(),
+                'error'   => $e->getMessage(),
             ], 500);
         }
     }
