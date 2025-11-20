@@ -19,7 +19,7 @@ class DatabaseSeeder extends Seeder
             FileExtensionSeeder::class,
             LaserFileExtensionSeeder::class,
             BendFileExtensionSeeder::class,
-            FactoryOrderStatus::class,
+            FactoryOrderStatusSeeder::class,
             MaterialsSeeder::class,
              ClientSeeder::class,
         ]);

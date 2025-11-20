@@ -15,7 +15,7 @@ class StatusFactory extends Factory
     public function definition(): array
     {
         return [
-            'status' => $this->faker->word, // Adjust this to match your Status model attributes
+            'status' => $this->faker->word,
         ];
     }
 }
