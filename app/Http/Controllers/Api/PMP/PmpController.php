@@ -181,14 +181,43 @@ class PmpController extends Controller
         return response()->json(['exists' => (bool)$pmp, 'pmp' => $pmp]);
     }
 
+//    public function checkPmpByRemoteNumber(Request $request, $id): JsonResponse
+//    {
+//        $pmp = Pmp::with(['remoteNumber', 'files.factory'])->find($id);
+//
+//        return $pmp
+//            ? response()->json(['exists' => true, 'pmp' => $pmp])
+//            : response()->json(['exists' => false, 'message' => 'PMP not found.']);
+//    }
+
     public function checkPmpByRemoteNumber(Request $request, $id): JsonResponse
     {
-        $pmp = Pmp::with(['remoteNumber', 'files.factory'])->find($id);
+        // $id → RemoteNumber-ի ID-ն է
+        $remoteNumber = RemoteNumber::find($id);
 
-        return $pmp
-            ? response()->json(['exists' => true, 'pmp' => $pmp])
-            : response()->json(['exists' => false, 'message' => 'PMP not found.']);
+        if (! $remoteNumber) {
+            return response()->json([
+                'exists'  => false,
+                'message' => 'Remote number not found.',
+            ], 404);
+        }
+
+        $pmp = Pmp::with(['remoteNumber', 'files.factory'])
+            ->find($remoteNumber->pmp_id);
+
+        if (! $pmp) {
+            return response()->json([
+                'exists'  => false,
+                'message' => 'PMP not found.',
+            ], 404);
+        }
+
+        return response()->json([
+            'exists' => true,
+            'pmp'    => $pmp,
+        ]);
     }
+
 
     /**
      * Suggest next free remote number (01..99)
