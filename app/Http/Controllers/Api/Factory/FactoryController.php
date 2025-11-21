@@ -255,7 +255,6 @@ class FactoryController extends Controller
                 ->where('factory_id', $factoryId)
                 ->firstOrFail();
 
-            // FactoryOrderStatus-ից վերցնում ենք "confirmed" կոդը (value)
             $confirmedStatus = FactoryOrderStatus::where('key', 'confirmed')->value('value') ?? 'confirmed';
 
             $factoryOrder->status = $confirmedStatus;

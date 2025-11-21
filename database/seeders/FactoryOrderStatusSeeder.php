@@ -8,17 +8,10 @@ use Illuminate\Database\Seeder;
 class FactoryOrderStatusSeeder extends Seeder
 {
     private const STATUSES = [
-//        [
-//            'key'             => 'no_status',
-//            'name'            => 'Առանց կարգավիճակի',
-//            'value'           => null,
-//            'icon'            => 'Circle',
-//            'color'           => '#9CA3AF',
-//            'requires_reason' => false,
-//        ],
         [
             'key'             => 'confirmation',
-            'name'            => 'Հաստատել',
+            'name'            => 'Կատարել',
+            'status_label'    => 'Կատարվում է',
             'value'           => 'confirmed',
             'icon'            => 'Check',
             'color'           => '#10B981',
@@ -27,6 +20,7 @@ class FactoryOrderStatusSeeder extends Seeder
         [
             'key'             => 'canceling',
             'name'            => 'Մերժել',
+            'status_label'    => 'Մերժված',
             'value'           => 'canceled',
             'icon'            => 'Cross',
             'color'           => '#EF4444',
@@ -35,6 +29,7 @@ class FactoryOrderStatusSeeder extends Seeder
         [
             'key'             => 'changeDate',
             'name'            => 'Կատարման ժամկետի փոխարինում',
+            'status_label'    => 'Ժամկետը փոխված է',
             'value'           => 'date_changed',
             'icon'            => 'Refresh',
             'color'           => '#F59E0B',
@@ -43,6 +38,7 @@ class FactoryOrderStatusSeeder extends Seeder
         [
             'key'             => 'finishing',
             'name'            => 'Ավարտել',
+            'status_label'    => 'Ավարտված',
             'value'           => 'finished',
             'icon'            => 'Check Circle',
             'color'           => '#06B6D4',

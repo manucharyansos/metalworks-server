@@ -12,6 +12,7 @@ class FactoryOrderStatusController extends Controller
     {
         return FactoryOrderStatus::query()
             ->whereNotNull('value')
+            ->orderBy('sort_order')
             ->get()
             ->map(function ($status) {
                 return [
@@ -29,12 +30,11 @@ class FactoryOrderStatusController extends Controller
         $statuses = FactoryOrderStatus::where('is_active', true)
             ->orderBy('sort_order')
             ->get([
-                'id',
                 'key as id',
-                'name as label',
+                'status_label as label',
                 'value',
                 'icon',
-                'color'
+                'color',
             ]);
 
         return response()->json($statuses);

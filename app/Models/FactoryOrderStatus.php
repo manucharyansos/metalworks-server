@@ -9,5 +9,5 @@ class FactoryOrderStatus extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['key', 'name', 'value', 'color', 'icon', 'requires_reason', 'sort_order', 'is_active'];
+    protected $fillable = ['key', 'name', 'status_label', 'value', 'color', 'icon', 'requires_reason', 'sort_order', 'is_active'];
 }

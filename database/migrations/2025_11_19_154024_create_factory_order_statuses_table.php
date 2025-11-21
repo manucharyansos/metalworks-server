@@ -15,6 +15,7 @@ return new class extends Migration
             $table->id();
             $table->string('key')->unique();
             $table->string('name');
+            $table->string('status_label');
             $table->string('value');
             $table->string('color')->default('#6B7280');
             $table->string('icon')->default('•');

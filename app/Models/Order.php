@@ -87,20 +87,30 @@ class Order extends Model
         return (new DateTime($value))->format('d/m/Y');
     }
 
-    public function updateStatusIfAllFactoriesAdminConfirmed(): void
+    public function updateStatusIfAllFactoriesAdminConfirmed()
     {
-        $totalFactories = $this->factories()->count();
-        if ($totalFactories === 0) {
+        $factoryOrders = $this->factoryOrders;
+
+        if ($factoryOrders->isEmpty()) {
             return;
         }
 
-        $confirmedFactories = $this->factoryOrders()
-            ->whereNotNull('admin_confirmation_date')
-            ->distinct('factory_id')
-            ->count('factory_id');
+        $allConfirmed = $factoryOrders->every(function ($fo) {
+            $status = strtolower($fo->status ?? '');
 
-        if ($confirmedFactories === $totalFactories && $this->status !== 'finished') {
-            $this->status = 'finished';
+            // Միայն "Ավարտված" վիճակը + ադմինի հաստատումը
+            $isFinished = in_array($status, ['finished', 'completed', 'done']);
+
+            // Չեղարկվածները չպետք է բացառել, բայց եթե չեղարկված է՝ թող չխանգարի
+            $isCanceled = in_array($status, ['canceled', 'cancelled']);
+
+            // Կարևոր է՝ admin_confirmation_date-ը լինի, և status-ը՝ finished
+            return ($isFinished && !is_null($fo->admin_confirmation_date)) || $isCanceled;
+        });
+
+        if ($allConfirmed) {
+            $this->status = 'completed';
+            $this->completed_at = now();
             $this->save();
         }
     }
