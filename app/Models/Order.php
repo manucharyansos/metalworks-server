@@ -98,13 +98,10 @@ class Order extends Model
         $allConfirmed = $factoryOrders->every(function ($fo) {
             $status = strtolower($fo->status ?? '');
 
-            // Միայն "Ավարտված" վիճակը + ադմինի հաստատումը
             $isFinished = in_array($status, ['finished', 'completed', 'done']);
 
-            // Չեղարկվածները չպետք է բացառել, բայց եթե չեղարկված է՝ թող չխանգարի
             $isCanceled = in_array($status, ['canceled', 'cancelled']);
 
-            // Կարևոր է՝ admin_confirmation_date-ը լինի, և status-ը՝ finished
             return ($isFinished && !is_null($fo->admin_confirmation_date)) || $isCanceled;
         });
 
