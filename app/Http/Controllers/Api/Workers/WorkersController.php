@@ -3,134 +3,108 @@
 namespace App\Http\Controllers\Api\Workers;
 
 use App\Http\Controllers\Controller;
+use App\Http\Resources\WorkerResource;
 use App\Models\User;
+use App\Models\Worker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 
 class WorkersController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(): AnonymousResourceCollection
     {
-        $users = User::whereIn('role_id', [4, 5, 6, 7, 8])
-            ->with('client')
+        $workers = User::with(['worker', 'role'])
+            ->whereHas('role', fn($q) => $q->whereIn('id', [4, 5, 6, 7, 8]))
             ->orderByDesc('id')
             ->get();
 
-        return response()->json([
-            'status'  => true,
-            'message' => 'Workers fetched',
-            'data'    => $users,
-        ]);
+        return WorkerResource::collection($workers);
     }
 
     public function store(Request $request): JsonResponse
     {
-        $request->validate([
-            'email'     => ['required','email','unique:users,email'],
-            'password'  => ['required','string','min:6','confirmed'],
-            'role_id'   => ['required','exists:roles,id'],
-            'factory_id'=> ['nullable','exists:factories,id'],
-            'name'      => ['required','string'],
-            'type'      => ['required','string'],
-            'phone'     => ['required','string'],
-            'last_name' => ['nullable','string'],
-            'second_phone' => ['nullable','string'],
-            'address'   => ['nullable','string'],
+        $validated = $request->validate([
+            'name'         => 'required|string|max:255',
+            'last_name'    => 'nullable|string|max:255',
+            'email'        => 'required|email|unique:users,email',
+            'password'     => 'required|string|min:6|confirmed',
+            'role_id'      => 'required|exists:roles,id',
+            'factory_id'   => 'nullable|exists:factories,id',
+            'phone'        => 'required|string|max:20',
+            'second_phone' => 'nullable|string|max:20',
+            'address'      => 'nullable|string',
         ]);
 
         $user = User::create([
-            'name'     => $request->string('name'),
-            'email'    => $request->string('email'),
-            'password' => Hash::make($request->string('password')),
-            'role_id'  => $request->integer('role_id'),
-            'factory_id' => $request->integer('factory_id') ?: null,
+            'name'       => $validated['name'],
+            'email'      => $validated['email'],
+            'password'   => Hash::make($validated['password']),
+            'role_id'    => $validated['role_id'],
+            'factory_id' => $validated['factory_id'] ?? null,
         ]);
 
-        $clientData = [
-            'type'          => $request->string('type'),
-            'name'          => $request->string('name'),
-            'last_name'     => $request->string('last_name'),
-            'phone'         => $request->string('phone'),
-            'second_phone'  => $request->string('second_phone'),
-            'address'       => $request->string('address'),
-        ];
-        $user->client()->create($clientData);
+        $user->worker()->create([
+            'last_name'    => $validated['last_name'],
+            'phone'        => $validated['phone'],
+            'second_phone' => $validated['second_phone'],
+            'address'      => $validated['address'],
+        ]);
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Worker created',
-            'data' => $user->load('client'),
-        ], 201);
+        return response()->json(new WorkerResource($user->load('worker')), 201);
     }
 
-    public function update(Request $request, $id): JsonResponse
+    public function show(User $worker): WorkerResource
     {
-        $user = User::with('client')->findOrFail($id);
+        $worker->load('worker', 'role');
+        return new WorkerResource($worker);
+    }
 
-        $request->validate([
-            'email'     => ['required','email', Rule::unique('users','email')->ignore($user->id)],
-            'role_id'   => ['required','exists:roles,id'],
-            'factory_id'=> ['nullable','exists:factories,id'],
-            'name'      => ['required','string'],
-            'type'      => ['required','string'],
-            'phone'     => ['required','string'],
-            'last_name' => ['nullable','string'],
-            'second_phone' => ['nullable','string'],
-            'address'   => ['nullable','string'],
-            // optional password change
-            'password'  => ['nullable','string','min:6','confirmed'],
+    public function update(Request $request, User $worker): JsonResponse
+    {
+        $validated = $request->validate([
+            'name'         => 'required|string|max:255',
+            'last_name'    => 'nullable|string|max:255',
+            'email'        => ['required', 'email', Rule::unique('users', 'email')->ignore($worker->id)],
+            'role_id'      => 'required|exists:roles,id',
+            'factory_id'   => 'nullable|exists:factories,id',
+            'phone'        => 'required|string|max:20',
+            'second_phone' => 'nullable|string|max:20',
+            'address'      => 'nullable|string',
+            'password'     => 'nullable|string|min:6|confirmed',
         ]);
 
-        $user->update([
-            'name'    => $request->string('name'),
-            'email'   => $request->string('email'),
-            'role_id' => $request->integer('role_id'),
-            'factory_id' => $request->integer('factory_id') ?: null,
+        $worker->update([
+            'name'       => $validated['name'],
+            'email'      => $validated['email'],
+            'role_id'    => $validated['role_id'],
+            'factory_id' => $validated['factory_id'] ?? null,
         ]);
 
         if ($request->filled('password')) {
-            $user->update([
-                'password' => Hash::make($request->string('password')),
-            ]);
+            $worker->update(['password' => Hash::make($validated['password'])]);
         }
 
-        $clientData = [
-            'type'          => $request->string('type'),
-            'name'          => $request->string('name'),
-            'last_name'     => $request->string('last_name'),
-            'phone'         => $request->string('phone'),
-            'second_phone'  => $request->string('second_phone'),
-            'address'       => $request->string('address'),
-        ];
-
-        $user->client()->updateOrCreate(
-            ['user_id' => $user->id],
-            $clientData
-        );
+        $worker->worker()->updateOrCreate([], [
+            'last_name'    => $validated['last_name'],
+            'phone'        => $validated['phone'],
+            'second_phone' => $validated['second_phone'],
+            'address'      => $validated['address'],
+        ]);
 
         return response()->json([
-            'status' => true,
-            'message' => 'Worker updated',
-            'data' => $user->fresh()->load('client'),
+            'message' => 'Աշխատակիցը հաջողությամբ թարմացվեց',
+            'data'    => new WorkerResource($worker->load('worker'))
         ]);
     }
 
-    public function destroy($id): JsonResponse
+    public function destroy(User $worker): JsonResponse
     {
-        $user = User::with('client')->findOrFail($id);
-        if ($user->client) $user->client->delete();
-        $user->delete();
+        $worker->worker()?->delete();
+        $worker->delete();
 
-        return response()->json([
-            'status' => true,
-            'message' => 'Worker deleted',
-        ]);
-    }
-
-    public function show(string $worker)
-    {
-
+        return response()->json(['message' => 'Աշխատակիցը հաջողությամբ ջնջվեց']);
     }
 }

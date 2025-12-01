@@ -11,120 +11,110 @@ use Illuminate\Http\Request;
 
 class ClientController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
     public function index(): JsonResponse
     {
-        $clients = Client::with(['user:id,name,email'])
-            ->whereIn('type', ['physPerson', 'legalEntity'])
+        $clients = Client::with('user:id,name,email')
+            ->whereRelation('user', 'role_id', 3)
             ->orderByDesc('id')
             ->get();
 
         return ClientResource::collection($clients)->response();
     }
 
-
-    /**
-     * Store a newly created resource in storage.
-     */
-
-
     public function store(Request $request): JsonResponse
     {
-        $validatedUserData = $request->validate([
+        $request->validate([
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:6|confirmed',
+            'type' => 'required|in:physPerson,legalEntity',
         ]);
 
-        $validatedClientData = $this->getArr($request);
+        $clientData = $this->validateClientData($request);
 
         $user = User::create([
-            'name' => $validatedClientData['name'],
-            'email' => $validatedUserData['email'],
-            'password' => bcrypt($validatedUserData['password']),
-            'role_id' => 3
+            'name' => $clientData['name'],
+            'email' => $request->email,
+            'password' => bcrypt($request->password),
+            'role_id' => 3,
         ]);
 
-        $client = $user->client()->create($validatedClientData);
+        $client = $user->client()->create($clientData);
 
-        return response()->json($client, 201);
+        return response()->json(new ClientResource($client->load('user')), 201);
     }
 
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(Client $client): JsonResponse
+    public function show(User $user): JsonResponse
     {
-        return response()->json($client, 200);
-    }
+        $client = $user->client;
 
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, Client $client): JsonResponse
-    {
-        $validatedData = $this->getArr($request);
-
-        // կապած user-ը
-        $user = $client->user;
-
-        if ($user) {
-            $user->update(['name' => $validatedData['name']]);
+        if (!$client) {
+            return response()->json(['message' => 'Հաճախորդը չի գտնվել'], 404);
         }
+
+        return new ClientResource($client->load('user'));
+    }
+
+    public function update(Request $request, User $user): JsonResponse
+    {
+        $client = $user->client;
+
+        if (!$client) {
+            return response()->json(['message' => 'Հաճախորդը չի գտնվել'], 404);
+        }
+
+        $request->validate([
+            'type' => 'required|in:physPerson,legalEntity',
+        ]);
+
+        $validatedData = $this->validateClientData($request);
+
+        $user->update(['name' => $validatedData['name']]);
 
         $client->update($validatedData);
 
         return response()->json([
-            'user'    => $user ? $user->load('client') : null,
-            'client'  => $client,
             'message' => 'Հաճախորդը հաջողությամբ թարմացվեց',
+            'client'  => new ClientResource($client->load('user'))
         ], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(Client $client): JsonResponse
+    public function destroy(User $user): JsonResponse
     {
-        $client->delete();
+        $client = $user->client;
 
-        return response()->json(['message' => 'Client deleted successfully'], 200);
-    }
-
-    /**
-     * @param Request $request
-     * @return array
-     */
-    public function getArr(Request $request): array
-    {
-        $validatedClientData = $request->validate([
-            'type' => 'required|in:physPerson,legalEntity', // Վավերացնում ենք տեսակը
-        ]);
-
-        if ($validatedClientData['type'] === 'physPerson') {
-            $validatedClientData = array_merge($validatedClientData, $request->validate([
-                'name' => 'required|string',
-                'last_name' => 'nullable|string',
-                'phone' => 'required|string',
-                'second_phone' => 'nullable|string',
-                'address' => 'nullable|string',
-            ]));
-        } elseif ($validatedClientData['type'] === 'legalEntity') {
-            $validatedClientData = array_merge($validatedClientData, $request->validate([
-                'name' => 'required|string',
-                'phone' => 'required|string',
-                'address' => 'nullable|string',
-                'company_name' => 'required|string',
-                'AVC' => 'required|string',
-                'accountant' => 'required|string',
-            ]));
+        if (!$client) {
+            return response()->json(['message' => 'Հաճախորդը չի գտնվել'], 404);
         }
 
-        return $validatedClientData;
+        $client->delete();
+        $user->delete();
+
+        return response()->json(['message' => 'Հաճախորդը հաջողությամբ ջնջվեց']);
     }
 
+    private function validateClientData(Request $request): array
+    {
+        $type = $request->type;
+
+        $common = $request->validate([
+            'name'    => 'required|string|max:255',
+            'phone'   => 'required|string|max:20',
+            'address' => 'nullable|string',
+        ]);
+
+        if ($type === 'physPerson') {
+            $specific = $request->validate([
+                'last_name'    => 'nullable|string|max:255',
+                'second_phone' => 'nullable|string|max:20',
+            ]);
+        } else {
+            $specific = $request->validate([
+                'company_name' => 'required|string|max:255',
+                'AVC'          => 'required|string|max:50',
+                'accountant'   => 'required|string|max:255',
+            ]);
+        }
+
+        return array_merge(['type' => $type], $common, $specific);
+    }
 }

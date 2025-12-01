@@ -4,107 +4,107 @@ namespace Database\Seeders;
 
 use App\Models\Factory;
 use App\Models\Role;
-use Illuminate\Database\Seeder;
 use App\Models\User;
+use App\Models\Worker; // ← ավելացրեցինք
+use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
 class UserSeeder extends Seeder
 {
     public function run(): void
     {
-        $adminRole = Role::where('name', 'admin')->first();
-        $managerRole = Role::where('name', 'manager')->first();
-        $laserRole = Role::where('name', 'laser')->first();
-        $bendRole = Role::where('name', 'bend')->first();
-        $cattingRole = Role::where('name', 'powder_catting')->first();
-        $engineerRole = Role::where('name', 'engineer')->first();
+        $roles = [
+            'admin'           => Role::firstWhere('name', 'admin'),
+            'manager'         => Role::firstWhere('name', 'manager'),
+            'engineer'        => Role::firstWhere('name', 'engineer'),
+            'bend'            => Role::firstWhere('name', 'bend'),
+            'laser'           => Role::firstWhere('name', 'laser'),
+            'powder_catting'  => Role::firstWhere('name', 'powder_catting'),
+        ];
 
-        $factoryBend = Factory::where('name', 'Bend')->first();
-        $factoryLaserCutting = Factory::where('name', 'Laser cutting')->first();
-        $factoryLaser = Factory::where('name', 'Laser')->first();
-        $factoryPowder = Factory::where('name', 'Informal')->first();
+        $factories = [
+            'bend'            => Factory::firstWhere('name', 'Bend'),
+            'laser_cutting'   => Factory::firstWhere('name', 'Laser cutting'),
+            'laser'           => Factory::firstWhere('name', 'Laser'),
+            'powder'          => Factory::firstWhere('name', 'Informal'),
+        ];
 
-        User::create([
-            'name' => 'Admin User',
-            'email' => 'admin@example.com',
-            'password' => Hash::make('password'),
-            'role_id' => $adminRole->id,
-        ]);
+        User::updateOrCreate(
+            ['email' => 'admin@example.com'],
+            [
+                'name'     => 'Admin User',
+                'password' => Hash::make('password'),
+                'role_id'  => $roles['admin']?->id,
+            ]
+        );
 
-        User::create([
-            'name' => 'Manager 1',
-            'email' => 'manager@metalworks.am',
-            'password' => Hash::make('password'),
-            'role_id' => $managerRole->id,
-        ]);
+        $managers = [
+            ['Manager 1', 'manager@metalworks.am'],
+            ['Manager 2', 'manager2@metalworks.am'],
+        ];
 
-        User::create([
-            'name' => 'Manager 2',
-            'email' => 'manager2@metalworks.am',
-            'password' => Hash::make('password'),
-            'role_id' => $managerRole->id,
-        ]);
+        foreach ($managers as [$name, $email]) {
+            User::updateOrCreate(
+                ['email' => $email],
+                [
+                    'name'     => $name,
+                    'password' => Hash::make('password'),
+                    'role_id'  => $roles['manager']?->id,
+                ]
+            );
+        }
 
-        User::create([
-            'name' => 'Engineer',
-            'email' => 'engineering@metalworks.am',
-            'password' => Hash::make('password'),
-            'role_id' => $engineerRole->id,
-        ]);
+        $engineers = [
+            ['Հայկ Գրիգորյան', 'engineering@metalworks.am'],
+            ['Անի Հովհաննիսյան', 'engineer2@metalworks.am'],
+        ];
 
-        User::create([
-            'name' => 'Engineer 2',
-            'email' => 'engineer2@metalworks.am',
-            'password' => Hash::make('password'),
-            'role_id' => $engineerRole->id,
-        ]);
+        foreach ($engineers as [$name, $email]) {
+            User::updateOrCreate(
+                ['email' => $email],
+                [
+                    'name'     => $name,
+                    'password' => Hash::make('password'),
+                    'role_id'  => $roles['engineer']?->id,
+                ]
+            );
+        }
 
-        User::create([
-            'name' => 'Bend 1',
-            'email' => 'bend@metalworks.am',
-            'password' => Hash::make('password'),
-            'role_id' => $bendRole->id,
-            'factory_id' => optional($factoryBend)->id,
-        ]);
+        $workers = [
+            ['Աշոտ Մարտիրոսյան', 'bend@metalworks.am', $roles['bend'], $factories['bend'], 'Մարտիրոսյան', '+37498111222'],
+            ['Գոռ Գևորգյան', 'bend2@metalworks.am', $roles['bend'], $factories['bend'], 'Գևորգյան', '+37498122334'],
 
-        User::create([
-            'name' => 'Bend 2',
-            'email' => 'bend2@metalworks.am',
-            'password' => Hash::make('password'),
-            'role_id' => $bendRole->id,
-            'factory_id' => optional($factoryBend)->id,
-        ]);
+            ['Սարգիս Խաչատրյան', 'catting@metalworks.am', $roles['powder_catting'], $factories['powder'], 'Խաչատրյան', '+37477123456'],
+            ['Լևոն Հակոբյան', 'catting2@metalworks.am', $roles['powder_catting'], $factories['powder'], 'Հակոբյան', '+37477134567'],
 
-        User::create([
-            'name' => 'Catting 1',
-            'email' => 'catting@metalworks.am',
-            'password' => Hash::make('password'),
-            'role_id' => $cattingRole->id,
-            'factory_id' => optional($factoryPowder)->id,
-        ]);
+            ['Դավիթ Պետրոսյան', 'laser@metalworks.am', $roles['laser'], $factories['laser_cutting'], 'Պետրոսյան', '+37493111222'],
+            ['Վահե Սարգսյան', 'laser2@metalworks.am', $roles['laser'], $factories['laser_cutting'], 'Սարգսյան', '+37493122334'],
+        ];
 
-        User::create([
-            'name' => 'Catting 2',
-            'email' => 'catting2@metalworks.am',
-            'password' => Hash::make('password'),
-            'role_id' => $cattingRole->id,
-            'factory_id' => optional($factoryPowder)->id,
-        ]);
+        foreach ($workers as $w) {
+            [$name, $email, $role, $factory, $lastName, $phone] = $w;
 
-        User::create([
-            'name' => 'Laser 1',
-            'email' => 'laser@metalworks.am',
-            'password' => Hash::make('password'),
-            'role_id' => $laserRole->id,
-            'factory_id' => optional($factoryLaserCutting)->id,
-        ]);
+            $user = User::updateOrCreate(
+                ['email' => $email],
+                [
+                    'name'       => $name,
+                    'password'   => Hash::make('password'),
+                    'role_id'    => $role?->id,
+                    'factory_id' => $factory?->id,
+                ]
+            );
 
-        User::create([
-            'name' => 'Laser 2',
-            'email' => 'laser2@metalworks.am',
-            'password' => Hash::make('password'),
-            'role_id' => $laserRole->id,
-            'factory_id' => optional($factoryLaserCutting)->id,
-        ]);
+            Worker::updateOrCreate(
+                ['user_id' => $user->id],
+                [
+                    'last_name'    => $lastName,
+                    'phone'        => $phone,
+                    'second_phone' => null,
+                    'address'      => 'Երևան, ' . ($factory?->name ?? 'Անհայտ'),
+                ]
+            );
+        }
+
+        $this->command->info('Հաջողությամբ ստեղծվեցին Admin, Managers, Engineers և Workers (ընդհանուր ' . User::count() . ' օգտատեր)');
     }
 }

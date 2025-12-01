@@ -9,21 +9,30 @@ class ClientResource extends JsonResource
     public function toArray($request)
     {
         return [
-            'id' => $this->id,
-            'name' => $this->name,
-            'phone' => $this->phone,
-            'email' => $this->email,
-            'client' => [
-                'id' => $this->user->id ?? null,
-                'name' => $this->user->name ?? null,
-                'email' => $this->user->email ?? null,
-                'phone' => $this->phone,
-                'second_phone' => $this->second_phone,
-                'address' => $this->address,
-                'company_name' => $this->company_name,
-                'last_name' => $this->last_name,
-                'type' => $this->type,
-            ]
+            'id'            => $this->id,
+            'user_id'       => $this->user_id,
+            'type'          => $this->type,
+            'name'          => $this->name,
+            'phone'         => $this->phone,
+            'address'       => $this->address,
+            'last_name'     => $this->last_name,
+            'second_phone'  => $this->second_phone,
+            'company_name'  => $this->company_name,
+            'AVC'           => $this->AVC,
+            'accountant'    => $this->accountant,
+
+            'user' => $this->whenLoaded('user', fn() => [
+                'id'    => $this->user->id,
+                'name'  => $this->user->name,
+                'email' => $this->user->email,
+            ]),
+
+            'display_name' => $this->type === 'legalEntity'
+                ? ($this->company_name ?: $this->name)
+                : trim($this->name . ' ' . ($this->last_name ?? '')),
+
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
         ];
     }
 }

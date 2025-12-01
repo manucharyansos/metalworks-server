@@ -111,19 +111,30 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::put('/{user}/permissions', [UserPermissionController::class, 'update']);
         });
 
-        Route::group(['prefix' => 'clients'], function () {
+        Route::prefix('clients')->name('clients.')->group(function () {
+
             Route::get('client', [ClientController::class, 'index'])
-                ->middleware('permission:clients.view');
+                ->middleware('permission:clients.view')
+                ->name('index');
+
             Route::post('client', [ClientController::class, 'store'])
-                ->middleware('permission:clients.create');
-            Route::get('client/{client}', [ClientController::class, 'show'])
-                ->middleware('permission:clients.view');
-            Route::put('client/{client}', [ClientController::class, 'update'])
+                ->middleware('permission:clients.create')
+                ->name('store');
+
+            Route::get('client/{user}', [ClientController::class, 'show'])
+                ->middleware('permission:clients.view')
+                ->name('show');
+
+            Route::put('client/{user}', [ClientController::class, 'update'])
+                ->middleware('permission:clients.update')
+                ->name('update');
+
+            Route::patch('client/{user}', [ClientController::class, 'update'])
                 ->middleware('permission:clients.update');
-            Route::patch('client/{client}', [ClientController::class, 'update'])
-                ->middleware('permission:clients.update');
-            Route::delete('client/{client}', [ClientController::class, 'destroy'])
-                ->middleware('permission:clients.delete');
+
+            Route::delete('client/{user}', [ClientController::class, 'destroy'])
+                ->middleware('permission:clients.delete')
+                ->name('destroy');
         });
 
         Route::group(['prefix' => 'workers'], function () {

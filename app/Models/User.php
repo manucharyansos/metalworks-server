@@ -33,8 +33,6 @@ class User extends Authenticatable
     ];
 
 
-    // App/Models/User.php
-
     public function hasPermission(string $slug): bool
     {
         if ($this->role && $this->role->name === 'admin') {
@@ -67,6 +65,11 @@ class User extends Authenticatable
     public function client(): HasOne
     {
         return $this->hasOne(Client::class, 'user_id');
+    }
+
+    public function worker(): HasOne
+    {
+        return $this->hasOne(Worker::class);
     }
 
 

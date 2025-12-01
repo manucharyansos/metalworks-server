@@ -21,7 +21,7 @@ class DatabaseSeeder extends Seeder
             BendFileExtensionSeeder::class,
             FactoryOrderStatusSeeder::class,
             MaterialsSeeder::class,
-             ClientSeeder::class,
+            ClientSeeder::class,
         ]);
     }
 }

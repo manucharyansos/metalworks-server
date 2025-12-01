@@ -8,30 +8,28 @@ class WorkerResource extends JsonResource
 {
     public function toArray($request)
     {
-        $client = $this->client;
-
         return [
-            'id'        => $this->id,
-            'name'      => (string) $this->name,
-            'email'     => (string) $this->email,
+            'id'          => $this->id,
+            'name'        => $this->name,
+            'email'       => $this->email,
+            'role_id'     => $this->role_id,
+            'role'        => $this->role?->name ?? null,
+            'factory_id'  => $this->factory_id,
+            'factory'     => $this->factory?->name ?? null,
 
-            'role'      => $this->relationLoaded('role') && $this->role
-                ? [
-                    'id'   => $this->role->id,
-                    'name' => $this->role->name,
-                ]
-                : null,
+            'worker' => $this->whenLoaded('worker', function () {
+                return [
+                    'last_name'    => $this->worker?->last_name,
+                    'phone'        => $this->worker?->phone,
+                    'second_phone' => $this->worker?->second_phone,
+                    'address'      => $this->worker?->address,
+                ];
+            }),
 
-            'client'    => $client ? [
-                'type'          => (string) $client->type,          // worker | physPerson | legalEntity
-                'last_name'     => (string) ($client->last_name ?? ''),
-                'phone'         => (string) $client->phone,
-                'second_phone'  => (string) ($client->second_phone ?? ''),
-                'address'       => (string) ($client->address ?? ''),
-            ] : null,
+            'created_at' => $this->created_at,
+            'updated_at' => $this->updated_at,
 
-            'created_at'=> optional($this->created_at)->toIso8601String(),
-            'updated_at'=> optional($this->updated_at)->toIso8601String(),
+            'display_name' => trim($this->name . ' ' . ($this->worker?->last_name ?? '')),
         ];
     }
 }
