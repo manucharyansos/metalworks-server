@@ -14,12 +14,15 @@ class ManagerMiddleware
      * @param  \Closure  $next
      * @return mixed
      */
-    public function handle($request, Closure $next)
+    public function handle($request, Closure $next): mixed
     {
-        if (Auth::check() && Auth::user()->role('manager')) {
-            return $next($request);
+        $user = Auth::user();
+        $role = $user->role->name ?? $user->role ?? null;
+
+        if (!$user || $role !== 'manager') {
+            return response()->json(['error' => 'Forbidden'], 403);
         }
 
-        return response()->json(['error' => 'Forbidden'], 403);
+        return $next($request);
     }
 }

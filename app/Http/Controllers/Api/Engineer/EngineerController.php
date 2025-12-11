@@ -42,7 +42,7 @@ class EngineerController extends Controller
                 'factoryOrders.files',
                 'factoryOrders.operator:id,name',
                 'selectedFiles.pmpFile',
-                'user',
+                'client.user',
                 'creator:id,name',
             ])->visibleTo($user);
 
@@ -122,7 +122,6 @@ class EngineerController extends Controller
                 'description' => 'required|string',
                 'name' => 'required|string',
                 'status' => 'nullable|string',
-                'creator_id' => 'required|exists:users,id',
                 'finish_date' => 'required|date',
                 'remote_number_id' => 'nullable|exists:remote_numbers,id',
                 'pmp_id' => 'required|exists:pmps,id',
@@ -136,6 +135,9 @@ class EngineerController extends Controller
                 'factory_operators.*.factory_id' => 'required|exists:factories,id',
                 'factory_operators.*.user_id' => 'required|exists:users,id',
             ]);
+
+            // creator-ը միշտ վերցնում ենք մուտք գործած օգտատերից
+            $validatedData['creator_id'] = $request->user()->id;
 
             // պատվերը
             $order = Order::create($validatedData);
@@ -251,6 +253,8 @@ class EngineerController extends Controller
                         'factoryOrders.files',
                         'factoryOrders.operator',
                         'selectedFiles.pmpFile',
+                        'client.user',
+                        'creator:id,name',
                     ]),
                 ],
                 201
@@ -278,7 +282,7 @@ class EngineerController extends Controller
         $order->load([
             'orderNumber','prefixCode','dates',
             'factoryOrders.factory','factoryOrders.files',
-            'selectedFiles.pmpFile','user',
+            'selectedFiles.pmpFile','user', 'client.user',
         ]);
 
         return response()->json(['order' => $order], 200);
@@ -297,7 +301,7 @@ class EngineerController extends Controller
                 'factoryOrders.factory',
                 'factoryOrders.files',
                 'selectedFiles.pmpFile',
-                'user',
+                'client.user',
             ])->findOrFail($id);
 
             $users = User::select('id', 'name', 'email')->get();
@@ -326,7 +330,6 @@ class EngineerController extends Controller
                 'description' => 'required|string',
                 'name' => 'required|string',
                 'status' => 'nullable|string',
-                'creator_id' => 'required|exists:users,id',
                 'finish_date' => 'required|date',
                 'remote_number_id' => 'nullable|exists:remote_numbers,id',
                 'pmp_id' => 'required|exists:pmps,id',
@@ -337,6 +340,10 @@ class EngineerController extends Controller
             ]);
 
                 $order = Order::findOrFail($id);
+
+                // creator_id-ը չենք փոխում frontend-ից եկած արժեքով
+                $validatedData['creator_id'] = $order->creator_id ?? $request->user()->id;
+
                 $order->update($validatedData);
 
                 $order->dates()->update(['finish_date' => $validatedData['finish_date']]);
@@ -399,6 +406,7 @@ class EngineerController extends Controller
                             'factoryOrders.factory',
                             'factoryOrders.files',
                             'selectedFiles.pmpFile',
+                            'creator:id,name',
                         ]),
                     ],
                     200

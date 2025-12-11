@@ -76,6 +76,10 @@ class Order extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+    public function client(): HasOne
+    {
+        return $this->hasOne(Client::class, 'user_id', 'user_id');
+    }
 
     public function factoryOrders(): HasMany
     {

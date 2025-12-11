@@ -31,7 +31,7 @@ class OrderController extends Controller
                 'factoryOrders.factory',
                 'factoryOrders.files',
                 'selectedFiles.pmpFile',
-                'user',
+                'client.user',
                 'creator:id,name',
                 'logs.user',
                 'factoryOrders.operator:id,name',
@@ -124,7 +124,8 @@ class OrderController extends Controller
             'files',
             'factoryOrders.files',
             'creator:id,name',
-            'user',
+            'client.user',
+            'client',
             'logs.user',
             'factoryOrders.operator:id,name',
         ])->findOrFail($id);
@@ -138,9 +139,10 @@ class OrderController extends Controller
             $validatedData = $request->validate([
                 'name' => 'required|string|max:255',
                 'description' => 'required|string',
-                'status' => 'nullable|string',
+                'status' => 'sometimes|required|string|in:pending,in_progress,completed,cancelled', // ակտիվացրեցինք
                 'factories' => 'required|array|min:1',
                 'factories.*.id' => 'required|exists:factories,id',
+                // 'factories.*.status' => 'sometimes|required|string|in:pending,in_progress,completed', // եթե ուզում ես per-factory status
                 'store_link.url' => 'nullable|url',
                 'finish_date' => 'nullable|date',
             ]);
@@ -148,19 +150,22 @@ class OrderController extends Controller
             /** @var \App\Models\Order $order */
             $order = Order::findOrFail($id);
 
-            $oldStatus      = $order->status;
-            $oldName        = $order->name;
-            $oldDesc        = $order->description;
-            $oldFinishDate  = optional($order->dates)->finish_date;
-            $oldStoreLink   = optional($order->storeLink)->url;
-            $oldFactoryIds  = $order->factories()->pluck('factories.id')->toArray();
+            // Հին արժեքները log-ի համար
+            $oldStatus = $order->status;
+            $oldName = $order->name;
+            $oldDesc = $order->description;
+            $oldFinishDate = optional($order->dates)->finish_date;
+            $oldStoreLink = optional($order -> storeLink)->url;
+            $oldFactoryIds = $order->factories()->pluck('factories.id')->toArray();
 
+            // 1) Հիմնական դաշտերի թարմացում
             $order->update([
-                'name'        => $validatedData['name'],
+                'name' => $validatedData['name'],
                 'description' => $validatedData['description'],
-                'status'      => $validatedData['status'] ?? $order->status,
+                'status' => $validatedData['status'] ?? $order->status, // կարևոր է!
             ]);
 
+            // 2) Store Link
             if (!empty($validatedData['store_link']['url'])) {
                 $order->storeLink()->updateOrCreate(
                     ['order_id' => $order->id],
@@ -170,27 +175,23 @@ class OrderController extends Controller
                 $order->storeLink()->delete();
             }
 
-            if (!empty($validatedData['factories'])) {
-                $factoryIds = array_column($validatedData['factories'], 'id');
+            // 3) Factories + FactoryOrders
+            $factoryIds = collect($validatedData['factories'])->pluck('id')->toArray();
+            $order->factories()->sync($factoryIds);
 
-                $order->factories()->sync($factoryIds);
-
-                foreach ($validatedData['factories'] as $factory) {
-                    $order->factoryOrders()->updateOrCreate(
-                        [
-                            'factory_id' => $factory['id'],
-                            'order_id'   => $order->id,
-                        ],
-                        [
-                            'status' => $factory['status'] ?? 'pending',
-                        ]
-                    );
-                }
-            } else {
-                $factoryIds = $oldFactoryIds;
+            foreach ($validatedData['factories'] as $factory) {
+                $order->factoryOrders()->updateOrCreate(
+                    [
+                        'factory_id' => $factory['id'],
+                        'order_id' => $order->id,
+                    ],
+                    [
+                        // 'status' => $factory['status'] ?? 'pending', // ակտիվացրու եթե պետք է per-factory status
+                    ]
+                );
             }
 
-            // 4) Finish date (OrderDates relation)
+            // 4) Finish date
             if (array_key_exists('finish_date', $validatedData)) {
                 if ($validatedData['finish_date']) {
                     $order->dates()->updateOrCreate(
@@ -202,7 +203,7 @@ class OrderController extends Controller
                 }
             }
 
-            // Թարմ load բոլոր կապերով
+            // Reload relations
             $order->load(
                 'orderNumber',
                 'prefixCode',
@@ -210,7 +211,7 @@ class OrderController extends Controller
                 'factoryOrders.factory',
                 'factoryOrders.files',
                 'selectedFiles.pmpFile',
-                'user',
+                'client.user',
                 'logs.user',
                 'creator:id,name',
                 'factoryOrders.operator:id,name',
@@ -218,13 +219,10 @@ class OrderController extends Controller
                 'factories'
             );
 
-            // OrderNumber-ը միշտ լինի array տեսքով
-            $order['orderNumber'] = $order->orderNumber
-                ? $order->orderNumber->toArray()
-                : null;
+            $order['orderNumber'] = $order->orderNumber?->toArray();
 
-            // ⭐ LOG — ինչ է փոխվել
-            $user    = $request->user();
+            // === LOGIC ՓՈՓՈԽՈՒԹՅՈՒՆՆԵՐԻ ՀԱՄԱՐ ===
+            $user = $request->user();
             $changes = [];
 
             if ($oldName !== $order->name) {
@@ -262,38 +260,41 @@ class OrderController extends Controller
                 $changes[] = 'գործարանների ցուցակը թարմացվել է';
             }
 
+            // Log
             OrderLog::create([
                 'order_id' => $order->id,
-                'user_id'  => $user?->id,
-                'action'   => 'order.updated',
-                'message'  => $changes
+                'user_id' => $user?->id,
+                'action' => 'order.updated',
+                'message' => $changes
                     ? 'Պատվերը թարմացվել է (' . implode(', ', $changes) . ')'
                     : 'Պատվերը թարմացվել է առանց էական փոփոխությունների',
-                'meta'     => [
-                    'from_status'    => $oldStatus,
-                    'to_status'      => $order->status,
-                    'old_finish'     => $oldFinishDate,
-                    'new_finish'     => $newFinishDate,
-                    'old_factories'  => $oldFactoryIds,
-                    'new_factories'  => $newFactoryIds,
+                'meta' => [
+                    'from_status' => $oldStatus,
+                    'to_status' => $order->status,
+                    'old_finish' => $oldFinishDate,
+                    'new_finish' => $newFinishDate,
+                    'old_factories' => $oldFactoryIds,
+                    'new_factories' => $newFactoryIds,
                     'old_store_link' => $oldStoreLink,
                     'new_store_link' => $newStoreLink,
                 ],
             ]);
 
             return response()->json([
-                'order'   => $order,
+                'order' => $order,
                 'message' => 'Պատվերը հաջողությամբ թարմացվել է',
             ], 200);
+
         } catch (ValidationException $e) {
             return response()->json([
                 'message' => 'Վավերացման սխալ',
-                'errors'  => $e->errors(),
+                'errors' => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
+            \Log::error('Order update failed', ['exception' => $e, 'order_id' => $id]);
             return response()->json([
                 'message' => 'Սխալ պատվերի թարմացման ընթացքում',
-                'error'   => $e->getMessage(),
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

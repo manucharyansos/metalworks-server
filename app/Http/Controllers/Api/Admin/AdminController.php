@@ -24,7 +24,9 @@ class AdminController extends Controller
                 'factoryOrders.files',
                 'selectedFiles.pmpFile',
                 'user',
-            ])->where('creator_id', auth()->id());
+                'client.user',   // ensure client relation with user is loaded
+                'creator:id,name',
+            ]);
 
             if ($search) {
                 $query->where(function ($q) use ($search) {

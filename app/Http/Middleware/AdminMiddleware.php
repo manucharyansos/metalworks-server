@@ -16,7 +16,10 @@ class AdminMiddleware
      */
     public function handle($request, Closure $next): mixed
     {
-        if (!Auth::check() && Auth::user()->role !== 'admin') {
+        $user = Auth::user();
+        $role = $user->role->name ?? $user->role ?? null;
+
+        if (!$user || $role !== 'admin') {
             return response()->json(['error' => 'Forbidden'], 403);
         }
 

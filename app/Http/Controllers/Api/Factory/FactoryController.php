@@ -227,12 +227,21 @@ class FactoryController extends Controller
             return response()->json(['message' => 'Invalid factory IDs'], 400);
         }
         $orders = Order::whereHas('factories', function ($query) use ($factoryIdsArray) {
-            $query->whereIn('factories.id', $factoryIdsArray);
-        })
+                $query->whereIn('factories.id', $factoryIdsArray);
+            })
             ->whereDoesntHave('factoryOrder', function ($query) {
                 $query->where('status', 'confirmed');
             })
-            ->with('orderNumber', 'prefixCode', 'storeLink', 'factories', 'files', 'dates', 'user')
+            ->with(
+                'orderNumber',
+                'prefixCode',
+                'storeLink',
+                'factories',
+                'files',
+                'dates',
+                'user',
+                'creator:id,name'
+            )
             ->get();
 
         return response()->json($orders);
@@ -262,7 +271,7 @@ class FactoryController extends Controller
             $factoryOrder->save();
 
             $order = $factoryOrder->order;
-            $order->loadMissing('factories', 'factoryOrders');
+            $order->loadMissing('factories', 'factoryOrders', 'creator:id,name');
             $order->updateStatusIfAllFactoriesAdminConfirmed();
 
             return response()->json([

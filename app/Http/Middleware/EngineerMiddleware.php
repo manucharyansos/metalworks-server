@@ -18,7 +18,10 @@ class EngineerMiddleware
      */
     public function handle($request, Closure $next): mixed
     {
-        if (!Auth::check() && Auth::user()->role !== 'engineer') {
+        $user = Auth::user();
+        $role = $user->role->name ?? $user->role ?? null;
+
+        if (!$user || $role !== 'engineer') {
             return response()->json(['error' => 'Forbidden'], 403);
         }
 
