@@ -172,7 +172,7 @@ class ProfileController extends Controller
         $scope = $request->query('scope', 'current');
         abort_unless(in_array($scope, ['current', 'history'], true), 422, 'Invalid scope');
 
-        $historyStatuses = ['finished', 'completed', 'done', 'canceled', 'cancelled'];
+        $historyStatuses = ['finished', 'completed', 'done', 'confirmed', 'canceled', 'cancelled'];
 
         $query = FactoryOrder::query()
             ->where('factory_id', $user->factory_id)
