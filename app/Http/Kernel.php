@@ -20,6 +20,7 @@ class Kernel extends HttpKernel
         \App\Http\Middleware\SecurityHeaders::class,
         \App\Http\Middleware\PreventRequestsDuringMaintenance::class,
         \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
+        \App\Http\Middleware\RejectDangerousUploads::class,
         \App\Http\Middleware\TrimStrings::class,
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
         \App\Http\Middleware\DetectDeviceMiddleware::class,
@@ -28,7 +29,7 @@ class Kernel extends HttpKernel
     /**
      * The application's route middleware groups.
      *
-     * @var array<string, array<int, class-string|string>>
+     * @var array<string, array<int, class-string|string>
      */
     protected $middlewareGroups = [
         'web' => [
