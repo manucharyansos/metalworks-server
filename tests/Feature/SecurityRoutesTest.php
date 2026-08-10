@@ -35,6 +35,19 @@ class SecurityRoutesTest extends TestCase
         $this->assertRouteUsesMiddleware($export, 'throttle:10,1');
     }
 
+    public function test_factory_file_extension_management_is_admin_only(): void
+    {
+        $index = $this->findRoute('GET', 'api/admin/factory-file-extensions');
+        $store = $this->findRoute('POST', 'api/admin/factory-file-extensions');
+        $update = $this->findRoute('PUT', 'api/admin/factory-file-extensions/{factoryFileExtension}');
+        $delete = $this->findRoute('DELETE', 'api/admin/factory-file-extensions/{factoryFileExtension}');
+
+        foreach ([$index, $store, $update, $delete] as $route) {
+            $this->assertRouteUsesMiddleware($route, 'auth:sanctum');
+            $this->assertRouteUsesMiddleware($route, 'admin');
+        }
+    }
+
     public function test_permission_management_routes_are_admin_only(): void
     {
         $route = $this->findRoute('PUT', 'api/users/{user}/permissions');
