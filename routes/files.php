@@ -3,11 +3,10 @@
 use App\Http\Controllers\Api\File\SecureOrderFileController;
 use App\Http\Controllers\Api\File\SecurePmpFileController;
 use Illuminate\Support\Facades\Route;
-use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
+// RouteServiceProvider already applies the `api` middleware group here,
+// including Sanctum's stateful handling, throttling, bindings, and locale.
 Route::middleware([
-    EnsureFrontendRequestsAreStateful::class,
-    'setlocale',
     'auth:sanctum',
     'detect.device',
 ])->prefix('secure-files')->group(function () {
