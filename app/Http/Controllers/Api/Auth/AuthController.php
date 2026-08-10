@@ -45,18 +45,17 @@ class AuthController extends Controller
             ], 500);
         }
 
+        $validatedData['email'] = Str::lower(trim($validatedData['email']));
         $validatedData['role_id'] = $roleId;
         $validatedData['password'] = Hash::make($validatedData['password']);
 
         $user = User::create($validatedData);
         $user->load('role');
 
-        $accessToken = $user->createToken('auth_token')->plainTextToken;
         RateLimiter::clear($rateLimitKey);
 
         return response()->json([
             'user' => $user,
-            'access_token' => $accessToken,
         ], 201);
     }
 
@@ -120,15 +119,17 @@ class AuthController extends Controller
             'email' => 'required|email',
         ]);
 
+        $email = Str::lower(trim($validated['email']));
+
         try {
-            Password::sendResetLink(['email' => $validated['email']]);
+            Password::sendResetLink(['email' => $email]);
 
             return response()->json([
                 'message' => 'Եթե այդ էլ․ հասցեով օգտատեր գոյություն ունի, գաղտնաբառի վերականգնման հղումը ուղարկվել է։',
             ]);
         } catch (\Throwable $e) {
             Log::error('Password reset link failed', [
-                'email' => $validated['email'],
+                'email' => $email,
                 'exception' => $e,
             ]);
 
@@ -148,7 +149,7 @@ class AuthController extends Controller
 
         $status = Password::reset(
             [
-                'email' => $validated['email'],
+                'email' => Str::lower(trim($validated['email'])),
                 'password' => $validated['password'],
                 'password_confirmation' => $request->input('password_confirmation'),
                 'token' => $validated['token'],
