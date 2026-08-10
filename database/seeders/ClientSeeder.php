@@ -3,6 +3,7 @@
 namespace Database\Seeders;
 
 use App\Models\Client;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -11,6 +12,17 @@ class ClientSeeder extends Seeder
 {
     public function run(): void
     {
+        if (app()->environment('production')) {
+            $this->command?->warn('ClientSeeder skipped in production to avoid creating or resetting sample client credentials.');
+            return;
+        }
+
+        $clientRole = Role::firstWhere('name', 'authenticatedUser');
+        if (!$clientRole) {
+            $this->command?->error('ClientSeeder skipped because authenticatedUser role is missing.');
+            return;
+        }
+
         $clients = [
             [
                 'name'         => 'Արմեն Հովհաննիսյան',
@@ -37,14 +49,13 @@ class ClientSeeder extends Seeder
                 'last_name' => 'Մարտիրոսյան',
             ],
             [
-                'name'    => 'Մարիամ Պետրոսյան',
-                'email'   => 'mariam@client.am',
-                'phone'   => '+37499111222',
-                'address' => 'Երևան, Մաշտոցի 25',
-                'type'    => 'physPerson',
+                'name'      => 'Մարիամ Պետրոսյան',
+                'email'     => 'mariam@client.am',
+                'phone'     => '+37499111222',
+                'address'   => 'Երևան, Մաշտոցի 25',
+                'type'      => 'physPerson',
                 'last_name' => 'Պետրոսյան',
             ],
-
             [
                 'name'         => 'Գևորգ Սարգսյան',
                 'email'        => 'info@haytech.am',
@@ -83,7 +94,7 @@ class ClientSeeder extends Seeder
                 [
                     'name'     => $data['name'],
                     'password' => Hash::make('password'),
-                    'role_id'  => 3,
+                    'role_id'  => $clientRole->id,
                 ]
             );
 
@@ -106,6 +117,6 @@ class ClientSeeder extends Seeder
             );
         }
 
-        $this->command->info('Հաջողությամբ ստեղծվեց ' . count($clients) . ' հաճախորդ (ֆիզ. + իրավաբ.)');
+        $this->command?->info('Հաջողությամբ ստեղծվեց ' . count($clients) . ' հաճախորդ (ֆիզ. + իրավաբ.)');
     }
 }
