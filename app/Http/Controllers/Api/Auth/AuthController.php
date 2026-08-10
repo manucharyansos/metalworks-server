@@ -13,16 +13,27 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
     public function register(Request $request): JsonResponse
     {
+        $rateLimitKey = 'register|' . $request->ip();
+        if (RateLimiter::tooManyAttempts($rateLimitKey, 5)) {
+            return response()->json([
+                'message' => 'Too many registration attempts. Please try again later.',
+                'retry_after' => RateLimiter::availableIn($rateLimitKey),
+            ], 429);
+        }
+
+        RateLimiter::hit($rateLimitKey, 600);
+
         $validatedData = $request->validate([
             'name' => 'required|min:3|max:255',
             'email' => 'required|email|unique:users',
-            'password' => 'required|min:6|confirmed',
+            'password' => 'required|string|min:8|confirmed',
         ]);
 
         $roleId = Role::where('name', 'authenticatedUser')->value('id');
@@ -41,6 +52,7 @@ class AuthController extends Controller
         $user->load('role');
 
         $accessToken = $user->createToken('auth_token')->plainTextToken;
+        RateLimiter::clear($rateLimitKey);
 
         return response()->json([
             'user' => $user,
@@ -56,21 +68,34 @@ class AuthController extends Controller
             'remember' => 'nullable|boolean',
         ]);
 
+        $normalizedEmail = Str::lower(trim($validated['email']));
+        $rateLimitKey = 'login|' . hash('sha256', $normalizedEmail . '|' . $request->ip());
+
+        if (RateLimiter::tooManyAttempts($rateLimitKey, 5)) {
+            return response()->json([
+                'error' => 'Too many login attempts. Please try again later.',
+                'retry_after' => RateLimiter::availableIn($rateLimitKey),
+            ], 429);
+        }
+
         $credentials = [
-            'email' => $validated['email'],
+            'email' => $normalizedEmail,
             'password' => $validated['password'],
         ];
 
         try {
             if (!Auth::attempt($credentials, (bool) ($validated['remember'] ?? false))) {
+                RateLimiter::hit($rateLimitKey, 60);
                 return response()->json(['error' => 'Invalid credentials'], 401);
             }
+
+            RateLimiter::clear($rateLimitKey);
 
             if ($request->hasSession()) {
                 $request->session()->regenerate();
             }
 
-            $user = User::with('role')->where('email', $validated['email'])->firstOrFail();
+            $user = User::with('role')->where('email', $normalizedEmail)->firstOrFail();
             $accessToken = $user->createToken('auth_token')->plainTextToken;
 
             return response()->json([
@@ -79,7 +104,7 @@ class AuthController extends Controller
             ]);
         } catch (\Throwable $e) {
             Log::error('Login failed', [
-                'email' => $validated['email'],
+                'email' => $normalizedEmail,
                 'exception' => $e,
             ]);
 
