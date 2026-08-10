@@ -19,11 +19,16 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class FactoryController extends Controller
 {
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $factories = Factory::with('operators:id,name,factory_id')->get();
+        $user = $request->user();
+        $query = Factory::with('operators:id,name,factory_id');
 
-        return response()->json($factories);
+        if ($user?->factory_id && $user->role?->name !== 'admin') {
+            $query->whereKey($user->factory_id);
+        }
+
+        return response()->json($query->get());
     }
 
     public function create()
@@ -182,6 +187,16 @@ class FactoryController extends Controller
             'factory_id' => $factoryId,
         ]);
 
+        if (
+            $user?->factory_id &&
+            $user->role?->name !== 'admin' &&
+            $fo->exists &&
+            $fo->operator_id &&
+            (int) $fo->operator_id !== (int) $user->id
+        ) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $oldStatus = $fo->status;
 
         $fo->status = $status;
@@ -276,6 +291,19 @@ class FactoryController extends Controller
         $orders = Order::whereHas('factories', function ($query) use ($factoryIdsArray) {
             $query->whereIn('factories.id', $factoryIdsArray);
         })
+            ->when(
+                $user->factory_id && $user->role?->name !== 'admin',
+                function ($query) use ($user) {
+                    $query->whereHas('factoryOrders', function ($factoryOrderQuery) use ($user) {
+                        $factoryOrderQuery
+                            ->where('factory_id', $user->factory_id)
+                            ->where(function ($operatorQuery) use ($user) {
+                                $operatorQuery->whereNull('operator_id')
+                                    ->orWhere('operator_id', $user->id);
+                            });
+                    });
+                }
+            )
             ->whereDoesntHave('factoryOrders', function ($query) {
                 $query->where('status', 'confirmed');
             })
@@ -400,9 +428,16 @@ class FactoryController extends Controller
                 return $decodedPath;
             }
 
-            return (int) $user->factory_id === (int) optional($directFactoryFile->factoryOrder)->factory_id
-                ? $decodedPath
-                : null;
+            $factoryOrder = $directFactoryFile->factoryOrder;
+            if (!$factoryOrder || (int) $user->factory_id !== (int) $factoryOrder->factory_id) {
+                return null;
+            }
+
+            if ($factoryOrder->operator_id && (int) $factoryOrder->operator_id !== (int) $user->id) {
+                return null;
+            }
+
+            return $decodedPath;
         }
 
         $pmpFile = PmpFiles::where('path', $decodedPath)->first();
@@ -413,6 +448,10 @@ class FactoryController extends Controller
 
             $belongsToUsersFactory = FactoryOrder::query()
                 ->where('factory_id', $user->factory_id)
+                ->where(function ($query) use ($user) {
+                    $query->whereNull('operator_id')
+                        ->orWhere('operator_id', $user->id);
+                })
                 ->whereHas('files', function ($query) use ($pmpFile) {
                     $query->whereKey($pmpFile->id);
                 })
