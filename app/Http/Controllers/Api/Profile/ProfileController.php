@@ -113,8 +113,14 @@ class ProfileController extends Controller
             'password' => $validated['password'],
         ]);
 
-        // A password change invalidates existing personal access tokens on other devices.
-        $user->tokens()->delete();
+        // Revoke other API sessions while keeping this request valid long enough
+        // for the client to perform its normal logout flow.
+        $currentToken = $user->currentAccessToken();
+        if ($currentToken) {
+            $user->tokens()->where('id', '!=', $currentToken->id)->delete();
+        } else {
+            $user->tokens()->delete();
+        }
 
         return response()->json([
             'message' => 'Գաղտնաբառը հաջողությամբ փոխվել է։ Խնդրում ենք նորից մուտք գործել։',
@@ -169,7 +175,7 @@ class ProfileController extends Controller
                 'order.orderNumber',
                 'order.prefixCode',
                 'order.dates',
-                'order.client.user:id,name,email',
+                'order.client.user:id,name',
             ])
             ->latest('id');
 
