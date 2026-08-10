@@ -7,64 +7,49 @@ use App\Models\Factory;
 use App\Models\FactoryOrder;
 use App\Models\FactoryOrderFile;
 use App\Models\FactoryOrderStatus;
-use App\Models\File;
 use App\Models\Order;
-use App\Models\PmpFiles;
-use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class FactoryController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
+    public function index(): JsonResponse
     {
         $factories = Factory::with('operators:id,name,factory_id')->get();
 
         return response()->json($factories);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
         //
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request): JsonResponse
     {
-        $request->validate([
-            'name' => 'required|unique:roles|max:255',
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255', Rule::unique('factories', 'name')],
         ]);
+
         $factory = Factory::create([
-            'name' => $request->name,
+            'name' => $validated['name'],
         ]);
+
         return response()->json($factory, 201);
     }
-
-    /**
-     * Display the specified resource.
-     */
 
     public function show(Request $request, $id): JsonResponse
     {
         $user = $request->user();
 
-        // Եթե хочешь, կարող ես նաև ստուգում դնել, որ user–ի գործարանը
-        // համընկնի URL–ի factory id–ին.
-        // if ($user->factory_id != $id && $user->role->name !== 'admin') {
-        //     return response()->json(['message' => 'Forbidden'], 403);
-        // }
+        if ($user?->factory_id && (int) $user->factory_id !== (int) $id && $user->role?->name !== 'admin') {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
 
         $factory = Factory::with(['orders' => function ($query) use ($id, $user) {
             $query->whereHas('factoryOrders', function ($q) use ($id, $user) {
@@ -72,7 +57,7 @@ class FactoryController extends Controller
                     ->whereNull('admin_confirmation_date')
                     ->where(function ($sub) use ($user) {
                         $sub->whereNull('operator_id')
-                        ->orWhere('operator_id', $user->id);
+                            ->orWhere('operator_id', $user->id);
                     });
             })
                 ->with([
@@ -90,38 +75,38 @@ class FactoryController extends Controller
                     },
                     'dates',
                     'creator',
-                    'factoryOrders.operator:id,name', 'logs'
+                    'factoryOrders.operator:id,name',
+                    'logs',
                 ]);
         }])->find($id);
+
+        if (!$factory) {
+            return response()->json(['message' => 'Factory not found'], 404);
+        }
 
         return response()->json($factory);
     }
 
-
-
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit(string $id)
     {
         //
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, string $id): JsonResponse
     {
-        $request->validate([
-            'name' => 'required|unique:roles,name,' . $id . '|max:255',
-        ]);
         $factory = Factory::find($id);
         if (!$factory) {
             return response()->json(['message' => 'Factory not found'], 404);
         }
-        $factory->update([
-            'name' => $request->name,
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255', Rule::unique('factories', 'name')->ignore($factory->id)],
         ]);
+
+        $factory->update([
+            'name' => $validated['name'],
+        ]);
+
         return response()->json($factory, 200);
     }
 
@@ -132,56 +117,67 @@ class FactoryController extends Controller
             'factory_order.status' => 'nullable|string',
             'factory_order.canceling' => 'nullable|string',
             'factory_order.cancel_date' => 'nullable|date',
+            'factory_order.finish_date' => 'nullable|date',
             'factory_order.operator_finish_date' => 'nullable|date',
             'factory_order.admin_confirmation_date' => 'nullable|date',
         ]);
+
+        $user = $request->user();
+        $factoryId = (int) $validatedData['factory_id'];
+
+        if ($user?->factory_id && (int) $user->factory_id !== $factoryId && $user->role?->name !== 'admin') {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
 
         $order = Order::find($id);
         if (!$order) {
             return response()->json(['error' => 'Order not found'], 404);
         }
 
+        $belongsToOrder = $order->factories()->where('factories.id', $factoryId)->exists();
+        if (!$belongsToOrder) {
+            return response()->json(['message' => 'Factory is not assigned to this order'], 422);
+        }
+
         $factoryOrderData = $request->input('factory_order', []);
         $status = $factoryOrderData['status'] ?? null;
 
         $fo = FactoryOrder::firstOrNew([
-            'order_id'   => $order->id,
-            'factory_id' => $validatedData['factory_id'],
+            'order_id' => $order->id,
+            'factory_id' => $factoryId,
         ]);
 
-        $oldStatus = $fo->status; // 👈 պահում ենք հին status–ը
+        $oldStatus = $fo->status;
 
-        $fo->status                 = $status;
-        $fo->canceling              = $factoryOrderData['canceling'] ?? '';
-        $fo->cancel_date            = $factoryOrderData['cancel_date'] ?? null;
-        $fo->finish_date            = $factoryOrderData['finish_date'] ?? null;
-        $fo->operator_finish_date   = $factoryOrderData['operator_finish_date'] ?? null;
-        $fo->admin_confirmation_date= $factoryOrderData['admin_confirmation_date'] ?? null;
+        $fo->status = $status;
+        $fo->canceling = $factoryOrderData['canceling'] ?? '';
+        $fo->cancel_date = $factoryOrderData['cancel_date'] ?? null;
+        $fo->finish_date = $factoryOrderData['finish_date'] ?? null;
+        $fo->operator_finish_date = $factoryOrderData['operator_finish_date'] ?? null;
+        $fo->admin_confirmation_date = $factoryOrderData['admin_confirmation_date'] ?? null;
 
         if (!$fo->operator_id && $status && $status !== 'pending') {
-            $fo->operator_id = $request->user()->id;
+            $fo->operator_id = $user->id;
         }
 
         $fo->save();
 
-        // 🔹 LOG — factory order status change
-        $user = $request->user();
         $factoryName = optional($fo->factory)->name ?? ('ID ' . $fo->factory_id);
 
         \App\Models\OrderLog::create([
             'order_id' => $order->id,
-            'user_id'  => $user?->id,
-            'action'   => 'factory_order.status_changed',
-            'message'  => sprintf(
+            'user_id' => $user?->id,
+            'action' => 'factory_order.status_changed',
+            'message' => sprintf(
                 'Գործարան "%s" կարգավիճակը փոխվել է "%s" → "%s"',
                 $factoryName,
                 $oldStatus ?? '—',
                 $fo->status ?? '—'
             ),
-            'meta'     => [
-                'factory_id'   => $fo->factory_id,
-                'from_status'  => $oldStatus,
-                'to_status'    => $fo->status,
+            'meta' => [
+                'factory_id' => $fo->factory_id,
+                'from_status' => $oldStatus,
+                'to_status' => $fo->status,
             ],
         ]);
 
@@ -194,25 +190,21 @@ class FactoryController extends Controller
                 'dates',
                 'factoryOrders.files',
                 'logs.user',
-                'factoryOrders.operator:id,name',
+                'factoryOrders.operator:id,name'
             ),
             200
         );
     }
 
-
-
-
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(string $id): JsonResponse
     {
         $factory = Factory::find($id);
         if (!$factory) {
             return response()->json(['message' => 'Factory not found'], 404);
         }
+
         $factory->delete();
+
         return response()->json(null, 204);
     }
 
@@ -222,13 +214,24 @@ class FactoryController extends Controller
         if (!$factoryIds) {
             return response()->json(['message' => 'Factory IDs are required'], 400);
         }
-        $factoryIdsArray = explode(',', $factoryIds);
+
+        $factoryIdsArray = array_values(array_filter(array_map('intval', explode(',', $factoryIds))));
         if (empty($factoryIdsArray)) {
             return response()->json(['message' => 'Invalid factory IDs'], 400);
         }
+
+        $user = $request->user();
+        if ($user?->factory_id && $user->role?->name !== 'admin') {
+            foreach ($factoryIdsArray as $factoryId) {
+                if ((int) $user->factory_id !== $factoryId) {
+                    return response()->json(['message' => 'Forbidden'], 403);
+                }
+            }
+        }
+
         $orders = Order::whereHas('factories', function ($query) use ($factoryIdsArray) {
-                $query->whereIn('factories.id', $factoryIdsArray);
-            })
+            $query->whereIn('factories.id', $factoryIdsArray);
+        })
             ->whereDoesntHave('factoryOrder', function ($query) {
                 $query->where('status', 'confirmed');
             })
@@ -247,17 +250,13 @@ class FactoryController extends Controller
         return response()->json($orders);
     }
 
-
-
     public function confirmOrderStatus(Request $request, $id): JsonResponse
     {
         try {
             $factoryId = $request->input('factory_id');
 
             if (!$factoryId) {
-                return response()->json([
-                    'message' => 'factory_id is required',
-                ], 422);
+                return response()->json(['message' => 'factory_id is required'], 422);
             }
 
             $factoryOrder = FactoryOrder::where('order_id', $id)
@@ -276,83 +275,86 @@ class FactoryController extends Controller
 
             return response()->json([
                 'message' => 'Order factory status confirmed successfully.',
-                'data'    => [
+                'data' => [
                     'factory_order' => $factoryOrder,
-                    'order'         => $order,
+                    'order' => $order,
                 ],
             ], 200);
         } catch (ModelNotFoundException $e) {
-            return response()->json([
-                'message' => 'Factory order not found.',
-            ], 404);
-        } catch (\Exception $e) {
+            return response()->json(['message' => 'Factory order not found.'], 404);
+        } catch (\Throwable $e) {
+            Log::error('Factory order confirmation failed', [
+                'order_id' => $id,
+                'factory_id' => $request->input('factory_id'),
+                'exception' => $e,
+            ]);
+
             return response()->json([
                 'message' => 'An error occurred while confirming the order status.',
-                'error'   => $e->getMessage(),
             ], 500);
         }
     }
 
-    public function getFile($filePath): JsonResponse
+    public function getFile(Request $request, $filePath): JsonResponse
     {
-        $decodedPath = urldecode($filePath);
-        if (!Storage::disk('public')->exists($decodedPath)) {
-            return response()->json(['error' => 'File not found'], 404);
+        $decodedPath = $this->authorizeFilePath($request, $filePath);
+        if (!$decodedPath) {
+            return response()->json(['error' => 'File not found or access denied'], 404);
         }
+
         $fileContent = Storage::disk('public')->get($decodedPath);
         $originalName = basename($decodedPath);
         $fileSize = Storage::disk('public')->size($decodedPath);
         $mimeType = Storage::disk('public')->mimeType($decodedPath);
-
-        $base64Content = base64_encode($fileContent);
 
         return response()->json([
             'path' => $decodedPath,
             'original_name' => $originalName,
             'file_size' => $fileSize,
             'mime_type' => $mimeType,
-            'content' => $base64Content,
+            'content' => base64_encode($fileContent),
         ], 200);
     }
 
-//    public function getFile($filePath): JsonResponse
-//    {
-//        $decodedPath = urldecode($filePath);
-//
-//        $file = PmpFiles::where('path', $decodedPath)->first();
-//
-//        if (!$file || !Storage::disk('public')->exists($decodedPath)) {
-//            return response()->json(['error' => 'File not found'], 404);
-//        }
-//
-//        $fileContent = Storage::disk('public')->get($decodedPath);
-//        $base64Content = base64_encode($fileContent);
-//
-//        return response()->json([
-//            'id' => $file->id,
-//            'pmp_id' => $file->pmp_id,
-//            'remote_number_id' => $file->remote_number_id,
-//            'factory_id' => $file->factory_id,
-//            'path' => $decodedPath,
-//            'original_name' => $file->original_name,
-//            'quantity' => $file->quantity,
-//            'material_type' => $file->material_type,
-//            'thickness' => $file->thickness,
-//            'file_size' => Storage::disk('public')->size($decodedPath),
-//            'mime_type' => Storage::disk('public')->mimeType($decodedPath),
-//            'content' => $base64Content,
-//        ], 200);
-//    }
-
-
-    public function downloadFile($filePath): BinaryFileResponse|JsonResponse
+    public function downloadFile(Request $request, $filePath): BinaryFileResponse|JsonResponse
     {
-        $decodedPath = urldecode($filePath);
-        if (!Storage::disk('public')->exists($decodedPath)) {
-            return response()->json(['error' => 'File not found'], 404);
+        $decodedPath = $this->authorizeFilePath($request, $filePath);
+        if (!$decodedPath) {
+            return response()->json(['error' => 'File not found or access denied'], 404);
         }
-        $fullPath = storage_path("app/public/{$decodedPath}");
+
+        $fullPath = Storage::disk('public')->path($decodedPath);
+
         return response()->download($fullPath, basename($decodedPath));
     }
 
+    private function authorizeFilePath(Request $request, string $filePath): ?string
+    {
+        $decodedPath = ltrim(str_replace('\\', '/', urldecode($filePath)), '/');
+
+        if ($decodedPath === '' || str_contains($decodedPath, '../') || $decodedPath === '..') {
+            return null;
+        }
+
+        if (!Storage::disk('public')->exists($decodedPath)) {
+            return null;
+        }
+
+        $user = $request->user();
+        $file = FactoryOrderFile::with('factoryOrder')
+            ->where('path', $decodedPath)
+            ->first();
+
+        if (!$file) {
+            return $user?->role?->name === 'admin' ? $decodedPath : null;
+        }
+
+        if ($user?->factory_id && $user->role?->name !== 'admin') {
+            if ((int) $user->factory_id !== (int) optional($file->factoryOrder)->factory_id) {
+                return null;
+            }
+        }
+
+        return $decodedPath;
+    }
 }
