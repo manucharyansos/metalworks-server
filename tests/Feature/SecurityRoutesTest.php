@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Http\UploadedFile;
 use Illuminate\Routing\Route as LaravelRoute;
 use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
@@ -45,6 +46,25 @@ class SecurityRoutesTest extends TestCase
 
         $this->assertRouteUsesMiddleware($route, 'auth:sanctum');
         $this->assertRouteUsesMiddleware($route, 'permission:factory.download');
+    }
+
+    public function test_dangerous_uploads_are_rejected_before_controller_logic(): void
+    {
+        $response = $this
+            ->withHeader('Accept', 'application/json')
+            ->post('/api/login', [
+                'email' => 'test@example.com',
+                'password' => 'not-used',
+                'payload' => UploadedFile::fake()->create(
+                    'shell.php',
+                    1,
+                    'application/x-httpd-php'
+                ),
+            ]);
+
+        $response
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('files');
     }
 
     private function findRoute(string $method, string $uri): LaravelRoute
