@@ -30,6 +30,7 @@ class FactoryFileExtensionController extends Controller
     public function store(Request $request): JsonResponse
     {
         $this->normalizeExtension($request);
+        $factoryId = (int) $request->input('factory_id');
 
         $validated = $request->validate([
             'factory_id' => ['required', 'integer', 'exists:factories,id'],
@@ -39,7 +40,7 @@ class FactoryFileExtensionController extends Controller
                 'max:20',
                 'regex:/^[a-z0-9][a-z0-9._+\-]*$/i',
                 Rule::unique('factory_file_extensions', 'extension')
-                    ->where(fn ($query) => $query->where('factory_id', $request->integer('factory_id'))),
+                    ->where(fn ($query) => $query->where('factory_id', $factoryId)),
             ],
         ]);
 
