@@ -9,12 +9,26 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Validation\ValidationException;
 
 class Order extends Model
 {
     use HasFactory;
 
     protected $fillable = ['user_id', 'name', 'description', 'status', 'link_existing_files', 'creator_id', 'remote_number_id'];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Order $order): void {
+            $order->assertCustomerUser();
+        });
+
+        static::updating(function (Order $order): void {
+            if ($order->isDirty('user_id')) {
+                $order->assertCustomerUser();
+            }
+        });
+    }
 
     public function logs(): HasMany
     {
@@ -114,6 +128,20 @@ class Order extends Model
             $this->status = 'completed';
             $this->completed_at = now();
             $this->save();
+        }
+    }
+
+    private function assertCustomerUser(): void
+    {
+        $isCustomer = User::query()
+            ->whereKey($this->user_id)
+            ->whereHas('role', fn ($query) => $query->where('name', 'authenticatedUser'))
+            ->exists();
+
+        if (!$isCustomer) {
+            throw ValidationException::withMessages([
+                'user_id' => ['Պատվերի հաճախորդը պետք է լինի գրանցված հաճախորդի հաշիվ։'],
+            ]);
         }
     }
 }
