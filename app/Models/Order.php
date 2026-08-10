@@ -24,6 +24,7 @@ class Order extends Model
     protected $casts = [
         'link_existing_files' => 'boolean',
     ];
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'creator_id');
@@ -76,6 +77,7 @@ class Order extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+
     public function client(): HasOne
     {
         return $this->hasOne(Client::class, 'user_id', 'user_id');
@@ -91,7 +93,7 @@ class Order extends Model
         return (new DateTime($value))->format('d/m/Y');
     }
 
-    public function updateStatusIfAllFactoriesAdminConfirmed()
+    public function updateStatusIfAllFactoriesAdminConfirmed(): void
     {
         $factoryOrders = $this->factoryOrders;
 
@@ -102,9 +104,8 @@ class Order extends Model
         $allConfirmed = $factoryOrders->every(function ($fo) {
             $status = strtolower($fo->status ?? '');
 
-            $isFinished = in_array($status, ['finished', 'completed', 'done']);
-
-            $isCanceled = in_array($status, ['canceled', 'cancelled']);
+            $isFinished = in_array($status, ['finished', 'completed', 'done', 'confirmed'], true);
+            $isCanceled = in_array($status, ['canceled', 'cancelled'], true);
 
             return ($isFinished && !is_null($fo->admin_confirmation_date)) || $isCanceled;
         });
