@@ -20,6 +20,17 @@ class SecurityRoutesTest extends TestCase
         $this->assertRouteUsesMiddleware($legacyPath, 'auth:sanctum');
     }
 
+    public function test_admin_operations_dashboard_routes_are_admin_only(): void
+    {
+        $dashboard = $this->findRoute('GET', 'api/admin/dashboard');
+        $orders = $this->findRoute('GET', 'api/admin/dashboard/orders');
+
+        foreach ([$dashboard, $orders] as $route) {
+            $this->assertRouteUsesMiddleware($route, 'auth:sanctum');
+            $this->assertRouteUsesMiddleware($route, 'admin');
+        }
+    }
+
     public function test_permission_management_routes_are_admin_only(): void
     {
         $route = $this->findRoute('PUT', 'api/users/{user}/permissions');
