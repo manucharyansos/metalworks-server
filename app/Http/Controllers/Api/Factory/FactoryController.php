@@ -8,6 +8,7 @@ use App\Models\FactoryOrder;
 use App\Models\FactoryOrderFile;
 use App\Models\FactoryOrderStatus;
 use App\Models\Order;
+use App\Models\PmpFiles;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,6 +33,8 @@ class FactoryController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $this->authorizeAdmin($request);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255', Rule::unique('factories', 'name')],
         ]);
@@ -94,6 +97,8 @@ class FactoryController extends Controller
 
     public function update(Request $request, string $id): JsonResponse
     {
+        $this->authorizeAdmin($request);
+
         $factory = Factory::find($id);
         if (!$factory) {
             return response()->json(['message' => 'Factory not found'], 404);
@@ -129,6 +134,14 @@ class FactoryController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
+        $factoryOrderData = $request->input('factory_order', []);
+        if (
+            $user?->role?->name !== 'admin' &&
+            array_key_exists('admin_confirmation_date', $factoryOrderData)
+        ) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $order = Order::find($id);
         if (!$order) {
             return response()->json(['error' => 'Order not found'], 404);
@@ -139,7 +152,6 @@ class FactoryController extends Controller
             return response()->json(['message' => 'Factory is not assigned to this order'], 422);
         }
 
-        $factoryOrderData = $request->input('factory_order', []);
         $status = $factoryOrderData['status'] ?? null;
 
         $fo = FactoryOrder::firstOrNew([
@@ -154,7 +166,7 @@ class FactoryController extends Controller
         $fo->cancel_date = $factoryOrderData['cancel_date'] ?? null;
         $fo->finish_date = $factoryOrderData['finish_date'] ?? null;
         $fo->operator_finish_date = $factoryOrderData['operator_finish_date'] ?? null;
-        $fo->admin_confirmation_date = $factoryOrderData['admin_confirmation_date'] ?? null;
+        $fo->admin_confirmation_date = $factoryOrderData['admin_confirmation_date'] ?? $fo->admin_confirmation_date;
 
         if (!$fo->operator_id && $status && $status !== 'pending') {
             $fo->operator_id = $user->id;
@@ -196,8 +208,10 @@ class FactoryController extends Controller
         );
     }
 
-    public function destroy(string $id): JsonResponse
+    public function destroy(Request $request, string $id): JsonResponse
     {
+        $this->authorizeAdmin($request);
+
         $factory = Factory::find($id);
         if (!$factory) {
             return response()->json(['message' => 'Factory not found'], 404);
@@ -232,7 +246,7 @@ class FactoryController extends Controller
         $orders = Order::whereHas('factories', function ($query) use ($factoryIdsArray) {
             $query->whereIn('factories.id', $factoryIdsArray);
         })
-            ->whereDoesntHave('factoryOrder', function ($query) {
+            ->whereDoesntHave('factoryOrders', function ($query) {
                 $query->where('status', 'confirmed');
             })
             ->with(
@@ -252,6 +266,8 @@ class FactoryController extends Controller
 
     public function confirmOrderStatus(Request $request, $id): JsonResponse
     {
+        $this->authorizeAdmin($request);
+
         try {
             $factoryId = $request->input('factory_id');
 
@@ -341,20 +357,47 @@ class FactoryController extends Controller
         }
 
         $user = $request->user();
-        $file = FactoryOrderFile::with('factoryOrder')
+        if (!$user) {
+            return null;
+        }
+
+        $directFactoryFile = FactoryOrderFile::with('factoryOrder')
             ->where('path', $decodedPath)
             ->first();
 
-        if (!$file) {
-            return $user?->role?->name === 'admin' ? $decodedPath : null;
-        }
-
-        if ($user?->factory_id && $user->role?->name !== 'admin') {
-            if ((int) $user->factory_id !== (int) optional($file->factoryOrder)->factory_id) {
-                return null;
+        if ($directFactoryFile) {
+            if ($user->role?->name === 'admin' || !$user->factory_id) {
+                return $decodedPath;
             }
+
+            return (int) $user->factory_id === (int) optional($directFactoryFile->factoryOrder)->factory_id
+                ? $decodedPath
+                : null;
         }
 
-        return $decodedPath;
+        $pmpFile = PmpFiles::where('path', $decodedPath)->first();
+        if ($pmpFile) {
+            if ($user->role?->name === 'admin' || !$user->factory_id) {
+                return $decodedPath;
+            }
+
+            $belongsToUsersFactory = FactoryOrder::query()
+                ->where('factory_id', $user->factory_id)
+                ->whereHas('files', function ($query) use ($pmpFile) {
+                    $query->whereKey($pmpFile->id);
+                })
+                ->exists();
+
+            return $belongsToUsersFactory ? $decodedPath : null;
+        }
+
+        // Preserve the existing admin capability for exceptional storage files,
+        // while non-admin users may only download files represented in the DB.
+        return $user->role?->name === 'admin' ? $decodedPath : null;
+    }
+
+    private function authorizeAdmin(Request $request): void
+    {
+        abort_unless($request->user()?->role?->name === 'admin', 403, 'Forbidden');
     }
 }
