@@ -129,10 +129,6 @@ class ProfileController extends Controller
             ], 422);
         }
 
-        // For the first-party SPA, rotate the password hash used by Laravel's
-        // AuthenticateSession middleware before storing the new password. This
-        // invalidates other browser sessions while the current request remains
-        // valid and can finish the password-change flow.
         if ($request->hasSession()) {
             Auth::guard('web')->logoutOtherDevices($validated['current_password']);
         }
@@ -141,9 +137,6 @@ class ProfileController extends Controller
             'password' => $validated['password'],
         ]);
 
-        // Password changes invalidate every bearer credential, including the
-        // token used for this request. The response can still complete, and
-        // clients must authenticate again with the new password afterwards.
         $user->tokens()->delete();
 
         return response()->json([
@@ -194,6 +187,10 @@ class ProfileController extends Controller
 
         $query = FactoryOrder::query()
             ->where('factory_id', $user->factory_id)
+            ->where(function ($operatorQuery) use ($user) {
+                $operatorQuery->whereNull('operator_id')
+                    ->orWhere('operator_id', $user->id);
+            })
             ->with([
                 'factory:id,name',
                 'order.orderNumber',
