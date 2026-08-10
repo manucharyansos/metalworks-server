@@ -8,6 +8,7 @@ use App\Models\Order;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
@@ -45,6 +46,10 @@ class ProfileController extends Controller
     {
         $user = $request->user();
 
+        $request->merge([
+            'email' => Str::lower(trim((string) $request->input('email'))),
+        ]);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:255'],
             'email' => [
@@ -53,6 +58,7 @@ class ProfileController extends Controller
                 'max:255',
                 Rule::unique('users', 'email')->ignore($user->id),
             ],
+            'current_password' => ['nullable', 'string'],
             'client' => ['nullable', 'array'],
             'client.phone' => ['nullable', 'string', 'max:50'],
             'client.address' => ['nullable', 'string', 'max:255'],
@@ -62,6 +68,19 @@ class ProfileController extends Controller
             'client.AVC' => ['nullable', 'integer'],
             'client.accountant' => ['nullable', 'string', 'max:255'],
         ]);
+
+        $emailChanged = Str::lower((string) $user->email) !== $validated['email'];
+        if ($emailChanged) {
+            $currentPassword = $validated['current_password'] ?? '';
+            if ($currentPassword === '' || !Hash::check($currentPassword, $user->password)) {
+                return response()->json([
+                    'message' => 'Էլ․ փոստը փոխելու համար հաստատեք ներկա գաղտնաբառը։',
+                    'errors' => [
+                        'current_password' => ['Ներկա գաղտնաբառը պարտադիր է և պետք է ճիշտ լինի։'],
+                    ],
+                ], 422);
+            }
+        }
 
         $user->update([
             'name' => $validated['name'],
