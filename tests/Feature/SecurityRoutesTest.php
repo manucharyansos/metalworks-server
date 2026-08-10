@@ -25,8 +25,9 @@ class SecurityRoutesTest extends TestCase
         $dashboard = $this->findRoute('GET', 'api/admin/dashboard');
         $orders = $this->findRoute('GET', 'api/admin/dashboard/orders');
         $export = $this->findRoute('GET', 'api/admin/dashboard/orders/export');
+        $reassign = $this->findRoute('PUT', 'api/admin/factory-orders/{factoryOrder}/operator');
 
-        foreach ([$dashboard, $orders, $export] as $route) {
+        foreach ([$dashboard, $orders, $export, $reassign] as $route) {
             $this->assertRouteUsesMiddleware($route, 'auth:sanctum');
             $this->assertRouteUsesMiddleware($route, 'admin');
         }
