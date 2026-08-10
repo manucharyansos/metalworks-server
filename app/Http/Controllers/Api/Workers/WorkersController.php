@@ -4,13 +4,14 @@ namespace App\Http\Controllers\Api\Workers;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WorkerResource;
+use App\Models\Role;
 use App\Models\User;
-use App\Models\Worker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class WorkersController extends Controller
 {
@@ -20,6 +21,12 @@ class WorkersController extends Controller
         'laser',
         'powder_catting',
         'engineer',
+    ];
+
+    private const FACTORY_ROLE_NAMES = [
+        'bend',
+        'laser',
+        'powder_catting',
     ];
 
     public function index(): AnonymousResourceCollection
@@ -53,12 +60,14 @@ class WorkersController extends Controller
             'address'      => 'nullable|string|max:255',
         ]);
 
+        $factoryId = $this->validatedFactoryIdForRole((int) $validated['role_id'], $validated['factory_id'] ?? null);
+
         $user = User::create([
             'name'       => $validated['name'],
             'email'      => $validated['email'],
             'password'   => $validated['password'],
             'role_id'    => $validated['role_id'],
-            'factory_id' => $validated['factory_id'] ?? null,
+            'factory_id' => $factoryId,
         ]);
 
         $user->worker()->create([
@@ -98,11 +107,13 @@ class WorkersController extends Controller
             'password'     => 'nullable|string|min:8|confirmed',
         ]);
 
+        $factoryId = $this->validatedFactoryIdForRole((int) $validated['role_id'], $validated['factory_id'] ?? null);
+
         $worker->update([
             'name'       => $validated['name'],
             'email'      => $validated['email'],
             'role_id'    => $validated['role_id'],
-            'factory_id' => $validated['factory_id'] ?? null,
+            'factory_id' => $factoryId,
         ]);
 
         if (!empty($validated['password'])) {
@@ -128,5 +139,22 @@ class WorkersController extends Controller
         $worker->delete();
 
         return response()->json(['message' => 'Աշխատակիցը հաջողությամբ ջնջվեց']);
+    }
+
+    private function validatedFactoryIdForRole(int $roleId, mixed $factoryId): ?int
+    {
+        $roleName = Role::whereKey($roleId)->value('name');
+
+        if (in_array($roleName, self::FACTORY_ROLE_NAMES, true)) {
+            if (!$factoryId) {
+                throw ValidationException::withMessages([
+                    'factory_id' => ['Այս աշխատակցի դերի համար արտադրամասը պարտադիր է։'],
+                ]);
+            }
+
+            return (int) $factoryId;
+        }
+
+        return null;
     }
 }
