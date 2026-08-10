@@ -7,6 +7,7 @@ use App\Models\FactoryOrder;
 use App\Models\Order;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -128,14 +129,21 @@ class ProfileController extends Controller
             ], 422);
         }
 
+        // For the first-party SPA, rotate the password hash used by Laravel's
+        // AuthenticateSession middleware before storing the new password. This
+        // invalidates other browser sessions while the current request remains
+        // valid and can finish the password-change flow.
+        if ($request->hasSession()) {
+            Auth::guard('web')->logoutOtherDevices($validated['current_password']);
+        }
+
         $user->update([
             'password' => $validated['password'],
         ]);
 
-        // Keep the current personal-access-token request alive long enough for the
-        // frontend to perform its normal logout, while revoking all other API tokens.
-        // Stateful Sanctum sessions may expose a transient token instead of a model,
-        // so only call getKey() when that method actually exists.
+        // Revoke API credentials as a separate protection layer. A stateful
+        // Sanctum browser session does not need a bearer token; non-session API
+        // clients are forced to authenticate again after a password change.
         $currentToken = $user->currentAccessToken();
         $currentTokenId = $currentToken && method_exists($currentToken, 'getKey')
             ? $currentToken->getKey()
