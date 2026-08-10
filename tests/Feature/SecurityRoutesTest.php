@@ -13,9 +13,11 @@ class SecurityRoutesTest extends TestCase
     {
         $pmp = $this->findRoute('GET', 'api/secure-files/pmp/{file}');
         $order = $this->findRoute('GET', 'api/secure-files/order/{file}');
+        $legacyPath = $this->findRoute('GET', 'api/secure-files/path/{path}');
 
         $this->assertRouteUsesMiddleware($pmp, 'auth:sanctum');
         $this->assertRouteUsesMiddleware($order, 'auth:sanctum');
+        $this->assertRouteUsesMiddleware($legacyPath, 'auth:sanctum');
     }
 
     public function test_permission_management_routes_are_admin_only(): void
