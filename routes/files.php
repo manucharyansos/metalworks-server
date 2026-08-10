@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\File\SecureOrderFileController;
 use App\Http\Controllers\Api\File\SecurePmpFileController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
@@ -11,5 +12,8 @@ Route::middleware([
     'detect.device',
 ])->prefix('secure-files')->group(function () {
     Route::get('pmp/{file}', [SecurePmpFileController::class, 'show'])
+        ->whereNumber('file');
+
+    Route::get('order/{file}', [SecureOrderFileController::class, 'show'])
         ->whereNumber('file');
 });
