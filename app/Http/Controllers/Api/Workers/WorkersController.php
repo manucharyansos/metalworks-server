@@ -82,12 +82,16 @@ class WorkersController extends Controller
 
     public function show(User $worker): WorkerResource
     {
+        $this->assertWorkerTarget($worker);
         $worker->load('worker', 'role', 'factory');
+
         return new WorkerResource($worker);
     }
 
     public function update(Request $request, User $worker): JsonResponse
     {
+        $this->assertWorkerTarget($worker);
+
         $request->merge([
             'email' => Str::lower(trim((string) $request->input('email'))),
         ]);
@@ -135,10 +139,23 @@ class WorkersController extends Controller
 
     public function destroy(User $worker): JsonResponse
     {
+        $this->assertWorkerTarget($worker);
+
         $worker->worker()?->delete();
         $worker->delete();
 
         return response()->json(['message' => 'Աշխատակիցը հաջողությամբ ջնջվեց']);
+    }
+
+    private function assertWorkerTarget(User $worker): void
+    {
+        $worker->loadMissing('role');
+
+        abort_unless(
+            $worker->role && in_array($worker->role->name, self::WORKER_ROLE_NAMES, true),
+            404,
+            'Worker not found'
+        );
     }
 
     private function validatedFactoryIdForRole(int $roleId, mixed $factoryId): ?int
