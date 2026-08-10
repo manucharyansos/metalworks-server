@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\Permission;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Auth\Events\PasswordReset;
 use Illuminate\Http\JsonResponse;
@@ -24,7 +25,16 @@ class AuthController extends Controller
             'password' => 'required|min:6|confirmed',
         ]);
 
-        $validatedData['role_id'] = 3;
+        $roleId = Role::where('name', 'authenticatedUser')->value('id');
+        if (!$roleId) {
+            Log::error('Registration failed because authenticatedUser role is missing');
+
+            return response()->json([
+                'message' => 'Registration is temporarily unavailable.',
+            ], 500);
+        }
+
+        $validatedData['role_id'] = $roleId;
         $validatedData['password'] = Hash::make($validatedData['password']);
 
         $user = User::create($validatedData);
@@ -143,7 +153,12 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()?->tokens()->delete();
+        $user = $request->user();
+        $currentToken = $user?->currentAccessToken();
+
+        if ($currentToken && method_exists($currentToken, 'delete')) {
+            $currentToken->delete();
+        }
 
         Auth::guard('web')->logout();
 
@@ -170,7 +185,7 @@ class AuthController extends Controller
         } else {
             $userPermissions = $user->permissions->pluck('slug');
             $rolePermissions = $user->role
-                ? $user->role->permissions->pluck('slug')
+                ? $user->role->permissions()->pluck('slug')
                 : collect();
 
             $permissions = $userPermissions
