@@ -149,6 +149,24 @@ class FactoryController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
+        $status = $factoryOrderData['status'] ?? null;
+        if ($status !== null) {
+            $allowedStatuses = FactoryOrderStatus::query()
+                ->whereNotNull('value')
+                ->pluck('value')
+                ->push('pending')
+                ->push('waiting')
+                ->unique()
+                ->values()
+                ->all();
+
+            if (!in_array($status, $allowedStatuses, true)) {
+                return response()->json([
+                    'message' => 'Invalid factory order status',
+                ], 422);
+            }
+        }
+
         $order = Order::find($id);
         if (!$order) {
             return response()->json(['error' => 'Order not found'], 404);
@@ -158,8 +176,6 @@ class FactoryController extends Controller
         if (!$belongsToOrder) {
             return response()->json(['message' => 'Factory is not assigned to this order'], 422);
         }
-
-        $status = $factoryOrderData['status'] ?? null;
 
         $fo = FactoryOrder::firstOrNew([
             'order_id' => $order->id,
@@ -231,6 +247,14 @@ class FactoryController extends Controller
 
     public function getOrdersByFactories(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if (
+            !$user ||
+            ($user->role?->name !== 'admin' && !$user->hasPermission('factory.view'))
+        ) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
         $factoryIds = $request->input('factory_ids');
         if (!$factoryIds) {
             return response()->json(['message' => 'Factory IDs are required'], 400);
@@ -241,8 +265,7 @@ class FactoryController extends Controller
             return response()->json(['message' => 'Invalid factory IDs'], 400);
         }
 
-        $user = $request->user();
-        if ($user?->factory_id && $user->role?->name !== 'admin') {
+        if ($user->factory_id && $user->role?->name !== 'admin') {
             foreach ($factoryIdsArray as $factoryId) {
                 if ((int) $user->factory_id !== $factoryId) {
                     return response()->json(['message' => 'Forbidden'], 403);
@@ -398,8 +421,6 @@ class FactoryController extends Controller
             return $belongsToUsersFactory ? $decodedPath : null;
         }
 
-        // Preserve the existing admin capability for exceptional storage files,
-        // while non-admin users may only download files represented in the DB.
         return $user->role?->name === 'admin' ? $decodedPath : null;
     }
 
