@@ -5,7 +5,7 @@ namespace Database\Seeders;
 use App\Models\Factory;
 use App\Models\Role;
 use App\Models\User;
-use App\Models\Worker; // ← ավելացրեցինք
+use App\Models\Worker;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
@@ -13,6 +13,11 @@ class UserSeeder extends Seeder
 {
     public function run(): void
     {
+        if (app()->environment('production')) {
+            $this->command?->warn('UserSeeder skipped in production to avoid creating or resetting known default credentials.');
+            return;
+        }
+
         $roles = [
             'admin'           => Role::firstWhere('name', 'admin'),
             'manager'         => Role::firstWhere('name', 'manager'),
@@ -105,6 +110,6 @@ class UserSeeder extends Seeder
             );
         }
 
-        $this->command->info('Հաջողությամբ ստեղծվեցին Admin, Managers, Engineers և Workers (ընդհանուր ' . User::count() . ' օգտատեր)');
+        $this->command?->info('Հաջողությամբ ստեղծվեցին Admin, Managers, Engineers և Workers (ընդհանուր ' . User::count() . ' օգտատեր)');
     }
 }
