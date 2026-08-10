@@ -84,7 +84,9 @@ class AuthController extends Controller
         ];
 
         try {
-            if (!Auth::attempt($credentials, (bool) ($validated['remember'] ?? false))) {
+            $remember = (bool) ($validated['remember'] ?? false);
+
+            if (!Auth::attempt($credentials, $remember)) {
                 RateLimiter::hit($rateLimitKey, 60);
                 return response()->json(['error' => 'Invalid credentials'], 401);
             }
@@ -96,7 +98,10 @@ class AuthController extends Controller
             }
 
             $user = User::with('role')->where('email', $normalizedEmail)->firstOrFail();
-            $accessToken = $user->createToken('auth_token')->plainTextToken;
+            $tokenExpiresAt = $remember ? now()->addDays(30) : now()->addDay();
+            $accessToken = $user
+                ->createToken('auth_token', ['*'], $tokenExpiresAt)
+                ->plainTextToken;
 
             return response()->json([
                 'user' => $user,
