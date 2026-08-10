@@ -3,7 +3,6 @@
 namespace Database\Seeders;
 
 use App\Models\Factory;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class FactorySeeder extends Seeder
@@ -13,11 +12,20 @@ class FactorySeeder extends Seeder
      */
     public function run(): void
     {
-        Factory::create(['name' => 'Engineering', 'value' => 'SW']);
-        Factory::create(['name' => 'Bend', 'value' => 'DLD']);
-        Factory::create(['name' => 'Laser cutting', 'value' => 'DXF']);
-        Factory::create(['name' => 'Laser', 'value' => 'IQS']);
-        Factory::create(['name' => 'Informal', 'value' => 'INFO']);
-        Factory::create(['name' => 'PDF', 'value' => 'PDF']);
+        $factories = [
+            'SW' => 'Engineering',
+            'DLD' => 'Bend',
+            'DXF' => 'Laser cutting',
+            'IQS' => 'Laser',
+            'INFO' => 'Informal',
+            'PDF' => 'PDF',
+        ];
+
+        foreach ($factories as $value => $name) {
+            Factory::updateOrCreate(
+                ['value' => $value],
+                ['name' => $name]
+            );
+        }
     }
 }
