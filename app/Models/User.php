@@ -20,6 +20,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role_id',
+        'factory_id',
     ];
 
     protected $hidden = [
@@ -31,7 +32,6 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
     ];
-
 
     public function hasPermission(string $slug): bool
     {
@@ -55,12 +55,10 @@ class User extends Authenticatable
         return $this->belongsTo(Role::class, 'role_id');
     }
 
-    public function factory()
+    public function factory(): BelongsTo
     {
         return $this->belongsTo(Factory::class, 'factory_id');
     }
-
-
 
     public function client(): HasOne
     {
@@ -71,7 +69,6 @@ class User extends Authenticatable
     {
         return $this->hasOne(Worker::class);
     }
-
 
     public function permissions(): BelongsToMany
     {
