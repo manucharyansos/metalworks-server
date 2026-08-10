@@ -98,15 +98,19 @@ class AuthController extends Controller
             }
 
             $user = User::with('role')->where('email', $normalizedEmail)->firstOrFail();
-            $tokenExpiresAt = $remember ? now()->addDays(30) : now()->addDay();
-            $accessToken = $user
-                ->createToken('auth_token', ['*'], $tokenExpiresAt)
-                ->plainTextToken;
+            $response = ['user' => $user];
 
-            return response()->json([
-                'user' => $user,
-                'access_token' => $accessToken,
-            ]);
+            // First-party Sanctum SPA requests authenticate with the session
+            // cookie and do not need a second bearer credential. Preserve
+            // bearer-token compatibility only for non-session API clients.
+            if (!$request->hasSession()) {
+                $tokenExpiresAt = $remember ? now()->addDays(30) : now()->addDay();
+                $response['access_token'] = $user
+                    ->createToken('auth_token', ['*'], $tokenExpiresAt)
+                    ->plainTextToken;
+            }
+
+            return response()->json($response);
         } catch (\Throwable $e) {
             Log::error('Login failed', [
                 'email' => $normalizedEmail,
