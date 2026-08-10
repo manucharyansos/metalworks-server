@@ -30,6 +30,10 @@ class AuthController extends Controller
 
         RateLimiter::hit($rateLimitKey, 600);
 
+        $request->merge([
+            'email' => Str::lower(trim((string) $request->input('email'))),
+        ]);
+
         $validatedData = $request->validate([
             'name' => 'required|min:3|max:255',
             'email' => 'required|email|unique:users',
@@ -45,14 +49,11 @@ class AuthController extends Controller
             ], 500);
         }
 
-        $validatedData['email'] = Str::lower(trim($validatedData['email']));
         $validatedData['role_id'] = $roleId;
         $validatedData['password'] = Hash::make($validatedData['password']);
 
         $user = User::create($validatedData);
         $user->load('role');
-
-        RateLimiter::clear($rateLimitKey);
 
         return response()->json([
             'user' => $user,
