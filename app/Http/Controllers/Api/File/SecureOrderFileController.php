@@ -21,23 +21,30 @@ class SecureOrderFileController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $disk = $this->resolveDisk($file->path);
+        $path = $this->normalizePath((string) $file->path);
+        if ($path === null) {
+            return response()->json(['message' => 'File not found'], 404);
+        }
+
+        $disk = $this->resolveDisk($path);
         if (!$disk) {
             return response()->json(['message' => 'File not found'], 404);
         }
 
-        $fullPath = Storage::disk($disk)->path($file->path);
-        $name = str_replace(["\r", "\n", '"'], '', $file->original_name ?: basename($file->path));
+        $fullPath = Storage::disk($disk)->path($path);
+        $name = str_replace(["\r", "\n", '"'], '', $file->original_name ?: basename($path));
 
         if ($request->boolean('download')) {
             return response()->download($fullPath, $name, [
                 'Cache-Control' => 'private, no-store, max-age=0',
+                'Pragma' => 'no-cache',
                 'X-Content-Type-Options' => 'nosniff',
             ]);
         }
 
         $response = response()->file($fullPath, [
             'Cache-Control' => 'private, no-store, max-age=0',
+            'Pragma' => 'no-cache',
             'X-Content-Type-Options' => 'nosniff',
         ]);
         $response->setContentDisposition('inline', $name);
@@ -79,6 +86,17 @@ class SecureOrderFileController extends Controller
                     ->orWhere('operator_id', $user->id);
             })
             ->exists();
+    }
+
+    private function normalizePath(string $path): ?string
+    {
+        $path = ltrim(str_replace('\\', '/', urldecode($path)), '/');
+
+        if ($path === '' || $path === '..' || str_contains($path, '../')) {
+            return null;
+        }
+
+        return $path;
     }
 
     private function resolveDisk(string $path): ?string
