@@ -69,6 +69,25 @@ class SecurityRoutesTest extends TestCase
             ->assertJsonValidationErrors('files');
     }
 
+    public function test_dangerous_double_extension_uploads_are_rejected(): void
+    {
+        $response = $this
+            ->withHeader('Accept', 'application/json')
+            ->post('/api/login', [
+                'email' => 'test@example.com',
+                'password' => 'not-used',
+                'payload' => UploadedFile::fake()->create(
+                    'shell.php.jpg',
+                    1,
+                    'image/jpeg'
+                ),
+            ]);
+
+        $response
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('files');
+    }
+
     private function findRoute(string $method, string $uri): LaravelRoute
     {
         $route = collect(Route::getRoutes()->getRoutes())
