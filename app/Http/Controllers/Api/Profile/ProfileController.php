@@ -141,19 +141,10 @@ class ProfileController extends Controller
             'password' => $validated['password'],
         ]);
 
-        // Revoke API credentials as a separate protection layer. A stateful
-        // Sanctum browser session does not need a bearer token; non-session API
-        // clients are forced to authenticate again after a password change.
-        $currentToken = $user->currentAccessToken();
-        $currentTokenId = $currentToken && method_exists($currentToken, 'getKey')
-            ? $currentToken->getKey()
-            : null;
-
-        if ($currentTokenId) {
-            $user->tokens()->where('id', '!=', $currentTokenId)->delete();
-        } else {
-            $user->tokens()->delete();
-        }
+        // Password changes invalidate every bearer credential, including the
+        // token used for this request. The response can still complete, and
+        // clients must authenticate again with the new password afterwards.
+        $user->tokens()->delete();
 
         return response()->json([
             'message' => 'Գաղտնաբառը հաջողությամբ փոխվել է։ Խնդրում ենք նորից մուտք գործել։',
