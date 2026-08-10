@@ -1,0 +1,32 @@
+name: PHP Syntax Check
+
+on:
+  push:
+    branches:
+      - master
+      - security-hardening/server
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  php-syntax:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: Lint application PHP files
+        shell: bash
+        run: |
+          set -euo pipefail
+          find app bootstrap config database routes tests \
+            -type f -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
