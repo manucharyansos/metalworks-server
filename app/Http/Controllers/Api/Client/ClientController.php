@@ -5,16 +5,19 @@ namespace App\Http\Controllers\Api\Client;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ClientResource;
 use App\Models\Client;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class ClientController extends Controller
 {
     public function index(): JsonResponse
     {
         $clients = Client::with('user:id,name,email')
-            ->whereRelation('user', 'role_id', 3)
+            ->whereHas('user.role', fn ($query) => $query->where('name', 'authenticatedUser'))
             ->orderByDesc('id')
             ->get();
 
@@ -23,19 +26,32 @@ class ClientController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $request->merge([
+            'email' => Str::lower(trim((string) $request->input('email'))),
+        ]);
+
         $request->validate([
             'email' => 'required|email|unique:users,email',
-            'password' => 'required|string|min:6|confirmed',
+            'password' => 'required|string|min:8|confirmed',
             'type' => 'required|in:physPerson,legalEntity',
         ]);
 
         $clientData = $this->validateClientData($request);
+        $roleId = Role::where('name', 'authenticatedUser')->value('id');
+
+        if (!$roleId) {
+            Log::error('Client creation failed because authenticatedUser role is missing');
+
+            return response()->json([
+                'message' => 'Հաճախորդի ստեղծումը ժամանակավորապես անհասանելի է։',
+            ], 500);
+        }
 
         $user = User::create([
             'name' => $clientData['name'],
             'email' => $request->email,
-            'password' => bcrypt($request->password),
-            'role_id' => 3,
+            'password' => $request->password,
+            'role_id' => $roleId,
         ]);
 
         $client = $user->client()->create($clientData);
@@ -69,12 +85,11 @@ class ClientController extends Controller
         $validatedData = $this->validateClientData($request);
 
         $user->update(['name' => $validatedData['name']]);
-
         $client->update($validatedData);
 
         return response()->json([
             'message' => 'Հաճախորդը հաջողությամբ թարմացվեց',
-            'client'  => new ClientResource($client->load('user'))
+            'client'  => new ClientResource($client->load('user')),
         ], 200, [], JSON_UNESCAPED_UNICODE);
     }
 
@@ -99,7 +114,7 @@ class ClientController extends Controller
         $common = $request->validate([
             'name'    => 'required|string|max:255',
             'phone'   => 'required|string|max:20',
-            'address' => 'nullable|string',
+            'address' => 'nullable|string|max:255',
         ]);
 
         if ($type === 'physPerson') {
