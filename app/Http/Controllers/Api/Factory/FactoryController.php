@@ -57,24 +57,31 @@ class FactoryController extends Controller
         $factory = Factory::with(['orders' => function ($query) use ($id, $user) {
             $query->whereHas('factoryOrders', function ($q) use ($id, $user) {
                 $q->where('factory_id', $id)
-                    ->whereNull('admin_confirmation_date')
-                    ->where(function ($sub) use ($user) {
+                    ->whereNull('admin_confirmation_date');
+
+                if ($user?->factory_id && $user->role?->name !== 'admin') {
+                    $q->where(function ($sub) use ($user) {
                         $sub->whereNull('operator_id')
                             ->orWhere('operator_id', $user->id);
                     });
+                }
             })
                 ->with([
                     'factoryOrders' => function ($q) use ($id, $user) {
                         $q->where('factory_id', $id)
-                            ->whereNull('admin_confirmation_date')
-                            ->where(function ($sub) use ($user) {
+                            ->whereNull('admin_confirmation_date');
+
+                        if ($user?->factory_id && $user->role?->name !== 'admin') {
+                            $q->where(function ($sub) use ($user) {
                                 $sub->whereNull('operator_id')
                                     ->orWhere('operator_id', $user->id);
-                            })
-                            ->with([
-                                'files',
-                                'operator:id,name',
-                            ]);
+                            });
+                        }
+
+                        $q->with([
+                            'files',
+                            'operator:id,name',
+                        ]);
                     },
                     'dates',
                     'creator',
@@ -279,7 +286,7 @@ class FactoryController extends Controller
                 ->where('factory_id', $factoryId)
                 ->firstOrFail();
 
-            $confirmedStatus = FactoryOrderStatus::where('key', 'confirmed')->value('value') ?? 'confirmed';
+            $confirmedStatus = FactoryOrderStatus::where('key', 'confirmation')->value('value') ?? 'confirmed';
 
             $factoryOrder->status = $confirmedStatus;
             $factoryOrder->admin_confirmation_date = now();
