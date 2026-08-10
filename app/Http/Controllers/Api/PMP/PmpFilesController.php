@@ -13,6 +13,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class PmpFilesController extends Controller
@@ -54,10 +55,14 @@ class PmpFilesController extends Controller
 
             $validated = $request->validate($rules);
             $file = $validated['file'];
-            $originalName = $file->getClientOriginalName();
-            $extension = strtolower($file->getClientOriginalExtension());
+            $originalName = basename(str_replace('\\', '/', $file->getClientOriginalName()));
+            $extension = strtolower(ltrim($file->getClientOriginalExtension(), '.'));
 
-            $allowed = $this->getAllowedExtensions($factory->value);
+            $allowed = array_values(array_filter(array_map(
+                static fn ($item) => strtolower(ltrim(trim((string) $item), '.')),
+                $this->getAllowedExtensions($factory->value)
+            )));
+
             if (!in_array($extension, $allowed, true)) {
                 return response()->json([
                     'error' => 'Ֆայլի տեսակը թույլատրված չէ։ Թույլատրելի են՝ ' . implode(', ', $allowed),
@@ -85,7 +90,7 @@ class PmpFilesController extends Controller
             $path = "MetalWorks/PMP_{$pmp->group}.{$remote->remote_number}/{$factory->value}";
             Storage::disk('public')->makeDirectory($path);
 
-            $uniqueName = pathinfo($originalName, PATHINFO_FILENAME) . '_' . $extension;
+            $uniqueName = Str::uuid()->toString() . '.' . $extension;
             $storedPath = $file->storeAs($path, $uniqueName, 'public');
 
             $record = PmpFiles::create([
@@ -132,11 +137,15 @@ class PmpFilesController extends Controller
             return response()->json(['error' => 'File not found'], 404);
         }
 
-        if (Storage::disk('public')->exists($file->path)) {
-            Storage::disk('public')->delete($file->path);
+        $path = $file->path;
+        $file->delete();
+
+        foreach (['private', 'public'] as $disk) {
+            if ($path && Storage::disk($disk)->exists($path)) {
+                Storage::disk($disk)->delete($path);
+            }
         }
 
-        $file->delete();
         return response()->json(['message' => 'File deleted successfully']);
     }
 
