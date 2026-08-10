@@ -3,24 +3,21 @@
 namespace App\Http\Middleware;
 
 use Closure;
-use Illuminate\Support\Facades\Auth;
 
 class AuthenticatedUserMiddleware
 {
-    /**
-     * Handle an incoming request.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \Closure  $next
-     * @return mixed
-     */
     public function handle($request, Closure $next): mixed
     {
-        if (!Auth::check() && Auth::user()->role('authenticatedUser')) {
+        $user = $request->user();
+
+        if (!$user) {
             return response()->json(['error' => 'Unauthorized'], 401);
+        }
+
+        if ($user->role?->name !== 'authenticatedUser') {
+            return response()->json(['error' => 'Forbidden'], 403);
         }
 
         return $next($request);
     }
 }
-
