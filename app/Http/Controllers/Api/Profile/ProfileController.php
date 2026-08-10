@@ -113,11 +113,17 @@ class ProfileController extends Controller
             'password' => $validated['password'],
         ]);
 
-        // Revoke other API sessions while keeping this request valid long enough
-        // for the client to perform its normal logout flow.
+        // Keep the current personal-access-token request alive long enough for the
+        // frontend to perform its normal logout, while revoking all other API tokens.
+        // Stateful Sanctum sessions may expose a transient token instead of a model,
+        // so only call getKey() when that method actually exists.
         $currentToken = $user->currentAccessToken();
-        if ($currentToken) {
-            $user->tokens()->where('id', '!=', $currentToken->id)->delete();
+        $currentTokenId = $currentToken && method_exists($currentToken, 'getKey')
+            ? $currentToken->getKey()
+            : null;
+
+        if ($currentTokenId) {
+            $user->tokens()->where('id', '!=', $currentTokenId)->delete();
         } else {
             $user->tokens()->delete();
         }
