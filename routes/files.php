@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\File\SecureLegacyFileController;
 use App\Http\Controllers\Api\File\SecureOrderFileController;
 use App\Http\Controllers\Api\File\SecurePmpFileController;
 use Illuminate\Support\Facades\Route;
@@ -15,4 +16,7 @@ Route::middleware([
 
     Route::get('order/{file}', [SecureOrderFileController::class, 'show'])
         ->whereNumber('file');
+
+    Route::get('path/{path}', [SecureLegacyFileController::class, 'show'])
+        ->where('path', '.*');
 });
