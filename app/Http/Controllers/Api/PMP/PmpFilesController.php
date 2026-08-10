@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\PMP;
 use App\Http\Controllers\Controller;
 use App\Models\BendFileExtension;
 use App\Models\Factory;
+use App\Models\FactoryFileExtension;
 use App\Models\LaserFileExtension;
 use App\Models\Pmp;
 use App\Models\PmpFiles;
@@ -12,6 +13,7 @@ use App\Models\RemoteNumber;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -60,12 +62,14 @@ class PmpFilesController extends Controller
 
             $allowed = array_values(array_filter(array_map(
                 static fn ($item) => strtolower(ltrim(trim((string) $item), '.')),
-                $this->getAllowedExtensions($factory->value)
+                $this->getAllowedExtensions($factory)
             )));
 
             if (!in_array($extension, $allowed, true)) {
                 return response()->json([
-                    'error' => 'Ֆայլի տեսակը թույլատրված չէ։ Թույլատրելի են՝ ' . implode(', ', $allowed),
+                    'error' => $allowed
+                        ? 'Ֆայլի տեսակը թույլատրված չէ։ Թույլատրելի են՝ ' . implode(', ', $allowed)
+                        : 'Այս արտադրամասի համար թույլատրելի ֆայլի տեսակ դեռ սահմանված չէ։',
                 ], 422);
             }
 
@@ -149,16 +153,27 @@ class PmpFilesController extends Controller
         return response()->json(['message' => 'File deleted successfully']);
     }
 
-    private function getAllowedExtensions(string $factoryType): array
+    private function getAllowedExtensions(Factory $factory): array
     {
-        return match ($factoryType) {
+        // During a rolling deployment the code can arrive moments before the migration.
+        // Keep the previous rules only until the new table exists; once it exists,
+        // an empty list intentionally means that this factory accepts no file formats.
+        if (Schema::hasTable('factory_file_extensions')) {
+            return FactoryFileExtension::query()
+                ->where('factory_id', $factory->id)
+                ->orderBy('extension')
+                ->pluck('extension')
+                ->toArray();
+        }
+
+        return match ($factory->value) {
             'SW' => ['sldprt', 'sldasm', 'slddrw'],
             'DLD' => BendFileExtension::pluck('extension')->toArray(),
             'DXF' => LaserFileExtension::pluck('extension')->toArray(),
             'IQS' => ['iqs'],
             'INFO' => ['txt', 'csv'],
             'PDF' => ['pdf'],
-            default => throw new \RuntimeException('Unsupported factory file type'),
+            default => [],
         };
     }
 }
