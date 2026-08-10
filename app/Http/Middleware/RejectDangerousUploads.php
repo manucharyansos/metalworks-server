@@ -22,12 +22,19 @@ class RejectDangerousUploads
     public function handle(Request $request, Closure $next)
     {
         foreach ($this->flattenFiles($request->allFiles()) as $file) {
+            $originalName = (string) $file->getClientOriginalName();
+            $normalizedName = strtolower($originalName);
             $extension = strtolower(trim((string) $file->getClientOriginalExtension()));
-            $name = strtolower((string) $file->getClientOriginalName());
+
+            if ($this->hasUnsafeName($originalName)) {
+                throw ValidationException::withMessages([
+                    'files' => 'Ֆայլի անունը անվտանգության պատճառով չի թույլատրվում։',
+                ]);
+            }
 
             if (
                 in_array($extension, self::BLOCKED_EXTENSIONS, true) ||
-                $this->hasBlockedTrailingExtension($name)
+                $this->hasBlockedExtensionSegment($normalizedName)
             ) {
                 throw ValidationException::withMessages([
                     'files' => 'Այս ֆայլի տեսակը անվտանգության պատճառով չի թույլատրվում։',
@@ -55,11 +62,43 @@ class RejectDangerousUploads
         }
     }
 
-    private function hasBlockedTrailingExtension(string $name): bool
+    private function hasUnsafeName(string $name): bool
+    {
+        if ($name === '' || strlen($name) > 255) {
+            return true;
+        }
+
+        if (
+            str_contains($name, '/') ||
+            str_contains($name, '\\') ||
+            str_contains($name, "\0") ||
+            $name === '.' ||
+            $name === '..'
+        ) {
+            return true;
+        }
+
+        return preg_match('/[\x00-\x1F\x7F]/', $name) === 1;
+    }
+
+    private function hasBlockedExtensionSegment(string $name): bool
     {
         $name = rtrim($name, ". \t\n\r\0\x0B");
-        $extension = strtolower((string) pathinfo($name, PATHINFO_EXTENSION));
+        $segments = explode('.', $name);
 
-        return in_array($extension, self::BLOCKED_EXTENSIONS, true);
+        if (count($segments) <= 1) {
+            return false;
+        }
+
+        array_shift($segments);
+
+        foreach ($segments as $segment) {
+            $segment = strtolower(trim($segment));
+            if (in_array($segment, self::BLOCKED_EXTENSIONS, true)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
