@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Workers;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WorkerResource;
+use App\Models\Factory;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
@@ -37,6 +38,31 @@ class WorkersController extends Controller
             ->get();
 
         return WorkerResource::collection($workers);
+    }
+
+    /**
+     * Read-only form options for staff creation/editing. This endpoint is tied
+     * to the worker action itself so admins do not need to grant unrelated
+     * factory/role viewing permissions just to use workers.create/update.
+     */
+    public function options(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $allowed = $user?->role?->name === 'admin'
+            || $user?->hasPermission('workers.create')
+            || $user?->hasPermission('workers.update');
+
+        abort_unless($allowed, 403, 'Forbidden');
+
+        return response()->json([
+            'roles' => Role::query()
+                ->whereIn('name', self::WORKER_ROLE_NAMES)
+                ->orderBy('name')
+                ->get(['id', 'name', 'value']),
+            'factories' => Factory::query()
+                ->orderBy('name')
+                ->get(['id', 'name', 'value']),
+        ]);
     }
 
     public function store(Request $request): JsonResponse
