@@ -17,7 +17,7 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
-    private static ?bool $permissionOverridesSupported = null;
+    private static ?bool $permissionAssignmentsSupported = null;
 
     protected $fillable = [
         'name',
@@ -37,31 +37,27 @@ class User extends Authenticatable
         'password' => 'hashed',
     ];
 
+    /**
+     * Individual access is intentionally independent from role permissions.
+     * Roles still describe the employee type / dashboard, while access to
+     * concrete actions is granted explicitly by an administrator.
+     */
     public function hasPermission(string $slug): bool
     {
         if ($this->role && $this->role->name === 'admin') {
             return true;
         }
 
-        if ($this->supportsPermissionOverrides()) {
-            $override = DB::table('permission_user')
-                ->join('permissions', 'permissions.id', '=', 'permission_user.permission_id')
-                ->where('permission_user.user_id', $this->id)
-                ->where('permissions.slug', $slug)
-                ->select('permission_user.allowed')
-                ->first();
-
-            if ($override !== null) {
-                return (bool) $override->allowed;
-            }
-        } elseif ($this->permissions()->where('slug', $slug)->exists()) {
-            // Backward-compatible path while the override migration is still pending.
-            return true;
+        if (!$this->supportsPermissionAssignments()) {
+            return false;
         }
 
-        return $this->role
-            ? $this->role->permissions()->where('slug', $slug)->exists()
-            : false;
+        return DB::table('permission_user')
+            ->join('permissions', 'permissions.id', '=', 'permission_user.permission_id')
+            ->where('permission_user.user_id', $this->id)
+            ->where('permissions.slug', $slug)
+            ->where('permission_user.allowed', true)
+            ->exists();
     }
 
     public function role(): BelongsTo
@@ -86,7 +82,9 @@ class User extends Authenticatable
 
     public function permissions(): BelongsToMany
     {
-        return $this->belongsToMany(Permission::class)->withTimestamps();
+        return $this->belongsToMany(Permission::class)
+            ->withPivot('allowed')
+            ->withTimestamps();
     }
 
     public function getCreatedAtAttribute($value): string
@@ -95,9 +93,10 @@ class User extends Authenticatable
         return $dateTime->format('d/m/Y');
     }
 
-    private function supportsPermissionOverrides(): bool
+    private function supportsPermissionAssignments(): bool
     {
-        return self::$permissionOverridesSupported ??=
-            Schema::hasColumn('permission_user', 'allowed');
+        return self::$permissionAssignmentsSupported ??=
+            Schema::hasTable('permission_user')
+            && Schema::hasColumn('permission_user', 'allowed');
     }
 }
