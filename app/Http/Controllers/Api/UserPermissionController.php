@@ -9,31 +9,30 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 
 class UserPermissionController extends Controller
 {
     /**
      * GET /api/users/{user}/permissions
      *
-     * Permissions are intentionally independent from roles. The admin sees
-     * the same permission catalogue for every staff account and explicitly
-     * chooses which concrete functions are enabled for that employee.
+     * Permissions are independent from roles. The admin sees only concrete
+     * business functions; role lookup itself is intentionally not configurable.
      */
     public function show(User $user): JsonResponse
     {
         $this->ensureStaffAccount($user);
         $user->loadMissing('role');
 
-        $permissions = Permission::query()
-            ->orderBy('group')
-            ->orderBy('slug')
-            ->get(['id', 'name', 'slug', 'group']);
+        $permissions = $this->assignablePermissions()->get();
+        $allowedIds = $permissions->pluck('id')->map(fn ($id) => (int) $id)->all();
 
         $selectedIds = [];
-        if ($this->assignmentsSupported()) {
+        if ($this->assignmentsSupported() && $allowedIds !== []) {
             $selectedIds = DB::table('permission_user')
                 ->where('user_id', $user->id)
                 ->where('allowed', true)
+                ->whereIn('permission_id', $allowedIds)
                 ->pluck('permission_id')
                 ->map(fn ($id) => (int) $id)
                 ->values()
@@ -73,11 +72,27 @@ class UserPermissionController extends Controller
         ]);
 
         $permissionIds = array_values(array_unique(array_map('intval', $data['permissions'])));
+        $assignableIds = $this->assignablePermissions()
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
 
-        DB::transaction(function () use ($user, $permissionIds) {
-            DB::table('permission_user')
-                ->where('user_id', $user->id)
-                ->delete();
+        $invalidIds = array_values(array_diff($permissionIds, $assignableIds));
+        if ($invalidIds !== []) {
+            throw ValidationException::withMessages([
+                'permissions' => ['Չկառավարվող կամ ներքին permission փոխանցել չի թույլատրվում։'],
+            ]);
+        }
+
+        DB::transaction(function () use ($user, $permissionIds, $assignableIds) {
+            // Remove only assignable business-function grants. Internal lookup
+            // behavior is not stored in permission_user.
+            if ($assignableIds !== []) {
+                DB::table('permission_user')
+                    ->where('user_id', $user->id)
+                    ->whereIn('permission_id', $assignableIds)
+                    ->delete();
+            }
 
             if ($permissionIds === []) {
                 return;
@@ -102,6 +117,15 @@ class UserPermissionController extends Controller
             'message' => 'Աշխատակցի թույլտվությունները պահպանվեցին։',
             'permission_ids' => $permissionIds,
         ]);
+    }
+
+    private function assignablePermissions()
+    {
+        return Permission::query()
+            ->where('slug', '!=', 'roles.view')
+            ->orderBy('group')
+            ->orderBy('slug')
+            ->select(['id', 'name', 'slug', 'group']);
     }
 
     private function ensureStaffAccount(User $user): void
