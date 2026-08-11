@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Permission;
 use App\Models\User;
+use App\Support\EmployeePermissionScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,22 +16,45 @@ class UserPermissionController extends Controller
 {
     /**
      * GET /api/users/{user}/permissions
+     *
+     * Role permissions remain untouched. The response exposes only the
+     * individual overrides that make sense for the selected employee role.
      */
     public function show(User $user): JsonResponse
     {
         $this->ensureStaffAccount($user);
         $user->load(['role.permissions', 'permissions']);
 
-        $allPermissions = Permission::query()
+        $scopeSlugs = EmployeePermissionScope::slugsFor($user);
+
+        $permissionsQuery = Permission::query()
             ->orderBy('group')
-            ->orderBy('slug')
-            ->get();
+            ->orderBy('slug');
+
+        if ($scopeSlugs === []) {
+            $permissionsQuery->whereRaw('1 = 0');
+        } else {
+            $permissionsQuery->whereIn('slug', $scopeSlugs);
+        }
+
+        $allPermissions = $permissionsQuery->get();
+        $scopePermissionIds = $allPermissions
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
 
         $rolePermissionIds = $user->role
-            ? $user->role->permissions->pluck('id')->map(fn ($id) => (int) $id)->all()
+            ? $user->role->permissions
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn (int $id) => in_array($id, $scopePermissionIds, true))
+                ->values()
+                ->all()
             : [];
 
         [$allowedPermissionIds, $deniedPermissionIds] = $this->userOverrides($user);
+        $allowedPermissionIds = array_values(array_intersect($allowedPermissionIds, $scopePermissionIds));
+        $deniedPermissionIds = array_values(array_intersect($deniedPermissionIds, $scopePermissionIds));
         $isAdmin = $user->role?->name === 'admin';
 
         $permissions = $allPermissions->map(function (Permission $permission) use (
@@ -70,6 +94,7 @@ class UserPermissionController extends Controller
             'role_permission_ids' => $rolePermissionIds,
             'overrides_supported' => $this->overridesSupported(),
             'immutable_full_access' => $isAdmin,
+            'role_permissions_unchanged' => true,
         ]);
     }
 
@@ -90,6 +115,21 @@ class UserPermissionController extends Controller
             ], 409);
         }
 
+        $scopeSlugs = EmployeePermissionScope::slugsFor($user);
+        $scopePermissionIds = $scopeSlugs === []
+            ? []
+            : Permission::query()
+                ->whereIn('slug', $scopeSlugs)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+        if ($scopePermissionIds === []) {
+            return response()->json([
+                'message' => 'Այս աշխատակցի role-ի համար անհատական փոփոխվող իրավունքներ սահմանված չեն։',
+            ], 422);
+        }
+
         $data = $request->validate([
             'permissions' => ['sometimes', 'array'],
             'permissions.*' => ['integer', 'distinct', 'exists:permissions,id'],
@@ -107,22 +147,53 @@ class UserPermissionController extends Controller
             ]);
         }
 
-        $syncData = [];
+        $requestedIds = array_values(array_unique(array_merge($allowedIds, $deniedIds)));
+        $outsideScope = array_values(array_diff($requestedIds, $scopePermissionIds));
 
-        foreach ($allowedIds as $permissionId) {
-            $syncData[$permissionId] = ['allowed' => true];
+        if ($outsideScope !== []) {
+            throw ValidationException::withMessages([
+                'permissions' => ['Այս role-ի համար չնախատեսված permission փոխել չի թույլատրվում։'],
+            ]);
         }
 
-        foreach ($deniedIds as $permissionId) {
-            $syncData[$permissionId] = ['allowed' => false];
-        }
+        DB::transaction(function () use ($user, $scopePermissionIds, $allowedIds, $deniedIds) {
+            // Change only the employee-specific scope. Any unrelated legacy
+            // overrides are left intact, and role_permission rows are never touched.
+            DB::table('permission_user')
+                ->where('user_id', $user->id)
+                ->whereIn('permission_id', $scopePermissionIds)
+                ->delete();
 
-        DB::transaction(function () use ($user, $syncData) {
-            $user->permissions()->sync($syncData);
+            $now = now();
+            $rows = [];
+
+            foreach ($allowedIds as $permissionId) {
+                $rows[] = [
+                    'user_id' => $user->id,
+                    'permission_id' => $permissionId,
+                    'allowed' => true,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+
+            foreach ($deniedIds as $permissionId) {
+                $rows[] = [
+                    'user_id' => $user->id,
+                    'permission_id' => $permissionId,
+                    'allowed' => false,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+            }
+
+            if ($rows !== []) {
+                DB::table('permission_user')->insert($rows);
+            }
         });
 
         return response()->json([
-            'message' => 'Աշխատակցի թույլտվությունները հաջողությամբ թարմացվեցին։',
+            'message' => 'Աշխատակցի անհատական թույլտվությունները հաջողությամբ թարմացվեցին։ Role-ի իրավունքները չեն փոխվել։',
         ]);
     }
 
