@@ -60,6 +60,17 @@ class SecurityRoutesTest extends TestCase
         }
     }
 
+    public function test_staff_form_option_routes_require_authentication(): void
+    {
+        $workerOptions = $this->findRoute('GET', 'api/staff/worker-options');
+        $materialOptions = $this->findRoute('GET', 'api/staff/material-options');
+
+        foreach ([$workerOptions, $materialOptions] as $route) {
+            $this->assertRouteUsesMiddleware($route, 'auth:sanctum');
+            $this->assertRouteUsesMiddleware($route, 'detect.device');
+        }
+    }
+
     public function test_engineer_order_mutations_keep_role_and_permission_guards(): void
     {
         $update = $this->findRoute('PUT', 'api/engineers/engineer/{engineer}');
