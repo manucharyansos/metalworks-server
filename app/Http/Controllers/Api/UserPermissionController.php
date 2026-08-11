@@ -232,7 +232,9 @@ class UserPermissionController extends Controller
         $user->loadMissing(['role', 'client']);
 
         abort_if(
-            $user->client !== null || $user->role?->name === 'authenticatedUser',
+            $user->client !== null
+                || $user->role === null
+                || in_array($user->role->name, ['authenticatedUser', 'guestUser'], true),
             404,
             'Staff account not found.'
         );
