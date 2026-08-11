@@ -10,19 +10,16 @@ use Illuminate\Http\Request;
 class UserController extends Controller
 {
     /**
-     * Admin staff directory. Customer accounts intentionally do not appear here.
+     * Admin staff directory. Customer, guest and role-less accounts
+     * intentionally do not appear here.
      */
     public function index(): JsonResponse
     {
         $users = User::query()
             ->with(['role', 'factory', 'worker'])
             ->whereDoesntHave('client')
-            ->where(function ($query) {
-                $query
-                    ->whereDoesntHave('role')
-                    ->orWhereHas('role', function ($roleQuery) {
-                        $roleQuery->where('name', '!=', 'authenticatedUser');
-                    });
+            ->whereHas('role', function ($roleQuery) {
+                $roleQuery->whereNotIn('name', ['authenticatedUser', 'guestUser']);
             })
             ->orderBy('name')
             ->get();
@@ -73,7 +70,9 @@ class UserController extends Controller
         $user->loadMissing(['role', 'client']);
 
         abort_if(
-            $user->client !== null || $user->role?->name === 'authenticatedUser',
+            $user->client !== null
+                || $user->role === null
+                || in_array($user->role->name, ['authenticatedUser', 'guestUser'], true),
             404,
             'Staff account not found.'
         );
