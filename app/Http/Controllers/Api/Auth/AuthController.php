@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class AuthController extends Controller
@@ -214,20 +215,25 @@ class AuthController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $user->load(['role', 'permissions', 'role.permissions', 'factory']);
+        $user->load(['role', 'factory']);
 
         if ($user->role && $user->role->name === 'admin') {
-            $permissions = Permission::pluck('slug');
-        } else {
-            $userPermissions = $user->permissions->pluck('slug');
-            $rolePermissions = $user->role
-                ? $user->role->permissions()->pluck('slug')
-                : collect();
-
-            $permissions = $userPermissions
-                ->merge($rolePermissions)
+            $permissions = Permission::query()->orderBy('slug')->pluck('slug');
+        } elseif (
+            Schema::hasTable('permission_user')
+            && Schema::hasColumn('permission_user', 'allowed')
+        ) {
+            $permissions = Permission::query()
+                ->join('permission_user', 'permissions.id', '=', 'permission_user.permission_id')
+                ->where('permission_user.user_id', $user->id)
+                ->where('permission_user.allowed', true)
+                ->orderBy('permissions.slug')
+                ->pluck('permissions.slug')
                 ->unique()
                 ->values();
+        } else {
+            // Fail closed until the individual-permission migration is applied.
+            $permissions = collect();
         }
 
         return response()->json([
