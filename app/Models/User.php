@@ -9,11 +9,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
+
+    private static ?bool $permissionOverridesSupported = null;
 
     protected $fillable = [
         'name',
@@ -39,12 +43,20 @@ class User extends Authenticatable
             return true;
         }
 
-        $userOverride = $this->permissions()
-            ->where('slug', $slug)
-            ->first();
+        if ($this->supportsPermissionOverrides()) {
+            $override = DB::table('permission_user')
+                ->join('permissions', 'permissions.id', '=', 'permission_user.permission_id')
+                ->where('permission_user.user_id', $this->id)
+                ->where('permissions.slug', $slug)
+                ->select('permission_user.allowed')
+                ->first();
 
-        if ($userOverride) {
-            return (bool) $userOverride->pivot->allowed;
+            if ($override !== null) {
+                return (bool) $override->allowed;
+            }
+        } elseif ($this->permissions()->where('slug', $slug)->exists()) {
+            // Backward-compatible path while the override migration is still pending.
+            return true;
         }
 
         return $this->role
@@ -74,14 +86,18 @@ class User extends Authenticatable
 
     public function permissions(): BelongsToMany
     {
-        return $this->belongsToMany(Permission::class)
-            ->withPivot('allowed')
-            ->withTimestamps();
+        return $this->belongsToMany(Permission::class)->withTimestamps();
     }
 
     public function getCreatedAtAttribute($value): string
     {
         $dateTime = new DateTime($value);
         return $dateTime->format('d/m/Y');
+    }
+
+    private function supportsPermissionOverrides(): bool
+    {
+        return self::$permissionOverridesSupported ??=
+            Schema::hasColumn('permission_user', 'allowed');
     }
 }
