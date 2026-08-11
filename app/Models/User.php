@@ -38,13 +38,20 @@ class User extends Authenticatable
     ];
 
     /**
-     * Individual access is intentionally independent from role permissions.
-     * Roles still describe the employee type / dashboard, while access to
-     * concrete actions is granted explicitly by an administrator.
+     * Business-function access is intentionally independent from role
+     * permissions. Roles only identify the employee workspace. The roles list
+     * itself is an internal manager/admin lookup used while editing staff and
+     * is not exposed as a user-configurable business permission.
      */
     public function hasPermission(string $slug): bool
     {
-        if ($this->role && $this->role->name === 'admin') {
+        $roleName = $this->role?->name;
+
+        if ($roleName === 'admin') {
+            return true;
+        }
+
+        if ($slug === 'roles.view' && $roleName === 'manager') {
             return true;
         }
 
