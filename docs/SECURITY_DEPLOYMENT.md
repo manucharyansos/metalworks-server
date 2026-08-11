@@ -13,6 +13,18 @@ php artisan files:security-audit
 
 Do not add a unique index to `order_numbers.number` until the order-number audit reports no duplicates.
 
+### Prepare staff permissions before the migration
+
+The migration `2026_08_11_222500_reset_individual_permissions.php` intentionally changes the staff-access model:
+
+- role permissions no longer grant concrete business-function access;
+- admin remains full access;
+- existing `permission_user` rows are copied to `permission_user_reset_backup_20260811` for rollback/audit;
+- all non-admin individual business grants are then removed;
+- an administrator must explicitly grant each staff member the functions they need from the admin employee page.
+
+Before running production migrations, prepare the desired staff permission matrix and make sure an administrator account can log in. Do not run this migration during a production window unless there is time to assign and smoke-test the required staff access immediately afterwards.
+
 ## 2. Production configuration checks
 
 Do not copy repository `.env` files over the production environment.
@@ -37,8 +49,11 @@ Run database migrations:
 
 ```bash
 php artisan migrate --force
+php artisan permission:sync
 php artisan optimize:clear
 ```
+
+Immediately after the migration, log in as admin and explicitly assign the required business functions to staff accounts. The permission reset is intentional; leaving this step unfinished means non-admin staff remain locked out of protected business functions.
 
 The order-number sequence migration must be present before normal traffic relies on the new generator.
 
@@ -58,9 +73,13 @@ Verify at minimum:
 - login / logout
 - password reset
 - current-user endpoint
-- manager order CRUD according to permissions
-- engineer can only see/update/delete orders they created
+- admin employee permission assignment
+- a staff account with zero grants cannot use protected business functions
+- each explicitly granted function works without inheriting unrelated role permissions
+- manager order CRUD according to individual permissions
+- engineer operations according to individual permissions and ownership constraints
 - factory worker sees only the assigned factory/operator work
+- factory file visibility/download requires `factory.download`
 - unauthorized file IDs return 403/404
 - authorized `/api/secure-files/pmp/{id}` and `/api/secure-files/order/{id}` requests work
 
@@ -68,7 +87,7 @@ Verify at minimum:
 
 Only after the secure-file backend routes are live, deploy client code that uses those routes for previews/downloads.
 
-Verify login, manager, engineer and factory views before continuing.
+Verify login, manager, engineer and factory views before continuing. Also verify navigation, direct URLs and action buttons against accounts with deliberately different permission combinations.
 
 ## 6. Stage files privately — non-destructive
 
