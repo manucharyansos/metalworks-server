@@ -10,64 +10,72 @@ use Illuminate\Http\Request;
 class UserController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * Admin staff directory. Customer accounts intentionally do not appear here.
      */
     public function index(): JsonResponse
     {
-        $users = User::with(['role', 'client'])->get();
+        $users = User::query()
+            ->with(['role', 'factory', 'worker'])
+            ->whereDoesntHave('client')
+            ->where(function ($query) {
+                $query
+                    ->whereDoesntHave('role')
+                    ->orWhereHas('role', function ($roleQuery) {
+                        $roleQuery->where('name', '!=', 'authenticatedUser');
+                    });
+            })
+            ->orderBy('name')
+            ->get();
 
         return response()->json([
             'data' => $users,
         ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     */
     public function create()
     {
         //
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
         //
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show(User $user): JsonResponse
     {
-        $user->load(['role', 'client']);
+        $this->ensureStaffAccount($user);
+
+        $user->load(['role', 'factory', 'worker']);
 
         return response()->json($user);
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit(string $id)
     {
         //
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, string $id): JsonResponse
     {
-
+        return response()->json([
+            'message' => 'User update is not implemented on this endpoint.',
+        ], 501);
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(string $id)
     {
         //
+    }
+
+    private function ensureStaffAccount(User $user): void
+    {
+        $user->loadMissing(['role', 'client']);
+
+        abort_if(
+            $user->client !== null || $user->role?->name === 'authenticatedUser',
+            404,
+            'Staff account not found.'
+        );
     }
 }
