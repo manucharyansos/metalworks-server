@@ -16,6 +16,27 @@ class MaterialCategoryController extends Controller
         return response()->json($categories);
     }
 
+    /**
+     * Lightweight internal lookup for the material create/edit form. Having
+     * materials.create/update is sufficient; category browsing remains a
+     * separate permission and is not required just to populate a dropdown.
+     */
+    public function options(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $allowed = $user?->role?->name === 'admin'
+            || $user?->hasPermission('materials.create')
+            || $user?->hasPermission('materials.update');
+
+        abort_unless($allowed, 403, 'Forbidden');
+
+        return response()->json([
+            'categories' => MaterialCategory::query()
+                ->orderBy('name')
+                ->get(['id', 'name', 'material_group_id']),
+        ]);
+    }
+
     public function store(Request $request): JsonResponse
     {
         $this->authorizeMutation($request, 'materials.create');
