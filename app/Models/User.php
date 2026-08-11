@@ -5,8 +5,8 @@ namespace App\Models;
 use DateTime;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -39,15 +39,17 @@ class User extends Authenticatable
             return true;
         }
 
-        $userHas = $this->permissions()
+        $userOverride = $this->permissions()
             ->where('slug', $slug)
-            ->exists();
+            ->first();
 
-        $roleHas = $this->role
+        if ($userOverride) {
+            return (bool) $userOverride->pivot->allowed;
+        }
+
+        return $this->role
             ? $this->role->permissions()->where('slug', $slug)->exists()
             : false;
-
-        return $userHas || $roleHas;
     }
 
     public function role(): BelongsTo
@@ -72,7 +74,9 @@ class User extends Authenticatable
 
     public function permissions(): BelongsToMany
     {
-        return $this->belongsToMany(Permission::class);
+        return $this->belongsToMany(Permission::class)
+            ->withPivot('allowed')
+            ->withTimestamps();
     }
 
     public function getCreatedAtAttribute($value): string
