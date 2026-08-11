@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Models\Role;
+use App\Models\User;
+use App\Support\EmployeePermissionScope;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Routing\Route as LaravelRoute;
 use Illuminate\Support\Facades\Route;
@@ -58,6 +61,40 @@ class SecurityRoutesTest extends TestCase
             $this->assertRouteUsesMiddleware($route, 'auth:sanctum');
             $this->assertRouteUsesMiddleware($route, 'admin');
         }
+    }
+
+    public function test_employee_permission_overrides_are_scoped_by_role(): void
+    {
+        $engineer = new User();
+        $engineer->setRelation('role', new Role(['name' => 'engineer']));
+
+        $engineerScope = EmployeePermissionScope::slugsFor($engineer);
+        $this->assertContains('pmp_files.view', $engineerScope);
+        $this->assertContains('pmp_files.upload', $engineerScope);
+        $this->assertContains('clients.view', $engineerScope);
+        $this->assertContains('workers.view', $engineerScope);
+        $this->assertNotContains('orders.delete', $engineerScope);
+        $this->assertNotContains('materials.update', $engineerScope);
+
+        $manager = new User();
+        $manager->setRelation('role', new Role(['name' => 'manager']));
+
+        $managerScope = EmployeePermissionScope::slugsFor($manager);
+        $this->assertContains('orders.view', $managerScope);
+        $this->assertContains('clients.update', $managerScope);
+        $this->assertContains('workers.update', $managerScope);
+        $this->assertContains('materials.view', $managerScope);
+        $this->assertNotContains('pmp_files.view', $managerScope);
+        $this->assertNotContains('factory.download', $managerScope);
+
+        $factoryOperator = new User();
+        $factoryOperator->factory_id = 10;
+        $factoryOperator->setRelation('role', new Role(['name' => 'laser']));
+
+        $this->assertSame(
+            ['factory.download'],
+            EmployeePermissionScope::slugsFor($factoryOperator)
+        );
     }
 
     public function test_engineer_order_mutations_keep_role_and_permission_guards(): void
