@@ -48,12 +48,16 @@ class SecurityRoutesTest extends TestCase
         }
     }
 
-    public function test_permission_management_routes_are_admin_only(): void
+    public function test_staff_directory_and_permission_management_are_admin_only(): void
     {
-        $route = $this->findRoute('PUT', 'api/users/{user}/permissions');
+        $staffDirectory = $this->findRoute('GET', 'api/users');
+        $permissionView = $this->findRoute('GET', 'api/users/{user}/permissions');
+        $permissionUpdate = $this->findRoute('PUT', 'api/users/{user}/permissions');
 
-        $this->assertRouteUsesMiddleware($route, 'auth:sanctum');
-        $this->assertRouteUsesMiddleware($route, 'admin');
+        foreach ([$staffDirectory, $permissionView, $permissionUpdate] as $route) {
+            $this->assertRouteUsesMiddleware($route, 'auth:sanctum');
+            $this->assertRouteUsesMiddleware($route, 'admin');
+        }
     }
 
     public function test_engineer_order_mutations_keep_role_and_permission_guards(): void
