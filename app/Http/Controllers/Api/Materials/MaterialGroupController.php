@@ -13,70 +13,102 @@ class MaterialGroupController extends Controller
     public function index(): JsonResponse
     {
         $materialGroups = MaterialGroup::with('categories.materials')->get();
+
         return response()->json($materialGroups, 200);
     }
 
     public function store(Request $request): JsonResponse
     {
+        $this->authorizeMutation($request, 'materials.create');
+
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'image' => 'nullable|file|mimes:jpg,jpeg,png|max:2048',
         ]);
+
         if ($request->hasFile('image')) {
             $file = $request->file('image');
-            $uniqueName = uniqid() . '_' . $file->getClientOriginalName();
+            $uniqueName = uniqid('', true) . '_' . basename($file->getClientOriginalName());
             $data['image'] = $file->storeAs('categories', $uniqueName, 'public');
         }
 
-        $materialGroups = MaterialGroup::create($data);
+        $materialGroup = MaterialGroup::create($data);
 
         return response()->json([
             'success' => true,
             'message' => 'Material group created successfully',
-            'data'    => $materialGroups,
+            'data' => $materialGroup,
         ], 201);
     }
 
-    public function show(MaterialGroup $materialGroups): JsonResponse
+    public function show(MaterialGroup $materialGroup): JsonResponse
     {
-        $materialGroups->load('categories');
+        $materialGroup->load('categories');
 
         return response()->json([
             'success' => true,
-            'data' => $materialGroups
+            'data' => $materialGroup,
         ], 200);
     }
 
-    public function update(Request $request, MaterialGroup $materialGroups): JsonResponse
+    public function update(Request $request, MaterialGroup $materialGroup): JsonResponse
     {
+        $this->authorizeMutation($request, 'materials.update');
+
         $data = $request->validate([
             'name' => 'required|string|max:255',
             'image' => 'nullable|file|mimes:jpg,jpeg,png|max:2048',
         ]);
+
         if ($request->hasFile('image')) {
-            if ($materialGroups->image && Storage::disk('public')->exists($materialGroups->image)) {
-                Storage::disk('public')->delete($materialGroups->image);
+            if ($materialGroup->image && Storage::disk('public')->exists($materialGroup->image)) {
+                Storage::disk('public')->delete($materialGroup->image);
             }
+
             $file = $request->file('image');
-            $uniqueName = uniqid() . '_' . $file->getClientOriginalName();
+            $uniqueName = uniqid('', true) . '_' . basename($file->getClientOriginalName());
             $data['image'] = $file->storeAs('categories', $uniqueName, 'public');
         }
-        $materialGroups->update($data);
+
+        $materialGroup->update($data);
 
         return response()->json([
             'success' => true,
             'message' => 'Material group updated successfully',
-            'data' => $materialGroups
+            'data' => $materialGroup->fresh(),
         ], 200);
     }
 
-    public function destroy(MaterialGroup $materialGroups): JsonResponse
+    public function destroy(Request $request, MaterialGroup $materialGroup): JsonResponse
     {
-        $materialGroups->delete();
+        $this->authorizeMutation($request, 'materials.delete');
+
+        if ($materialGroup->image && Storage::disk('public')->exists($materialGroup->image)) {
+            Storage::disk('public')->delete($materialGroup->image);
+        }
+
+        $materialGroup->delete();
 
         return response()->json([
             'success' => true,
-            'message' => 'Material group deleted successfully'
+            'message' => 'Material group deleted successfully',
         ], 200);
+    }
+
+    private function authorizeMutation(Request $request, string $permission): void
+    {
+        $user = $request->user('sanctum');
+
+        abort_unless($user, 401, 'Unauthenticated');
+
+        if ($user->role?->name === 'admin') {
+            return;
+        }
+
+        abort_unless(
+            method_exists($user, 'hasPermission') && $user->hasPermission($permission),
+            403,
+            'Forbidden'
+        );
     }
 }

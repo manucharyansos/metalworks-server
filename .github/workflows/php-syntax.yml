@@ -1,0 +1,75 @@
+name: PHP Security CI
+
+on:
+  push:
+    branches:
+      - master
+      - security-hardening/server
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  php-security-ci:
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      CACHE_DRIVER: array
+      DB_CONNECTION: sqlite
+      DB_DATABASE: ':memory:'
+      MAIL_MAILER: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: mbstring, sqlite3, pdo_sqlite, zip
+          coverage: none
+
+      - name: Validate Composer metadata
+        run: composer validate --no-check-publish --no-interaction
+
+      - name: Audit locked Composer dependencies
+        continue-on-error: true
+        run: composer audit --locked --no-interaction
+
+      - name: Install PHP dependencies without application scripts
+        run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
+
+      - name: Run Laravel package discovery explicitly
+        shell: bash
+        run: |
+          set +e
+          php artisan package:discover --ansi 2>&1 | tee package-discover.log
+          status=${PIPESTATUS[0]}
+          exit "$status"
+
+      - name: Upload Laravel bootstrap diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: laravel-bootstrap-diagnostics
+          path: package-discover.log
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Lint application PHP files
+        shell: bash
+        run: |
+          set -euo pipefail
+          find app bootstrap config database routes tests \
+            -type f -name '*.php' -print0 \
+            | xargs -0 -n1 php -l
+
+      - name: Boot Laravel and compile route table
+        run: php artisan route:list --except-vendor
+
+      - name: Run security route regression tests
+        run: php artisan test --filter=SecurityRoutesTest

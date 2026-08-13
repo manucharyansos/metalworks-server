@@ -9,12 +9,26 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Validation\ValidationException;
 
 class Order extends Model
 {
     use HasFactory;
 
     protected $fillable = ['user_id', 'name', 'description', 'status', 'link_existing_files', 'creator_id', 'remote_number_id'];
+
+    protected static function booted(): void
+    {
+        static::creating(function (Order $order): void {
+            $order->assertCustomerUser();
+        });
+
+        static::updating(function (Order $order): void {
+            if ($order->isDirty('user_id')) {
+                $order->assertCustomerUser();
+            }
+        });
+    }
 
     public function logs(): HasMany
     {
@@ -24,6 +38,7 @@ class Order extends Model
     protected $casts = [
         'link_existing_files' => 'boolean',
     ];
+
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'creator_id');
@@ -76,6 +91,7 @@ class Order extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+
     public function client(): HasOne
     {
         return $this->hasOne(Client::class, 'user_id', 'user_id');
@@ -91,7 +107,7 @@ class Order extends Model
         return (new DateTime($value))->format('d/m/Y');
     }
 
-    public function updateStatusIfAllFactoriesAdminConfirmed()
+    public function updateStatusIfAllFactoriesAdminConfirmed(): void
     {
         $factoryOrders = $this->factoryOrders;
 
@@ -102,9 +118,8 @@ class Order extends Model
         $allConfirmed = $factoryOrders->every(function ($fo) {
             $status = strtolower($fo->status ?? '');
 
-            $isFinished = in_array($status, ['finished', 'completed', 'done']);
-
-            $isCanceled = in_array($status, ['canceled', 'cancelled']);
+            $isFinished = in_array($status, ['finished', 'completed', 'done', 'confirmed'], true);
+            $isCanceled = in_array($status, ['canceled', 'cancelled'], true);
 
             return ($isFinished && !is_null($fo->admin_confirmation_date)) || $isCanceled;
         });
@@ -113,6 +128,20 @@ class Order extends Model
             $this->status = 'completed';
             $this->completed_at = now();
             $this->save();
+        }
+    }
+
+    private function assertCustomerUser(): void
+    {
+        $isCustomer = User::query()
+            ->whereKey($this->user_id)
+            ->whereHas('role', fn ($query) => $query->where('name', 'authenticatedUser'))
+            ->exists();
+
+        if (!$isCustomer) {
+            throw ValidationException::withMessages([
+                'user_id' => ['Պատվերի հաճախորդը պետք է լինի գրանցված հաճախորդի հաշիվ։'],
+            ]);
         }
     }
 }

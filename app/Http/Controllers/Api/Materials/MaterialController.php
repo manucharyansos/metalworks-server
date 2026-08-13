@@ -12,9 +12,9 @@ class MaterialController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $perPage     = (int) $request->input('per_page', 10);
-        $search      = trim((string) $request->input('search', ''));
-        $categoryId  = $request->input('category_id');
+        $perPage = max(1, min((int) $request->input('per_page', 10), 100));
+        $search = trim((string) $request->input('search', ''));
+        $categoryId = $request->input('category_id');
 
         $q = Material::query()->orderByDesc('created_at');
 
@@ -25,7 +25,6 @@ class MaterialController extends Controller
         if ($search !== '') {
             $q->where(function ($qq) use ($search) {
                 $qq->where('description', 'like', "%{$search}%")
-                    // թույլ տանք թվային դաշտերով «պարանային» համընկնում
                     ->orWhereRaw('CAST(width AS CHAR) LIKE ?', ["%{$search}%"])
                     ->orWhereRaw('CAST(length AS CHAR) LIKE ?', ["%{$search}%"])
                     ->orWhereRaw('CAST(height AS CHAR) LIKE ?', ["%{$search}%"])
@@ -39,11 +38,11 @@ class MaterialController extends Controller
             'data' => $p->items(),
             'pagination' => [
                 'current_page' => $p->currentPage(),
-                'last_page'    => $p->lastPage(),
-                'per_page'     => $p->perPage(),
-                'total'        => $p->total(),
-                'next_page_url'=> $p->nextPageUrl(),
-                'prev_page_url'=> $p->previousPageUrl(),
+                'last_page' => $p->lastPage(),
+                'per_page' => $p->perPage(),
+                'total' => $p->total(),
+                'next_page_url' => $p->nextPageUrl(),
+                'prev_page_url' => $p->previousPageUrl(),
             ],
         ]);
     }
@@ -66,9 +65,7 @@ class MaterialController extends Controller
         ]);
 
         if ($request->hasFile('image')) {
-            $file = $request->file('image');
-            $uniqueName = uniqid() . '_' . $file->getClientOriginalName();
-            $data['image'] = $file->storeAs('materials', $uniqueName, 'public');
+            $data['image'] = $request->file('image')->store('materials', 'public');
         }
 
         $material = Material::create($data);
@@ -76,10 +73,9 @@ class MaterialController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Material created successfully',
-            'data' => $material
+            'data' => $material,
         ], 201);
     }
-
 
     public function update(Request $request, Material $material): JsonResponse
     {
@@ -93,36 +89,51 @@ class MaterialController extends Controller
             'material_category_id' => 'required|exists:material_categories,id',
         ]);
 
+        $oldImage = $material->image;
+        $newImage = null;
+
         if ($request->hasFile('image')) {
-            if ($material->image && Storage::disk('public')->exists($material->image)) {
-                Storage::disk('public')->delete($material->image);
-            }
-            $file = $request->file('image');
-            $uniqueName = uniqid() . '_' . $file->getClientOriginalName();
-            $data['image'] = $file->storeAs('materials', $uniqueName, 'public');
+            $newImage = $request->file('image')->store('materials', 'public');
+            $data['image'] = $newImage;
         }
 
-        $material->update($data);
+        try {
+            $material->update($data);
+        } catch (\Throwable $e) {
+            if ($newImage && Storage::disk('public')->exists($newImage)) {
+                Storage::disk('public')->delete($newImage);
+            }
+            throw $e;
+        }
+
+        if (
+            $newImage &&
+            $oldImage &&
+            $oldImage !== $newImage &&
+            Storage::disk('public')->exists($oldImage)
+        ) {
+            Storage::disk('public')->delete($oldImage);
+        }
 
         return response()->json([
             'success' => true,
             'message' => 'Material updated successfully',
-            'data' => $material
+            'data' => $material->fresh(),
         ], 200);
     }
 
-
     public function destroy(Material $material): JsonResponse
     {
-        if ($material->image && Storage::disk('public')->exists($material->image)) {
-            Storage::disk('public')->delete($material->image);
-        }
-
+        $image = $material->image;
         $material->delete();
+
+        if ($image && Storage::disk('public')->exists($image)) {
+            Storage::disk('public')->delete($image);
+        }
 
         return response()->json([
             'success' => true,
-            'message' => 'Material deleted successfully'
+            'message' => 'Material deleted successfully',
         ], 200);
     }
 }

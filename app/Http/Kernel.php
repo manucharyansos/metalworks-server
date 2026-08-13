@@ -17,8 +17,10 @@ class Kernel extends HttpKernel
         // \App\Http\Middleware\TrustHosts::class,
         \App\Http\Middleware\TrustProxies::class,
         \Illuminate\Http\Middleware\HandleCors::class,
+        \App\Http\Middleware\SecurityHeaders::class,
         \App\Http\Middleware\PreventRequestsDuringMaintenance::class,
         \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
+        \App\Http\Middleware\RejectDangerousUploads::class,
         \App\Http\Middleware\TrimStrings::class,
         \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
         \App\Http\Middleware\DetectDeviceMiddleware::class,
@@ -27,7 +29,7 @@ class Kernel extends HttpKernel
     /**
      * The application's route middleware groups.
      *
-     * @var array<string, array<int, class-string|string>>
+     * @var array<string, array<int, class-string|string>
      */
     protected $middlewareGroups = [
         'web' => [
@@ -51,7 +53,7 @@ class Kernel extends HttpKernel
     /**
      * The application's middleware aliases.
      *
-     * Aliases may be used instead of class names to conveniently assign middleware to routes and groups.
+     * Aliases may be used to conveniently assign middleware to routes and groups.
      *
      * @var array<string, class-string|string>
      */

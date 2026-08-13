@@ -5,21 +5,26 @@ namespace App\Models;
 use DateTime;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
+    private static ?bool $permissionAssignmentsSupported = null;
+
     protected $fillable = [
         'name',
         'email',
         'password',
         'role_id',
+        'factory_id',
     ];
 
     protected $hidden = [
@@ -32,22 +37,34 @@ class User extends Authenticatable
         'password' => 'hashed',
     ];
 
-
+    /**
+     * Business-function access is intentionally independent from role
+     * permissions. Roles only identify the employee workspace. The roles list
+     * itself is an internal manager/admin lookup used while editing staff and
+     * is not exposed as a user-configurable business permission.
+     */
     public function hasPermission(string $slug): bool
     {
-        if ($this->role && $this->role->name === 'admin') {
+        $roleName = $this->role?->name;
+
+        if ($roleName === 'admin') {
             return true;
         }
 
-        $userHas = $this->permissions()
-            ->where('slug', $slug)
+        if ($slug === 'roles.view' && $roleName === 'manager') {
+            return true;
+        }
+
+        if (!$this->supportsPermissionAssignments()) {
+            return false;
+        }
+
+        return DB::table('permission_user')
+            ->join('permissions', 'permissions.id', '=', 'permission_user.permission_id')
+            ->where('permission_user.user_id', $this->id)
+            ->where('permissions.slug', $slug)
+            ->where('permission_user.allowed', true)
             ->exists();
-
-        $roleHas = $this->role
-            ? $this->role->permissions()->where('slug', $slug)->exists()
-            : false;
-
-        return $userHas || $roleHas;
     }
 
     public function role(): BelongsTo
@@ -55,12 +72,10 @@ class User extends Authenticatable
         return $this->belongsTo(Role::class, 'role_id');
     }
 
-    public function factory()
+    public function factory(): BelongsTo
     {
         return $this->belongsTo(Factory::class, 'factory_id');
     }
-
-
 
     public function client(): HasOne
     {
@@ -72,15 +87,23 @@ class User extends Authenticatable
         return $this->hasOne(Worker::class);
     }
 
-
     public function permissions(): BelongsToMany
     {
-        return $this->belongsToMany(Permission::class);
+        return $this->belongsToMany(Permission::class)
+            ->withPivot('allowed')
+            ->withTimestamps();
     }
 
     public function getCreatedAtAttribute($value): string
     {
         $dateTime = new DateTime($value);
         return $dateTime->format('d/m/Y');
+    }
+
+    private function supportsPermissionAssignments(): bool
+    {
+        return self::$permissionAssignmentsSupported ??=
+            Schema::hasTable('permission_user')
+            && Schema::hasColumn('permission_user', 'allowed');
     }
 }
