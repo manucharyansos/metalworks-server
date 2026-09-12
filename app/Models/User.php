@@ -38,20 +38,15 @@ class User extends Authenticatable
     ];
 
     /**
-     * Business-function access is intentionally independent from role
-     * permissions. Roles only identify the employee workspace. The roles list
-     * itself is an internal manager/admin lookup used while editing staff and
-     * is not exposed as a user-configurable business permission.
+     * Admin and manager are privileged roles and intentionally have access to
+     * every business function. Other employee roles rely on individual
+     * permission assignments from permission_user.
      */
     public function hasPermission(string $slug): bool
     {
         $roleName = $this->role?->name;
 
-        if ($roleName === 'admin') {
-            return true;
-        }
-
-        if ($slug === 'roles.view' && $roleName === 'manager') {
+        if (in_array($roleName, ['admin', 'manager'], true)) {
             return true;
         }
 
