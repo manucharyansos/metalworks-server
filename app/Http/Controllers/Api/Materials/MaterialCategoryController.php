@@ -17,14 +17,15 @@ class MaterialCategoryController extends Controller
     }
 
     /**
-     * Lightweight internal lookup for the material create/edit form. Having
-     * materials.create/update is sufficient; category browsing remains a
-     * separate permission and is not required just to populate a dropdown.
+     * Lightweight internal lookup for the material create/edit form. Admin and
+     * manager are privileged; other roles need the matching material mutation
+     * permission.
      */
     public function options(Request $request): JsonResponse
     {
         $user = $request->user();
-        $allowed = $user?->role?->name === 'admin'
+        $role = $user?->role?->name;
+        $allowed = in_array($role, ['admin', 'manager'], true)
             || $user?->hasPermission('materials.create')
             || $user?->hasPermission('materials.update');
 
@@ -101,7 +102,7 @@ class MaterialCategoryController extends Controller
 
         abort_unless($user, 401, 'Unauthenticated');
 
-        if ($user->role?->name === 'admin') {
+        if (in_array($user->role?->name, ['admin', 'manager'], true)) {
             return;
         }
 
