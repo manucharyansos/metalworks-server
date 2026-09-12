@@ -76,3 +76,6 @@ jobs:
 
       - name: Run manager full-access regression tests
         run: php artisan test --filter=ManagerFullAccessTest
+
+      - name: Run profile password regression tests
+        run: php artisan test --filter=ProfilePasswordChangeTest
