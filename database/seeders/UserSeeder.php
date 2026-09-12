@@ -13,11 +13,6 @@ class UserSeeder extends Seeder
 {
     public function run(): void
     {
-        if (app()->environment('production')) {
-            $this->command?->warn('UserSeeder skipped in production to avoid creating or resetting known default credentials.');
-            return;
-        }
-
         $roles = [
             'admin'           => Role::firstWhere('name', 'admin'),
             'manager'         => Role::firstWhere('name', 'manager'),
@@ -26,6 +21,11 @@ class UserSeeder extends Seeder
             'laser'           => Role::firstWhere('name', 'laser'),
             'powder_catting'  => Role::firstWhere('name', 'powder_catting'),
         ];
+
+        if (app()->environment('production')) {
+            $this->seedPrivilegedUsers($roles);
+            return;
+        }
 
         $factories = [
             'bend'            => Factory::firstWhere('name', 'Bend'),
@@ -111,5 +111,49 @@ class UserSeeder extends Seeder
         }
 
         $this->command?->info('Հաջողությամբ ստեղծվեցին Admin, Managers, Engineers և Workers (ընդհանուր ' . User::count() . ' օգտատեր)');
+    }
+
+    private function seedPrivilegedUsers(array $roles): void
+    {
+        $accounts = [
+            'admin' => config('privileged_users.admin'),
+            'manager' => config('privileged_users.manager'),
+        ];
+
+        foreach ($accounts as $roleName => $account) {
+            $email = trim((string) ($account['email'] ?? ''));
+            $name = trim((string) ($account['name'] ?? ''));
+            $password = (string) ($account['password'] ?? '');
+            $role = $roles[$roleName] ?? null;
+
+            if ($email === '') {
+                $this->command?->warn(strtoupper($roleName) . '_EMAIL is empty; account was not created.');
+                continue;
+            }
+
+            if (! $role) {
+                $this->command?->error("Role '{$roleName}' was not found; {$email} was not created or updated.");
+                continue;
+            }
+
+            $user = User::firstWhere('email', $email);
+
+            if (! $user) {
+                if ($password === '') {
+                    $this->command?->warn(strtoupper($roleName) . "_INITIAL_PASSWORD is empty; {$email} was not created.");
+                    continue;
+                }
+
+                $user = new User();
+                $user->email = $email;
+                $user->password = Hash::make($password);
+            }
+
+            $user->name = $name !== '' ? $name : ucfirst($roleName);
+            $user->role_id = $role->id;
+            $user->save();
+
+            $this->command?->info(ucfirst($roleName) . " account ensured: {$email}");
+        }
     }
 }
