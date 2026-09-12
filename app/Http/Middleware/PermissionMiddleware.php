@@ -15,7 +15,9 @@ class PermissionMiddleware
             abort(401, 'Unauthenticated');
         }
 
-        if ($user->role && $user->role->name === 'admin') {
+        $role = $user->role?->name;
+
+        if (in_array($role, ['admin', 'manager'], true)) {
             return $next($request);
         }
 
