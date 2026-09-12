@@ -10,11 +10,13 @@ class AdminMiddleware
     {
         $user = $request->user();
 
-        if (!$user) {
+        if (! $user) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        if ($user->role?->name !== 'admin') {
+        $role = $user->role?->name;
+
+        if (! in_array($role, ['admin', 'manager'], true)) {
             return response()->json(['error' => 'Forbidden'], 403);
         }
 
