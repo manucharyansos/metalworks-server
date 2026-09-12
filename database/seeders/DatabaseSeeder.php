@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\FactoryOrderStatus;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -16,9 +15,7 @@ class DatabaseSeeder extends Seeder
             RoleTableSeeder::class,
             FactorySeeder::class,
             UserSeeder::class,
-            FileExtensionSeeder::class,
-            LaserFileExtensionSeeder::class,
-            BendFileExtensionSeeder::class,
+            FactoryFileExtensionSeeder::class,
             FactoryOrderStatusSeeder::class,
             MaterialsSeeder::class,
             ClientSeeder::class,
