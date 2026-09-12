@@ -7,7 +7,7 @@ use Illuminate\Database\Seeder;
 class DatabaseSeeder extends Seeder
 {
     /**
-     * Seed the application's database.
+     * Seed only the system data required by a production installation.
      */
     public function run(): void
     {
@@ -17,8 +17,6 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             FactoryFileExtensionSeeder::class,
             FactoryOrderStatusSeeder::class,
-            MaterialsSeeder::class,
-            ClientSeeder::class,
         ]);
     }
 }
