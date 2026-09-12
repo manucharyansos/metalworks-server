@@ -6,6 +6,7 @@ use App\Models\Role;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class UserSeeder extends Seeder
 {
@@ -27,7 +28,7 @@ class UserSeeder extends Seeder
         ];
 
         foreach ($accounts as $roleName => $account) {
-            $email = trim((string) ($account['email'] ?? ''));
+            $email = Str::lower(trim((string) ($account['email'] ?? '')));
             $name = trim((string) ($account['name'] ?? ''));
             $password = (string) ($account['password'] ?? '');
             $role = $roles[$roleName] ?? null;
@@ -42,24 +43,18 @@ class UserSeeder extends Seeder
                 continue;
             }
 
-            $user = User::firstWhere('email', $email);
-
-            if (! $user) {
-                if ($password === '') {
-                    $this->command?->warn(strtoupper($roleName) . "_INITIAL_PASSWORD is empty; {$email} was not created.");
-                    continue;
-                }
-
-                $user = new User();
-                $user->email = $email;
-                $user->password = Hash::make($password);
+            if ($password === '') {
+                $this->command?->warn(strtoupper($roleName) . "_INITIAL_PASSWORD is empty; {$email} was not created or updated.");
+                continue;
             }
 
+            $user = User::firstOrNew(['email' => $email]);
             $user->name = $name !== '' ? $name : ucfirst($roleName);
             $user->role_id = $role->id;
+            $user->password = Hash::make($password);
             $user->save();
 
-            $this->command?->info(ucfirst($roleName) . " account ensured: {$email}");
+            $this->command?->info(ucfirst($roleName) . " account synced from environment: {$email}");
         }
     }
 }
