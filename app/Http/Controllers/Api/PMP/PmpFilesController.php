@@ -64,8 +64,9 @@ class PmpFilesController extends Controller
                 static fn ($item) => strtolower(ltrim(trim((string) $item), '.')),
                 $this->getAllowedExtensions($factory)
             )));
+            $allowsAnyType = in_array('*', $allowed, true);
 
-            if (!in_array($extension, $allowed, true)) {
+            if (! $allowsAnyType && ! in_array($extension, $allowed, true)) {
                 return response()->json([
                     'error' => $allowed
                         ? 'Ֆայլի տեսակը թույլատրված չէ։ Թույլատրելի են՝ ' . implode(', ', $allowed)
@@ -94,7 +95,7 @@ class PmpFilesController extends Controller
             $path = "MetalWorks/PMP_{$pmp->group}.{$remote->remote_number}/{$factory->value}";
             Storage::disk('public')->makeDirectory($path);
 
-            $uniqueName = Str::uuid()->toString() . '.' . $extension;
+            $uniqueName = Str::uuid()->toString() . ($extension !== '' ? ".{$extension}" : '');
             $storedPath = $file->storeAs($path, $uniqueName, 'public');
 
             $record = PmpFiles::create([
@@ -137,7 +138,7 @@ class PmpFilesController extends Controller
     public function destroy($id): JsonResponse
     {
         $file = PmpFiles::find($id);
-        if (!$file) {
+        if (! $file) {
             return response()->json(['error' => 'File not found'], 404);
         }
 
@@ -169,9 +170,9 @@ class PmpFilesController extends Controller
         return match ($factory->value) {
             'SW' => ['sldprt', 'sldasm', 'slddrw'],
             'DLD' => BendFileExtension::pluck('extension')->toArray(),
-            'DXF' => LaserFileExtension::pluck('extension')->toArray(),
+            'DXF' => ['dxf'],
             'IQS' => ['iqs'],
-            'INFO' => ['txt', 'csv'],
+            'INFO' => ['*'],
             'PDF' => ['pdf'],
             default => [],
         };
