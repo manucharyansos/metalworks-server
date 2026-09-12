@@ -6,6 +6,12 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth:sanctum', 'detect.device', 'setlocale'])->prefix('profile')->group(function () {
     Route::get('/', [ProfileController::class, 'show']);
     Route::patch('/', [ProfileController::class, 'update']);
+
+    Route::post('/email/code', [ProfileController::class, 'requestEmailCode'])
+        ->middleware('throttle:10,1');
+    Route::post('/email/confirm', [ProfileController::class, 'confirmEmailCode'])
+        ->middleware('throttle:20,1');
+
     Route::patch('/password', [ProfileController::class, 'updatePassword'])
         ->middleware('throttle:10,1');
     Route::get('/orders', [ProfileController::class, 'orders']);
