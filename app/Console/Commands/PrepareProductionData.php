@@ -38,6 +38,7 @@ class PrepareProductionData extends Command
         $this->warn('Deleting pre-production business data and uploaded files...');
 
         $deletedFiles = $this->deleteStoredFiles();
+        $deletedUploadRoots = $this->deleteKnownUploadRoots();
 
         $tables = [
             // Order / production history
@@ -108,7 +109,7 @@ class PrepareProductionData extends Command
 
             if (Schema::hasTable('users')) {
                 $deletedUsers = DB::table('users')
-                    ->whereNotIn(DB::raw('LOWER(email)'), [
+                    ->whereRaw('LOWER(email) NOT IN (?, ?)', [
                         strtolower($adminEmail),
                         strtolower($managerEmail),
                     ])
@@ -120,7 +121,8 @@ class PrepareProductionData extends Command
             Schema::enableForeignKeyConstraints();
         }
 
-        $this->info("Deleted {$deletedFiles} stored file copies.");
+        $this->info("Deleted {$deletedFiles} DB-referenced stored file copies.");
+        $this->info("Cleared {$deletedUploadRoots} known upload root(s), including orphaned old files.");
         $this->info('Rebuilding required production system data...');
 
         $exitCode = Artisan::call('db:seed', ['--force' => true]);
@@ -162,15 +164,31 @@ class PrepareProductionData extends Command
 
         foreach (array_keys($paths) as $path) {
             foreach (['private', 'public'] as $disk) {
-                if (Storage::disk($disk)->exists($path)) {
-                    if (Storage::disk($disk)->delete($path)) {
-                        $deleted++;
-                    }
+                if (Storage::disk($disk)->exists($path) && Storage::disk($disk)->delete($path)) {
+                    $deleted++;
                 }
             }
         }
 
         return $deleted;
+    }
+
+    private function deleteKnownUploadRoots(): int
+    {
+        $deletedRoots = 0;
+
+        // PMP uploads live under MetalWorks/... and direct order uploads under uploads/orders/...
+        // Deleting the whole roots also removes orphaned files no longer referenced by the DB.
+        foreach (['private', 'public'] as $disk) {
+            foreach (['MetalWorks', 'uploads/orders'] as $directory) {
+                if (Storage::disk($disk)->exists($directory)) {
+                    Storage::disk($disk)->deleteDirectory($directory);
+                    $deletedRoots++;
+                }
+            }
+        }
+
+        return $deletedRoots;
     }
 
     private function normalizePath(string $path): ?string
