@@ -101,7 +101,7 @@ class MaterialGroupController extends Controller
 
         abort_unless($user, 401, 'Unauthenticated');
 
-        if ($user->role?->name === 'admin') {
+        if (in_array($user->role?->name, ['admin', 'manager'], true)) {
             return;
         }
 
