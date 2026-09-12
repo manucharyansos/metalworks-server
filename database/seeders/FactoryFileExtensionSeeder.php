@@ -25,6 +25,7 @@ class FactoryFileExtensionSeeder extends Seeder
             'SW' => ['sldprt', 'sldasm', 'slddrw'],
             'IQS' => ['iqs'],
             'PDF' => ['pdf'],
+            'DLD' => ['pdf'],
             'DXF' => ['dxf'],
         ];
 
