@@ -41,14 +41,14 @@ class WorkersController extends Controller
     }
 
     /**
-     * Read-only form options for staff creation/editing. This endpoint is tied
-     * to the worker action itself so admins do not need to grant unrelated
-     * factory/role viewing permissions just to use workers.create/update.
+     * Read-only form options for staff creation/editing. Admin and manager are
+     * privileged; other roles need the matching worker mutation permission.
      */
     public function options(Request $request): JsonResponse
     {
         $user = $request->user();
-        $allowed = $user?->role?->name === 'admin'
+        $role = $user?->role?->name;
+        $allowed = in_array($role, ['admin', 'manager'], true)
             || $user?->hasPermission('workers.create')
             || $user?->hasPermission('workers.update');
 
