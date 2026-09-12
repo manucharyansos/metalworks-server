@@ -3,17 +3,18 @@
 namespace Database\Seeders;
 
 use App\Models\FileExtension;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class FileExtensionSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
-        FileExtension::create(['extension' => 'pdf']);
-        FileExtension::create(['extension' => 'dxf']);
+        // Legacy table compatibility. Current per-factory rules are maintained by
+        // FactoryFileExtensionSeeder and this seeder can be run repeatedly safely.
+        foreach (['pdf', 'dxf'] as $extension) {
+            FileExtension::firstOrCreate(['extension' => $extension]);
+        }
+
+        $this->call(FactoryFileExtensionSeeder::class);
     }
 }
