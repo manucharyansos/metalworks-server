@@ -15,6 +15,7 @@ class FactoryFileExtensionController extends Controller
     {
         $factories = Factory::query()
             ->with(['fileExtensions' => fn ($query) => $query->orderBy('extension')])
+            ->orderByRaw("CASE WHEN value = 'INFO' THEN 0 ELSE 1 END")
             ->orderBy('name')
             ->get(['id', 'name', 'value'])
             ->map(fn (Factory $factory) => [
@@ -38,7 +39,7 @@ class FactoryFileExtensionController extends Controller
                 'required',
                 'string',
                 'max:20',
-                'regex:/^[a-z0-9][a-z0-9._+\-]*$/i',
+                'regex:/^(?:\*|[a-z0-9][a-z0-9._+\-]*)$/i',
                 Rule::unique('factory_file_extensions', 'extension')
                     ->where(fn ($query) => $query->where('factory_id', $factoryId)),
             ],
@@ -58,7 +59,7 @@ class FactoryFileExtensionController extends Controller
                 'required',
                 'string',
                 'max:20',
-                'regex:/^[a-z0-9][a-z0-9._+\-]*$/i',
+                'regex:/^(?:\*|[a-z0-9][a-z0-9._+\-]*)$/i',
                 Rule::unique('factory_file_extensions', 'extension')
                     ->where(fn ($query) => $query->where('factory_id', $factoryFileExtension->factory_id))
                     ->ignore($factoryFileExtension->id),
@@ -79,7 +80,7 @@ class FactoryFileExtensionController extends Controller
 
     private function normalizeExtension(Request $request): void
     {
-        if (!$request->has('extension')) {
+        if (! $request->has('extension')) {
             return;
         }
 
