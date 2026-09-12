@@ -73,3 +73,6 @@ jobs:
 
       - name: Run security route regression tests
         run: php artisan test --filter=SecurityRoutesTest
+
+      - name: Run manager full-access regression tests
+        run: php artisan test --filter=ManagerFullAccessTest
