@@ -101,9 +101,6 @@ class AuthController extends Controller
             $user = User::with('role')->where('email', $normalizedEmail)->firstOrFail();
             $response = ['user' => $user];
 
-            // First-party Sanctum SPA requests authenticate with the session
-            // cookie and do not need a second bearer credential. Preserve
-            // bearer-token compatibility only for non-session API clients.
             if (!$request->hasSession()) {
                 $tokenExpiresAt = $remember ? now()->addDays(30) : now()->addDay();
                 $response['access_token'] = $user
@@ -216,8 +213,9 @@ class AuthController extends Controller
         }
 
         $user->load(['role', 'factory']);
+        $role = $user->role?->name;
 
-        if ($user->role && $user->role->name === 'admin') {
+        if (in_array($role, ['admin', 'manager'], true)) {
             $permissions = Permission::query()->orderBy('slug')->pluck('slug');
         } elseif (
             Schema::hasTable('permission_user')
@@ -232,7 +230,6 @@ class AuthController extends Controller
                 ->unique()
                 ->values();
         } else {
-            // Fail closed until the individual-permission migration is applied.
             $permissions = collect();
         }
 
