@@ -12,6 +12,7 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Laravel\Sanctum\HasApiTokens;
+use App\Support\PermissionScope;
 
 class User extends Authenticatable
 {
@@ -51,8 +52,15 @@ class User extends Authenticatable
     {
         $roleName = $this->role?->name;
 
-        if (in_array($roleName, ['admin', 'manager'], true)) {
+        if (PermissionScope::isFullAccess($roleName)) {
             return true;
+        }
+
+        // Individual grants only work inside the employee role's real workspace.
+        // This prevents stale or manually inserted permissions from opening
+        // unrelated manager/engineer/factory functionality.
+        if (!PermissionScope::allows($roleName, $slug)) {
+            return false;
         }
 
         if (!$this->supportsPermissionAssignments()) {
