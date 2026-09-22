@@ -69,6 +69,7 @@ class UserPermissionController extends Controller
                 'groups' => $scope['groups'],
                 'default_group' => $scope['default_group'],
                 'allowed_slugs' => $scope['permissions'],
+                'dependencies' => $scope['dependencies'] ?? [],
             ],
         ]);
     }
@@ -97,18 +98,37 @@ class UserPermissionController extends Controller
             'permissions.*' => ['integer', 'distinct', 'exists:permissions,id'],
         ]);
 
-        $permissionIds = array_values(array_unique(array_map('intval', $data['permissions'])));
-        $assignableIds = $this->assignablePermissions($user)
+        $requestedPermissionIds = array_values(array_unique(array_map('intval', $data['permissions'])));
+        $assignablePermissions = $this->assignablePermissions($user)->get();
+        $assignableIds = $assignablePermissions
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->all();
 
-        $invalidIds = array_values(array_diff($permissionIds, $assignableIds));
+        $invalidIds = array_values(array_diff($requestedPermissionIds, $assignableIds));
         if ($invalidIds !== []) {
             throw ValidationException::withMessages([
                 'permissions' => ['Ընտրված թույլտվություններից մեկը չի վերաբերում այս աշխատակցի հաստիքին։'],
             ]);
         }
+
+        $requestedSlugs = $assignablePermissions
+            ->whereIn('id', $requestedPermissionIds)
+            ->pluck('slug')
+            ->values()
+            ->all();
+
+        $expandedSlugs = PermissionScope::expandWithDependencies(
+            $user->role?->name,
+            $requestedSlugs
+        );
+
+        $permissionIds = $assignablePermissions
+            ->whereIn('slug', $expandedSlugs)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
 
         $catalogPermissionIds = Permission::query()
             ->whereIn('slug', PermissionMap::allSlugs())
