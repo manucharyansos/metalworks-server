@@ -138,6 +138,7 @@ class WorkersController extends Controller
         ]);
 
         $factoryId = $this->validatedFactoryIdForRole((int) $validated['role_id'], $validated['factory_id'] ?? null);
+        $roleChanged = (int) $worker->role_id !== (int) $validated['role_id'];
 
         $worker->update([
             'name'       => $validated['name'],
@@ -148,6 +149,13 @@ class WorkersController extends Controller
 
         if (!empty($validated['password'])) {
             $worker->update(['password' => $validated['password']]);
+        }
+
+        // Individual permissions belong to a concrete job scope. When the
+        // employee changes position, reset old grants instead of letting an
+        // overlapping permission silently become active in the new role.
+        if ($roleChanged) {
+            $worker->permissions()->detach();
         }
 
         $worker->worker()->updateOrCreate([], [
