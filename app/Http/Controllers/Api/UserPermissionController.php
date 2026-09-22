@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Permission;
 use App\Models\User;
+use App\Support\PermissionMap;
+use App\Support\PermissionScope;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,16 +18,31 @@ class UserPermissionController extends Controller
     /**
      * GET /api/users/{user}/permissions
      *
-     * Permissions are independent from roles. The admin sees only concrete
-     * business functions; role lookup itself is intentionally not configurable.
+     * Admin and manager can manage individual employee permissions. The list
+     * returned here is already restricted to functions that can actually be
+     * used by the target employee's role.
      */
     public function show(User $user): JsonResponse
     {
         $this->ensureStaffAccount($user);
         $user->loadMissing('role');
 
-        $permissions = $this->assignablePermissions()->get();
-        $allowedIds = $permissions->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $scope = PermissionScope::forRole($user->role?->name);
+        $permissions = $this->assignablePermissions($user)->get();
+
+        // Always display the canonical business label from config, even when an
+        // older database row still contains a legacy/duplicated title.
+        $permissions->each(function (Permission $permission) {
+            $label = PermissionMap::label($permission->slug);
+            if ($label) {
+                $permission->name = $label;
+            }
+        });
+
+        $allowedIds = $permissions
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
 
         $selectedIds = [];
         if ($this->assignmentsSupported() && $allowedIds !== []) {
@@ -44,8 +61,15 @@ class UserPermissionController extends Controller
             'permissions' => $permissions,
             'user_permission_ids' => $selectedIds,
             'assignments_supported' => $this->assignmentsSupported(),
-            'immutable_full_access' => $user->role?->name === 'admin',
+            'immutable_full_access' => (bool) $scope['full_access'],
             'role_permissions_used' => false,
+            'permission_scope' => [
+                'role' => $scope['role'],
+                'full_access' => (bool) $scope['full_access'],
+                'groups' => $scope['groups'],
+                'default_group' => $scope['default_group'],
+                'allowed_slugs' => $scope['permissions'],
+            ],
         ]);
     }
 
@@ -54,9 +78,11 @@ class UserPermissionController extends Controller
         $this->ensureStaffAccount($user);
         $user->loadMissing('role');
 
-        if ($user->role?->name === 'admin') {
+        $scope = PermissionScope::forRole($user->role?->name);
+
+        if ($scope['full_access']) {
             return response()->json([
-                'message' => 'Admin-ը միշտ ունի լիարժեք մուտք և անհատական սահմանափակում չի ընդունում։',
+                'message' => 'Admin և Manager հաստիքները միշտ ունեն լիարժեք հասանելիություն և անհատական սահմանափակում չեն ընդունում։',
             ], 422);
         }
 
@@ -72,7 +98,7 @@ class UserPermissionController extends Controller
         ]);
 
         $permissionIds = array_values(array_unique(array_map('intval', $data['permissions'])));
-        $assignableIds = $this->assignablePermissions()
+        $assignableIds = $this->assignablePermissions($user)
             ->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->all();
@@ -80,17 +106,23 @@ class UserPermissionController extends Controller
         $invalidIds = array_values(array_diff($permissionIds, $assignableIds));
         if ($invalidIds !== []) {
             throw ValidationException::withMessages([
-                'permissions' => ['Չկառավարվող կամ ներքին permission փոխանցել չի թույլատրվում։'],
+                'permissions' => ['Ընտրված թույլտվություններից մեկը չի վերաբերում այս աշխատակցի հաստիքին։'],
             ]);
         }
 
-        DB::transaction(function () use ($user, $permissionIds, $assignableIds) {
-            // Remove only assignable business-function grants. Internal lookup
-            // behavior is not stored in permission_user.
-            if ($assignableIds !== []) {
+        $catalogPermissionIds = Permission::query()
+            ->whereIn('slug', PermissionMap::allSlugs())
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        DB::transaction(function () use ($user, $permissionIds, $catalogPermissionIds) {
+            // Clear all known business grants first. This also removes stale
+            // permissions left behind after an employee changes role.
+            if ($catalogPermissionIds !== []) {
                 DB::table('permission_user')
                     ->where('user_id', $user->id)
-                    ->whereIn('permission_id', $assignableIds)
+                    ->whereIn('permission_id', $catalogPermissionIds)
                     ->delete();
             }
 
@@ -119,10 +151,16 @@ class UserPermissionController extends Controller
         ]);
     }
 
-    private function assignablePermissions()
+    private function assignablePermissions(User $user)
     {
+        $scope = PermissionScope::forRole($user->role?->name);
+
+        if ($scope['permissions'] === []) {
+            return Permission::query()->whereRaw('1 = 0');
+        }
+
         return Permission::query()
-            ->where('slug', '!=', 'roles.view')
+            ->whereIn('slug', $scope['permissions'])
             ->orderBy('group')
             ->orderBy('slug')
             ->select(['id', 'name', 'slug', 'group']);
