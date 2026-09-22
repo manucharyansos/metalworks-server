@@ -3,7 +3,7 @@
 namespace Tests\Unit;
 
 use App\Support\PermissionScope;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 
 class PermissionScopeTest extends TestCase
 {
