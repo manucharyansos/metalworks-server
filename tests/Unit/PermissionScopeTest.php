@@ -67,6 +67,34 @@ class PermissionScopeTest extends TestCase
         $this->assertTrue(PermissionScope::allows('manager', 'materials.create'));
     }
 
+    public function test_permission_dependencies_are_expanded_for_real_frontend_flows(): void
+    {
+        $engineer = PermissionScope::expandWithDependencies('engineer', [
+            'orders.create',
+            'pmp_files.upload',
+        ]);
+
+        foreach ([
+            'orders.create',
+            'clients.view',
+            'factory.view',
+            'pmp.view',
+            'pmp_files.view',
+            'pmp_files.upload',
+            'pmp_group.check_remote_number',
+        ] as $slug) {
+            $this->assertContains($slug, $engineer, $slug);
+        }
+
+        $factory = PermissionScope::expandWithDependencies('laser', [
+            'factory.download',
+        ]);
+
+        $this->assertContains('factory.view', $factory);
+        $this->assertContains('factory.download', $factory);
+        $this->assertNotContains('orders.view', $factory);
+    }
+
     public function test_unknown_employee_role_gets_no_individual_permissions(): void
     {
         $scope = PermissionScope::forRole('unknown');
