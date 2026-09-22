@@ -22,4 +22,15 @@ class PermissionMap
 
         return $slugs;
     }
+
+    public static function label(string $slug): ?string
+    {
+        [$module, $action] = array_pad(explode('.', $slug, 2), 2, null);
+
+        if (!$module || !$action) {
+            return null;
+        }
+
+        return self::all()[$module][$action] ?? null;
+    }
 }
