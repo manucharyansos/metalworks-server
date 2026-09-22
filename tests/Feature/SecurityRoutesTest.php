@@ -85,6 +85,19 @@ class SecurityRoutesTest extends TestCase
         $this->assertRouteUsesMiddleware($delete, 'permission:orders.delete');
     }
 
+
+    public function test_factory_workspace_lookup_routes_require_factory_view_permission(): void
+    {
+        $actions = $this->findRoute('GET', 'api/factories/factory-order-actions');
+        $filters = $this->findRoute('GET', 'api/factories/factory-order-filters');
+        $orders = $this->findRoute('GET', 'api/factories/getOrdersByFactories');
+
+        foreach ([$actions, $filters, $orders] as $route) {
+            $this->assertRouteUsesMiddleware($route, 'auth:sanctum');
+            $this->assertRouteUsesMiddleware($route, 'permission:factory.view');
+        }
+    }
+
     public function test_factory_file_download_route_keeps_download_permission(): void
     {
         $route = $this->findRoute('GET', 'api/factories/download/{path}');

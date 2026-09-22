@@ -194,13 +194,16 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
                 ->where('path', '.*')
                 ->middleware('permission:factory.download');
 
-            Route::get('/factory-order-actions',   [FactoryOrderStatusController::class, 'actions']);   // modal-ի համար
-            Route::get('/factory-order-filters',   [FactoryOrderStatusController::class, 'filters']);
+            Route::get('/factory-order-actions', [FactoryOrderStatusController::class, 'actions'])
+                ->middleware('permission:factory.view');
+            Route::get('/factory-order-filters', [FactoryOrderStatusController::class, 'filters'])
+                ->middleware('permission:factory.view');
 
             Route::put('updateOrder/{order}', [FactoryController::class, 'updateOrder'])
                 ->middleware('permission:factory.order_update');
 
-            Route::get('getOrdersByFactories', [FactoryController::class, 'getOrdersByFactories']);
+            Route::get('getOrdersByFactories', [FactoryController::class, 'getOrdersByFactories'])
+                ->middleware('permission:factory.view');
             Route::put('confirmOrderStatus/{id}', [FactoryController::class, 'confirmOrderStatus']);
         });
 
