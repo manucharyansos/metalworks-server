@@ -58,6 +58,12 @@ class ActivityObserver
             return;
         }
 
+        $actor = auth()->user();
+        $actorRole = $actor?->role?->name;
+        if (!$actorRole || in_array($actorRole, ['authenticatedUser', 'guestUser'], true)) {
+            return;
+        }
+
         $descriptor = $this->descriptor($model);
         if ($descriptor === null) {
             return;
@@ -81,7 +87,7 @@ class ActivityObserver
 
         try {
             ActivityLog::create([
-                'user_id' => auth()->id(),
+                'user_id' => $actor->id,
                 'category' => $descriptor['category'],
                 'action' => $action,
                 'method' => request()?->method(),
