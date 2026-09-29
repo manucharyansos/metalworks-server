@@ -48,6 +48,15 @@ class SecurityRoutesTest extends TestCase
         }
     }
 
+    public function test_engineer_factory_file_policy_is_read_only_and_permission_guarded(): void
+    {
+        $route = $this->findRoute('GET', 'api/factory-file-policies');
+
+        $this->assertRouteUsesMiddleware($route, 'auth:sanctum');
+        $this->assertRouteUsesMiddleware($route, 'detect.device');
+        $this->assertRouteUsesMiddleware($route, 'permission:pmp_files.view');
+    }
+
     public function test_staff_directory_and_individual_permission_management_are_admin_only(): void
     {
         $staffDirectory = $this->findRoute('GET', 'api/users');
@@ -84,7 +93,6 @@ class SecurityRoutesTest extends TestCase
         $this->assertRouteUsesMiddleware($delete, 'engineer');
         $this->assertRouteUsesMiddleware($delete, 'permission:orders.delete');
     }
-
 
     public function test_factory_workspace_lookup_routes_require_factory_view_permission(): void
     {
