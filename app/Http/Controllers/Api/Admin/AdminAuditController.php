@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
-use App\Models\OrderLog;
+use App\Models\ActivityLog;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class AdminAuditController extends Controller
 {
@@ -17,33 +19,43 @@ class AdminAuditController extends Controller
         $validated = $request->validate([
             'search' => ['nullable', 'string', 'max:255'],
             'user_id' => ['nullable', 'integer', 'exists:users,id'],
+            'role' => ['nullable', 'string', 'max:100'],
+            'category' => ['nullable', 'string', 'max:60'],
             'action' => ['nullable', 'string', 'max:150'],
-            'order_id' => ['nullable', 'integer', 'exists:orders,id'],
+            'subject_type' => ['nullable', 'string', 'max:80'],
             'date_from' => ['nullable', 'date'],
-            'date_to' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],
         ]);
 
+        if (!Schema::hasTable('activity_logs')) {
+            return response()->json([
+                'message' => 'Activity log migration-ը դեռ կիրառված չէ։',
+                'migration_required' => true,
+            ], 409);
+        }
+
         try {
-            $query = OrderLog::query()->with([
-                'user:id,name,email',
-                'order:id,name,status',
-                'order.orderNumber:id,order_id,number',
-                'order.prefixCode:id,order_id,code',
+            $query = ActivityLog::query()->with([
+                'user.role:id,name,value',
+                'user.factory:id,name',
+                'user.worker:id,user_id,last_name,phone',
             ]);
 
             if (!empty($validated['search'])) {
                 $search = trim($validated['search']);
                 $query->where(function (Builder $q) use ($search) {
-                    $q->where('message', 'like', "%{$search}%")
+                    $q->where('description', 'like', "%{$search}%")
+                        ->orWhere('subject_label', 'like', "%{$search}%")
                         ->orWhere('action', 'like', "%{$search}%")
+                        ->orWhere('subject_id', 'like', "%{$search}%")
                         ->orWhereHas('user', function (Builder $userQuery) use ($search) {
                             $userQuery->where('name', 'like', "%{$search}%")
-                                ->orWhere('email', 'like', "%{$search}%");
-                        })
-                        ->orWhereHas('order', fn (Builder $orderQuery) => $orderQuery->where('name', 'like', "%{$search}%"))
-                        ->orWhereHas('order.orderNumber', fn (Builder $numberQuery) => $numberQuery->where('number', 'like', "%{$search}%"))
-                        ->orWhereHas('order.prefixCode', fn (Builder $prefixQuery) => $prefixQuery->where('code', 'like', "%{$search}%"));
+                                ->orWhere('email', 'like', "%{$search}%")
+                                ->orWhereHas('worker', fn (Builder $workerQuery) => $workerQuery
+                                    ->where('last_name', 'like', "%{$search}%")
+                                    ->orWhere('phone', 'like', "%{$search}%"));
+                        });
                 });
             }
 
@@ -51,52 +63,108 @@ class AdminAuditController extends Controller
                 $query->where('user_id', (int) $validated['user_id']);
             }
 
+            if (!empty($validated['role'])) {
+                $role = $validated['role'];
+                $query->whereHas('user.role', fn (Builder $roleQuery) => $roleQuery->where('name', $role));
+            }
+
+            if (!empty($validated['category'])) {
+                $query->where('category', $validated['category']);
+            }
+
             if (!empty($validated['action'])) {
                 $query->where('action', $validated['action']);
             }
 
-            if (!empty($validated['order_id'])) {
-                $query->where('order_id', (int) $validated['order_id']);
+            if (!empty($validated['subject_type'])) {
+                $query->where('subject_type', $validated['subject_type']);
             }
 
             if (!empty($validated['date_from'])) {
-                $query->whereDate('created_at', '>=', $validated['date_from']);
+                $query->where('created_at', '>=', Carbon::parse($validated['date_from'])->startOfDay());
             }
 
             if (!empty($validated['date_to'])) {
-                $query->whereDate('created_at', '<=', $validated['date_to']);
+                $query->where('created_at', '<=', Carbon::parse($validated['date_to'])->endOfDay());
             }
 
-            $logs = $query->latest('id')->paginate((int) ($validated['per_page'] ?? 30));
+            $logs = $query
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->paginate((int) ($validated['per_page'] ?? 40));
 
-            $items = collect($logs->items())->map(function (OrderLog $row) {
+            $items = collect($logs->items())->map(function (ActivityLog $row) {
+                $user = $row->user;
+                $lastName = $user?->last_name ?: $user?->worker?->last_name;
+                $displayName = trim(implode(' ', array_filter([$user?->name, $lastName])));
+
                 return [
                     'id' => $row->id,
-                    'order_id' => $row->order_id,
                     'user_id' => $row->user_id,
+                    'category' => $row->category,
                     'action' => $row->action,
-                    'message' => $row->message,
+                    'method' => $row->method,
+                    'route' => $row->route,
+                    'subject_type' => $row->subject_type,
+                    'subject_id' => $row->subject_id,
+                    'subject_label' => $row->subject_label,
+                    'description' => $row->description,
                     'meta' => $row->meta,
-                    'created_at' => $row->getRawOriginal('created_at'),
-                    'user' => $row->user ? [
-                        'id' => $row->user->id,
-                        'name' => $row->user->name,
-                        'email' => $row->user->email,
-                    ] : null,
-                    'order' => $row->order ? [
-                        'id' => $row->order->id,
-                        'name' => $row->order->name,
-                        'status' => $row->order->status,
-                        'number' => $row->order->orderNumber?->number,
-                        'prefix' => $row->order->prefixCode?->code,
+                    'created_at' => $row->created_at?->toIso8601String(),
+                    'user' => $user ? [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'display_name' => $displayName !== '' ? $displayName : $user->name,
+                        'email' => $user->email,
+                        'phone' => $user->phone ?: $user->worker?->phone,
+                        'role' => $user->role ? [
+                            'name' => $user->role->name,
+                            'value' => $user->role->value,
+                        ] : null,
+                        'factory' => $user->factory ? [
+                            'id' => $user->factory->id,
+                            'name' => $user->factory->name,
+                        ] : null,
                     ] : null,
                 ];
             })->values();
 
-            $actorIds = OrderLog::query()
+            $actorIds = ActivityLog::query()
                 ->whereNotNull('user_id')
                 ->distinct()
                 ->pluck('user_id');
+
+            $actors = User::query()
+                ->with([
+                    'role:id,name,value',
+                    'factory:id,name',
+                    'worker:id,user_id,last_name,phone',
+                ])
+                ->whereIn('id', $actorIds)
+                ->orderBy('name')
+                ->get()
+                ->map(function (User $user) {
+                    $lastName = $user->last_name ?: $user->worker?->last_name;
+                    return [
+                        'id' => $user->id,
+                        'name' => $user->name,
+                        'display_name' => trim(implode(' ', array_filter([$user->name, $lastName]))) ?: $user->name,
+                        'email' => $user->email,
+                        'phone' => $user->phone ?: $user->worker?->phone,
+                        'role' => $user->role ? [
+                            'name' => $user->role->name,
+                            'value' => $user->role->value,
+                        ] : null,
+                        'factory' => $user->factory ? [
+                            'id' => $user->factory->id,
+                            'name' => $user->factory->name,
+                        ] : null,
+                    ];
+                })
+                ->values();
+
+            $today = now()->startOfDay();
+            $sevenDaysAgo = now()->copy()->subDays(6)->startOfDay();
 
             return response()->json([
                 'logs' => $items,
@@ -108,24 +176,39 @@ class AdminAuditController extends Controller
                     'from' => $logs->firstItem(),
                     'to' => $logs->lastItem(),
                 ],
+                'summary' => [
+                    'today' => ActivityLog::query()->where('created_at', '>=', $today)->count(),
+                    'last_7_days' => ActivityLog::query()->where('created_at', '>=', $sevenDaysAgo)->count(),
+                    'files_today' => ActivityLog::query()->where('category', 'files')->where('created_at', '>=', $today)->count(),
+                    'orders_today' => ActivityLog::query()->whereIn('category', ['orders', 'production'])->where('created_at', '>=', $today)->count(),
+                ],
                 'filters' => [
-                    'actors' => User::query()
-                        ->whereIn('id', $actorIds)
-                        ->orderBy('name')
-                        ->get(['id', 'name', 'email']),
-                    'actions' => OrderLog::query()
+                    'actors' => $actors,
+                    'roles' => $actors
+                        ->pluck('role')
+                        ->filter()
+                        ->unique('name')
+                        ->values(),
+                    'categories' => ActivityLog::query()
+                        ->whereNotNull('category')
+                        ->distinct()
+                        ->orderBy('category')
+                        ->pluck('category')
+                        ->values(),
+                    'actions' => ActivityLog::query()
                         ->whereNotNull('action')
                         ->distinct()
                         ->orderBy('action')
                         ->pluck('action')
                         ->values(),
                 ],
+                'server_time' => now()->toIso8601String(),
             ]);
         } catch (\Throwable $e) {
-            Log::error('Admin audit log failed', ['exception' => $e]);
+            Log::error('Admin activity audit failed', ['exception' => $e]);
 
             return response()->json([
-                'message' => 'Unable to load activity history.',
+                'message' => 'Unable to load employee activity history.',
             ], 500);
         }
     }
