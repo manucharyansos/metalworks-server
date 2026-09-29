@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ActivityLog;
 use App\Models\Permission;
 use App\Models\User;
 use App\Support\PermissionMap;
@@ -164,6 +165,31 @@ class UserPermissionController extends Controller
 
             DB::table('permission_user')->insert($rows);
         });
+
+        // Pivot-table changes do not fire Eloquent model observers, so record
+        // this business-critical action explicitly without storing secrets.
+        if (Schema::hasTable('activity_logs')) {
+            try {
+                ActivityLog::create([
+                    'user_id' => $request->user()?->id,
+                    'category' => 'access',
+                    'action' => 'access.permissions_updated',
+                    'method' => $request->method(),
+                    'route' => $request->path(),
+                    'subject_type' => 'user',
+                    'subject_id' => (string) $user->id,
+                    'subject_label' => $user->name,
+                    'description' => null,
+                    'meta' => [
+                        'target_user_id' => $user->id,
+                        'target_role' => $user->role?->name,
+                        'permissions' => array_values($expandedSlugs),
+                    ],
+                ]);
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
 
         return response()->json([
             'message' => 'Աշխատակցի թույլտվությունները պահպանվեցին։',
