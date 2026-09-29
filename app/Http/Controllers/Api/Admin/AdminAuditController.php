@@ -36,7 +36,7 @@ class AdminAuditController extends Controller
         }
 
         try {
-            $query = ActivityLog::query()->with([
+            $query = $this->staffActivityQuery()->with([
                 'user.role:id,name,value',
                 'user.factory:id,name',
                 'user.worker:id,user_id,last_name,phone',
@@ -129,7 +129,7 @@ class AdminAuditController extends Controller
                 ];
             })->values();
 
-            $actorIds = ActivityLog::query()
+            $actorIds = $this->staffActivityQuery()
                 ->whereNotNull('user_id')
                 ->distinct()
                 ->pluck('user_id');
@@ -177,10 +177,10 @@ class AdminAuditController extends Controller
                     'to' => $logs->lastItem(),
                 ],
                 'summary' => [
-                    'today' => ActivityLog::query()->where('created_at', '>=', $today)->count(),
-                    'last_7_days' => ActivityLog::query()->where('created_at', '>=', $sevenDaysAgo)->count(),
-                    'files_today' => ActivityLog::query()->where('category', 'files')->where('created_at', '>=', $today)->count(),
-                    'orders_today' => ActivityLog::query()->whereIn('category', ['orders', 'production'])->where('created_at', '>=', $today)->count(),
+                    'today' => $this->staffActivityQuery()->where('created_at', '>=', $today)->count(),
+                    'last_7_days' => $this->staffActivityQuery()->where('created_at', '>=', $sevenDaysAgo)->count(),
+                    'files_today' => $this->staffActivityQuery()->where('category', 'files')->where('created_at', '>=', $today)->count(),
+                    'orders_today' => $this->staffActivityQuery()->whereIn('category', ['orders', 'production'])->where('created_at', '>=', $today)->count(),
                 ],
                 'filters' => [
                     'actors' => $actors,
@@ -189,13 +189,13 @@ class AdminAuditController extends Controller
                         ->filter()
                         ->unique('name')
                         ->values(),
-                    'categories' => ActivityLog::query()
+                    'categories' => $this->staffActivityQuery()
                         ->whereNotNull('category')
                         ->distinct()
                         ->orderBy('category')
                         ->pluck('category')
                         ->values(),
-                    'actions' => ActivityLog::query()
+                    'actions' => $this->staffActivityQuery()
                         ->whereNotNull('action')
                         ->distinct()
                         ->orderBy('action')
@@ -211,5 +211,14 @@ class AdminAuditController extends Controller
                 'message' => 'Unable to load employee activity history.',
             ], 500);
         }
+    }
+
+    private function staffActivityQuery(): Builder
+    {
+        return ActivityLog::query()->where(function (Builder $query) {
+            $query->whereNull('user_id')
+                ->orWhereHas('user.role', fn (Builder $roleQuery) => $roleQuery
+                    ->whereNotIn('name', ['authenticatedUser', 'guestUser']));
+        });
     }
 }
