@@ -136,7 +136,7 @@ class EngineerController extends Controller
             $factoryOperators = $factoryOperatorsInput->keyBy('factory_id');
 
             $selectedFiles = $this->resolveSelectedFiles($validatedData, $pmp);
-            $this->validateSelectedFilesBelongToPmp($selectedFiles, $pmp);
+            $this->validateSelectedFilesBelongToPmp($selectedFiles, $pmp, $validatedData['remote_number_id'] ?? null);
 
             $order = DB::transaction(function () use (
                 $request,
@@ -323,7 +323,7 @@ class EngineerController extends Controller
 
             $selectedFiles = $validatedData['selected_files'] ?? [];
             if (!empty($selectedFiles)) {
-                $this->validateSelectedFilesBelongToPmp($selectedFiles, $pmp);
+                $this->validateSelectedFilesBelongToPmp($selectedFiles, $pmp, $validatedData['remote_number_id'] ?? null);
             }
 
             DB::transaction(function () use ($request, $validatedData, $order, $pmp, $selectedFiles) {
@@ -482,26 +482,42 @@ class EngineerController extends Controller
     private function resolveSelectedFiles(array $validatedData, Pmp $pmp): array
     {
         if ($validatedData['link_existing_files']) {
-            return $validatedData['selected_files'] ?? [];
+            $selectedFiles = $validatedData['selected_files'] ?? [];
+        } else {
+            $files = $pmp->files;
+            if (!empty($validatedData['remote_number_id'])) {
+                $files = $files->where('remote_number_id', (int) $validatedData['remote_number_id']);
+            }
+
+            $selectedFiles = $files->map(fn ($file) => [
+                'id' => $file->id,
+                'quantity' => 1,
+            ])->values()->toArray();
         }
 
-        $files = $pmp->files;
-        if (!empty($validatedData['remote_number_id'])) {
-            $files = $files->where('remote_number_id', (int) $validatedData['remote_number_id']);
+        if (empty($selectedFiles)) {
+            throw ValidationException::withMessages([
+                'selected_files' => [$validatedData['link_existing_files']
+                    ? 'Պատվեր ստեղծելու համար ընտրեք առնվազն մեկ ֆայլ։'
+                    : 'Ընտրված PMP-ում կամ ենթախմբում ֆայլեր չկան։ Նախ ավելացրեք ֆայլեր։'],
+            ]);
         }
 
-        return $files->map(fn ($file) => [
-            'id' => $file->id,
-            'quantity' => 1,
-        ])->values()->toArray();
+        return $selectedFiles;
     }
 
-    private function validateSelectedFilesBelongToPmp(array $selectedFiles, Pmp $pmp): void
+    private function validateSelectedFilesBelongToPmp(array $selectedFiles, Pmp $pmp, ?int $remoteNumberId = null): void
     {
         foreach ($selectedFiles as $selectedFile) {
-            if (!$pmp->files->contains('id', (int) $selectedFile['id'])) {
+            $file = $pmp->files->firstWhere('id', (int) $selectedFile['id']);
+            if (!$file) {
                 throw ValidationException::withMessages([
                     'selected_files' => ['Ընտրված ֆայլերից մեկը չի պատկանում այս PMP-ին։'],
+                ]);
+            }
+            if ($remoteNumberId && (int) $file->remote_number_id !== $remoteNumberId) {
+                throw ValidationException::withMessages([
+                    'selected_files' => ['Ընտրված ֆայլերից մեկը չի պատկանում ընտրված ենթախմբին։'],
                 ]);
             }
         }

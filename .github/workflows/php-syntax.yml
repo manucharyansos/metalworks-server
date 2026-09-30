@@ -79,3 +79,6 @@ jobs:
 
       - name: Run profile password regression tests
         run: php artisan test --filter=ProfilePasswordChangeTest
+
+      - name: Run engineer order file regression tests
+        run: php artisan test --filter=EngineerOrderFilesTest
