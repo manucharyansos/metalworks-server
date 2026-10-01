@@ -171,7 +171,7 @@ class PmpFilesController extends Controller
             'SW' => ['sldprt', 'sldasm', 'slddrw'],
             'DLD' => BendFileExtension::pluck('extension')->toArray(),
             'DXF' => ['dxf'],
-            'IQS' => ['iqs'],
+            'IQS' => ['iqs', 'igs', 'iges', 'step', 'stp', 'stl', 'obj'],
             'INFO' => ['*'],
             'PDF' => ['pdf'],
             default => [],

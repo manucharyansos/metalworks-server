@@ -85,3 +85,6 @@ jobs:
 
       - name: Run engineer order file regression tests
         run: php artisan test --filter=EngineerOrderFilesTest
+
+      - name: Run CAD model file policy regression tests
+        run: php artisan test --filter=CadModelFilePolicyTest

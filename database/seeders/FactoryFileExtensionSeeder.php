@@ -23,7 +23,7 @@ class FactoryFileExtensionSeeder extends Seeder
         $rules = [
             'INFO' => ['*'],
             'SW' => ['sldprt', 'sldasm', 'slddrw'],
-            'IQS' => ['iqs'],
+            'IQS' => ['iqs', 'igs', 'iges', 'step', 'stp', 'stl', 'obj'],
             'PDF' => ['pdf'],
             'DLD' => ['pdf'],
             'DXF' => ['dxf'],
