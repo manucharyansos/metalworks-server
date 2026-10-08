@@ -33,6 +33,8 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
     Route::post('login',    [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
     Route::get('registration/companies', [\App\Http\Controllers\Api\RegistrationRequestController::class, 'companies']);
+    Route::get('workspace/brands', [\App\Http\Controllers\Api\WorkspaceBrandController::class, 'index']);
+    Route::get('workspace/brands/{company}/logo', [\App\Http\Controllers\Api\WorkspaceBrandController::class, 'logo'])->whereNumber('company');
 
     Route::middleware(['auth:sanctum', 'detect.device'])->group(function () {
 
@@ -42,10 +44,15 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::get('options', [$controller, 'options']);
             Route::post('{registrationRequest}/approve', [$controller, 'approve']);
             Route::post('{registrationRequest}/reject', [$controller, 'reject']);
+            Route::post('{registrationRequest}/notify', [$controller, 'notify'])->middleware('throttle:6,1');
         });
 
         Route::get('user',   [AuthController::class, 'me']);
         Route::post('logout',[AuthController::class, 'logout']);
+        Route::prefix('company-access')->middleware('admin')->group(function () {
+            Route::get('{user}', [\App\Http\Controllers\Api\CompanyAccessController::class, 'show']);
+            Route::put('{user}', [\App\Http\Controllers\Api\CompanyAccessController::class, 'update']);
+        });
 
         /**
          * ─── ADMIN DASHBOARD ─────────────────────────────────

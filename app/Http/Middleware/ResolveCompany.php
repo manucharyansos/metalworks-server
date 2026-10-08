@@ -18,7 +18,7 @@ class ResolveCompany
         $context->set(null);
         try {
             // These routes authenticate or manage the shared personal identity.
-            if ($request->is('api/login', 'api/register', 'api/registration/companies', 'api/logout', 'api/password/*', 'api/forgot-password', 'api/reset-password')) {
+            if ($request->is('api/login', 'api/register', 'api/registration/companies', 'api/workspace/brands', 'api/workspace/brands/*', 'api/logout', 'api/password/*', 'api/forgot-password', 'api/reset-password')) {
                 return $next($request);
             }
             $user = $request->user();
