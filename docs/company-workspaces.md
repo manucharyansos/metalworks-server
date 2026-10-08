@@ -2,7 +2,7 @@
 
 An enterprise (`Company`) owns workshops (`Factory`) and every business record. A shared `User` identity has a `CompanyMembership` in each authorized enterprise, with a separate role, workshop, active flag and permission assignments. Deleting an employee or client revokes their membership in the selected company while preserving the account and historical records.
 
-The initial migration assigns existing records and account permissions to MetalWorks. Existing installation administrators receive `is_platform_admin`; new company administrators do not. Public registration creates only a personal identity and grants no enterprise access. The platform flag is not mass assignable or editable through employee/profile requests.
+The initial migration assigns existing records and account permissions to MetalWorks. Existing installation administrators receive `is_platform_admin`; new company administrators do not. Public registration submits a company-specific request; an account and membership are created only after manager approval. The platform flag is not mass assignable or editable through employee/profile requests.
 
 ## Deployment on an existing installation
 
@@ -51,4 +51,18 @@ Console business operations should explicitly run inside `CompanyContext::run($c
 php artisan test --filter=Company
 ```
 
-Tests cover populated-data backfill, interrupted and repeated migrations, company directories and header tampering, route bindings, dashboards, private downloads, independent numbering/group codes, role/workshop/permission isolation, access checkboxes, revocation, public registration, shared client identities and hash-verified privatization. CI separately runs the migration recovery tests on MySQL 8/InnoDB: Laravel 10's SQLite grammar ignores foreign keys added to existing tables and cannot verify these production DDL statements. The client regression suite checks request headers, account-scoped selection, draft cancellation, pending writes, page reload, trailing-slash authentication routes and protected file URLs.
+Tests cover populated-data backfill, interrupted and repeated migrations, company directories and header tampering, route bindings, dashboards, private downloads, independent numbering/group codes, role/workshop/permission isolation, access checkboxes, revocation, public registration, shared client identities and hash-verified privatization. CI separately runs migration recovery and registration approval tests on MySQL 8/InnoDB: Laravel 10's SQLite grammar ignores foreign keys added to existing tables and cannot verify these production DDL statements. The client regression suite checks request headers, account-scoped selection, draft cancellation, pending writes, page reload, trailing-slash authentication routes and protected file URLs.
+
+## Registration requests — 2026-10-08
+
+Deploy `2026_10_08_160000_create_registration_requests_table.php` using the deployment commands above before uploading the matching client. This additive migration does not modify existing accounts or memberships. Do not run `migrate:fresh`, reseed production, or remove company tables.
+
+Public `GET /api/registration/companies` returns only active company IDs and names, because both client and employee applicants must choose the destination when multiple enterprises accept requests. A sole active company is assigned automatically. Logos, workshops, staff and all business records remain private. This public endpoint and `POST /api/register` ignore stale company-selection headers.
+
+`POST /api/register` accepts `name`, `email`, `password`, `password_confirmation`, `company_id` and boolean `is_employee` (defaults to false). Employees also need `last_name` and informational `job_title`; `patronymic` is optional. Clients need neither surname, patronymic nor job title. Job title and any caller-provided role/platform-admin fields never grant access. The response is HTTP 202 with `{ "status": "pending", "message": "Ձեր հարցումն ընդունված է։" }`. It creates no user, membership, session or token. Passwords are hashed in the private request table and omitted from all API responses.
+
+Managers and company administrators review only the selected company's requests through `/api/registration-requests`, `/options`, `/{id}/approve` and `/{id}/reject`. Platform administrators can review another selected company. Employees require an explicit permitted role; laser, bend and powder operators also require a workshop from that company. Clients always receive `authenticatedUser`. Non-platform managers cannot assign administrators. Approval creates a user or adds an already verified shared account to the company, then creates the company-specific worker/client profile. Individual employee permissions are assigned separately through the existing employee-permissions page. Reactivating a membership clears its old job grants without affecting another company's access.
+
+Existing email owners must prove their current password when applying to another enterprise. Approval preserves their name, password and other memberships. If a new account for the email appeared after an application, the manager cannot approve that application until its owner resubmits with the account's current password. Repeated review returns 409. Rejection creates no account and clears the stored password hash; an applicant can resubmit. Pending retries for an unknown email require the same password, preventing another visitor from replacing the applicant's credentials.
+
+Run `php artisan test --filter=RegistrationRequestsTest` for the approval, validation, password, rate-limit and company-isolation regression suite. No registration email delivery is added by this release.

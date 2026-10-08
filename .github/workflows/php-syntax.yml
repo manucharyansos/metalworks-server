@@ -92,6 +92,9 @@ jobs:
       - name: Run company isolation and membership regression tests
         run: php artisan test --filter=Company
 
+      - name: Run manager-approved registration regression tests
+        run: php artisan test --filter=RegistrationRequestsTest
+
   company-mysql-migration:
     runs-on: ubuntu-latest
     services:
@@ -135,5 +138,5 @@ jobs:
         run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
       - name: Discover packages with proc_open disabled
         run: php -d disable_functions=proc_open artisan package:discover --no-interaction
-      - name: Verify interrupted and repeated migrations on InnoDB
-        run: vendor/bin/phpunit --filter=CompanyMigrationTest
+      - name: Verify interrupted migrations and registration approvals on InnoDB
+        run: vendor/bin/phpunit --filter='CompanyMigrationTest|RegistrationRequestsTest'

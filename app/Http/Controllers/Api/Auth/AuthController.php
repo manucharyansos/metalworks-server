@@ -21,44 +21,7 @@ class AuthController extends Controller
 {
     public function register(Request $request): JsonResponse
     {
-        $rateLimitKey = 'register|' . $request->ip();
-        if (RateLimiter::tooManyAttempts($rateLimitKey, 5)) {
-            return response()->json([
-                'message' => 'Too many registration attempts. Please try again later.',
-                'retry_after' => RateLimiter::availableIn($rateLimitKey),
-            ], 429);
-        }
-
-        RateLimiter::hit($rateLimitKey, 600);
-
-        $request->merge([
-            'email' => Str::lower(trim((string) $request->input('email'))),
-        ]);
-
-        $validatedData = $request->validate([
-            'name' => 'required|min:3|max:255',
-            'email' => 'required|email|unique:users',
-            'password' => 'required|string|min:8|confirmed',
-        ]);
-
-        $roleId = Role::where('name', 'authenticatedUser')->value('id');
-        if (!$roleId) {
-            Log::error('Registration failed because authenticatedUser role is missing');
-
-            return response()->json([
-                'message' => 'Registration is temporarily unavailable.',
-            ], 500);
-        }
-
-        $validatedData['role_id'] = $roleId;
-        $validatedData['password'] = Hash::make($validatedData['password']);
-
-        $user = User::create($validatedData);
-        $user->load('role');
-
-        return response()->json([
-            'user' => $user,
-        ], 201);
+        return app(\App\Http\Controllers\Api\RegistrationRequestController::class)->store($request);
     }
 
     public function login(Request $request): JsonResponse

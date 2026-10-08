@@ -166,13 +166,9 @@ class CompanyWorkspaceTest extends TestCase
     public function test_public_registration_has_no_company_access(): void
     {
         $this->getJson('/api/companies')->assertUnauthorized();
-        $this->postJson('/api/register', ['name' => 'New person', 'email' => 'new@example.invalid', 'password' => 'test-password', 'password_confirmation' => 'test-password', 'company_id' => $this->a->id])->assertCreated();
-        $user = User::where('email', 'new@example.invalid')->firstOrFail();
-        $this->assertSame(0, $user->memberships()->count());
-        Sanctum::actingAs($user);
-        $this->getJson('/api/user')->assertOk()->assertJsonPath('company', null)->assertJsonPath('companies', [])->assertJsonPath('permissions', []);
-        $this->getJson('/api/profile')->assertOk()->assertJsonPath('capabilities.client_orders', false);
-        $this->getJson('/api/workers')->assertForbidden();
+        $this->postJson('/api/register', ['name' => 'New person', 'email' => 'new@example.invalid', 'password' => 'test-password', 'password_confirmation' => 'test-password', 'company_id' => $this->a->id])->assertStatus(202)->assertJsonPath('status', 'pending');
+        $this->assertDatabaseMissing('users', ['email' => 'new@example.invalid']);
+        $this->postJson('/api/login', ['email' => 'new@example.invalid', 'password' => 'test-password'])->assertUnauthorized();
     }
 
     public function test_revoked_legacy_operator_is_not_routed_to_an_old_workshop(): void

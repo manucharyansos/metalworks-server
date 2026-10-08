@@ -32,8 +32,17 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
      */
     Route::post('login',    [AuthController::class, 'login']);
     Route::post('register', [AuthController::class, 'register']);
+    Route::get('registration/companies', [\App\Http\Controllers\Api\RegistrationRequestController::class, 'companies']);
 
     Route::middleware(['auth:sanctum', 'detect.device'])->group(function () {
+
+        Route::prefix('registration-requests')->middleware('admin')->group(function () {
+            $controller = \App\Http\Controllers\Api\RegistrationRequestController::class;
+            Route::get('/', [$controller, 'index']);
+            Route::get('options', [$controller, 'options']);
+            Route::post('{registrationRequest}/approve', [$controller, 'approve']);
+            Route::post('{registrationRequest}/reject', [$controller, 'reject']);
+        });
 
         Route::get('user',   [AuthController::class, 'me']);
         Route::post('logout',[AuthController::class, 'logout']);
