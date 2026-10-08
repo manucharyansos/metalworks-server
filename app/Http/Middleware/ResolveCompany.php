@@ -51,10 +51,18 @@ class ResolveCompany
                 CompanyMembership::create(['company_id' => $company->id, 'user_id' => $user->id, 'role_id' => $user->getRawOriginal('role_id'), 'is_active' => true]);
             }
             $context->set($company);
+            $assignmentId = $request->header('X-Assignment-ID', $request->is('api/secure-files/*') ? $request->query('assignment_id') : null);
+            if ($assignmentId !== null && $assignmentId !== '' && !$user->is_platform_admin) {
+                abort_unless(ctype_digit((string) $assignmentId), 403, 'Position access denied.');
+                $assignment = $context->membership($user->id)?->assignments()->whereKey((int) $assignmentId)->first();
+                abort_unless($assignment && $assignment->user_id === $user->id, 403, 'Position access denied.');
+                $context->selectAssignment($assignment);
+            }
             if (!$request->isMethod('GET') && $request->is('api/roles', 'api/roles/*', 'api/permissions', 'api/permissions/*')) abort_unless($user->is_platform_admin, 403);
             $user->unsetRelation('role')->unsetRelation('factory')->unsetRelation('worker')->unsetRelation('client');
             $response = $next($request);
             $response->headers->set('X-Company-ID', (string) $company->id);
+            if ($context->assignment($user->id)) $response->headers->set('X-Assignment-ID', (string) $context->assignment($user->id)->id);
             $response->headers->set('Cache-Control', 'private, no-store');
             return $response;
         } finally { $context->set(null); }

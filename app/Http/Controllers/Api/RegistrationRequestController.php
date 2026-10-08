@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\{Company, CompanyMembership, Factory, RegistrationRequest, Role, User};
 use App\Support\CompanyContext;
 use App\Support\RegistrationApprovalMail;
+use App\Support\MembershipAssignments;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Hash, RateLimiter, Schema};
@@ -121,14 +122,13 @@ class RegistrationRequestController extends Controller
     public function approve(Request $request, RegistrationRequest $registrationRequest): JsonResponse
     {
         $employee = $registrationRequest->type === 'employee';
-        $data = $request->validate([
-            'role_id' => $employee ? ['required', 'integer', Rule::exists('roles', 'id')->where(fn ($q) => $q->whereIn('name', $this->allowedRoles($request)))] : 'prohibited',
-            'factory_id' => $employee ? 'nullable|integer|exists:factories,id' : 'prohibited',
-        ]);
-        $role = $employee ? Role::findOrFail($data['role_id']) : Role::where('name', 'authenticatedUser')->firstOrFail();
+        if (!$employee) $request->validate(['role_id' => 'prohibited', 'factory_id' => 'prohibited', 'assignments' => 'prohibited']);
+        $assignments = $employee ? MembershipAssignments::validate($request->all(), $this->allowedRoles($request))
+            : [['role_id' => Role::where('name', 'authenticatedUser')->value('id'), 'factory_id' => null]];
+        $data = $assignments[0];
+        $role = Role::findOrFail($data['role_id']);
         $operator = in_array($role->name, self::OPERATOR_ROLES, true);
-        if ($operator && empty($data['factory_id'])) throw ValidationException::withMessages(['factory_id' => ['Select a workshop for this position.']]);
-        $user = DB::transaction(function () use ($request, $registrationRequest, $role, $operator, $data, $employee): User {
+        $user = DB::transaction(function () use ($request, $registrationRequest, $role, $operator, $data, $employee, $assignments): User {
             $application = RegistrationRequest::whereKey($registrationRequest->id)->lockForUpdate()->firstOrFail();
             abort_unless($application->status === 'pending', 409, 'This request has already been reviewed.');
             abort_unless($application->type === $registrationRequest->type, 409, 'The request type has changed. Refresh the list before reviewing it.');
@@ -153,7 +153,7 @@ class RegistrationRequestController extends Controller
                 'role_id' => $role->id, 'factory_id' => $operator ? $data['factory_id'] : null, 'is_active' => true,
             ]);
             // Reactivating an account must not restore grants from an old job.
-            $membership->permissions()->detach();
+            MembershipAssignments::sync($membership, $assignments, true);
             app(CompanyContext::class)->forgetMembership($user->id);
             if ($employee) {
                 $user->worker()->firstOrCreate([], ['last_name' => $application->last_name, 'phone' => '']);

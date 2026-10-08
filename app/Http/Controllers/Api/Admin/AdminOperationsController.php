@@ -86,7 +86,7 @@ class AdminOperationsController extends Controller
             $operatorStats = $this->operatorStats($now, $today, $tomorrow, $thirtyDaysAgo);
 
             $factories = Factory::query()
-                ->withCount('operators')
+                ->withCount(['operators' => fn ($query) => $query->select(DB::raw('count(distinct users.id)'))])
                 ->orderBy('name')
                 ->get(['id', 'name', 'value'])
                 ->map(function (Factory $factory) use ($factoryStats) {

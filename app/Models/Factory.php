@@ -23,6 +23,15 @@ class Factory extends Model
 
     public function operators(): BelongsToMany
     {
+        if (\Illuminate\Support\Facades\Schema::hasTable('membership_assignments')) {
+            return $this->belongsToMany(User::class, 'membership_assignments', 'factory_id', 'user_id')
+                ->whereExists(function ($query) {
+                    $query->selectRaw('1')->from('company_memberships as operator_membership')
+                        ->whereColumn('operator_membership.id', 'membership_assignments.membership_id')
+                        ->where('operator_membership.company_id', app(\App\Support\CompanyContext::class)->id() ?: $this->company_id)
+                        ->where('operator_membership.is_active', true);
+                })->distinct();
+        }
         return $this->belongsToMany(User::class, 'company_memberships', 'factory_id', 'user_id')
             ->wherePivot('company_id', app(\App\Support\CompanyContext::class)->id() ?: $this->company_id)
             ->wherePivot('is_active', true);

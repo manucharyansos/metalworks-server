@@ -9,6 +9,7 @@ use App\Models\Company;
 use App\Models\CompanyMembership;
 use App\Support\CompanyContext;
 use App\Support\CompanyStaffAccess;
+use App\Support\MembershipAssignments;
 use Illuminate\Support\Facades\DB;
 use App\Models\Role;
 use App\Models\User;
@@ -95,6 +96,7 @@ class WorkersController extends Controller
             CompanyMembership::updateOrCreate(['company_id' => app(CompanyContext::class)->id(), 'user_id' => $user->id], [
                 'role_id' => $validated['role_id'], 'factory_id' => $factoryId, 'is_active' => true,
             ]);
+            MembershipAssignments::sync(app(CompanyContext::class)->membership($user->id), $validated['assignments'], (bool) $existing);
             app(CompanyContext::class)->forgetMembership($user->id);
             $user->worker()->updateOrCreate([], $this->contactData($validated));
             CompanyStaffAccess::sync($request, $user);
@@ -113,6 +115,7 @@ class WorkersController extends Controller
     {
         $this->assertWorkerTarget($worker);
         abort_if($worker->is_platform_admin && !$request->user()->is_platform_admin, 403);
+        abort_if(!$request->user()->is_platform_admin && in_array('admin', $worker->workRoleNames(), true), 403);
         $request->merge(['email' => Str::lower(trim((string) $request->input('email')))]);
         $validated = $this->validateWorker($request, $worker, false);
         $factoryId = $this->validatedFactoryIdForRole((int) $validated['role_id'], $validated['factory_id'] ?? null);
@@ -127,8 +130,7 @@ class WorkersController extends Controller
             }
             $membership = app(CompanyContext::class)->membership($worker->id);
             $roleChanged = (int) $membership->role_id !== (int) $validated['role_id'];
-            $membership->update(['role_id' => $validated['role_id'], 'factory_id' => $factoryId]);
-            if ($roleChanged) $membership->permissions()->detach();
+            MembershipAssignments::sync($membership, $validated['assignments'], !$request->has('assignments') && $roleChanged);
             app(CompanyContext::class)->forgetMembership($worker->id);
             $worker->worker()->updateOrCreate([], $this->contactData($validated));
             CompanyStaffAccess::sync($request, $worker);
@@ -141,6 +143,7 @@ class WorkersController extends Controller
     {
         $this->assertWorkerTarget($worker);
         abort_if($worker->is_platform_admin || $worker->id === request()->user()->id, 422, 'Cannot revoke this administrator through the employee form.');
+        abort_if(!request()->user()->is_platform_admin && in_array('admin', $worker->workRoleNames(), true), 403);
         app(CompanyContext::class)->membership($worker->id)->update(['is_active' => false]);
         app(CompanyContext::class)->forgetMembership($worker->id);
         return response()->json(['message' => 'Այս կազմակերպության հասանելիությունը փակվեց։']);
@@ -153,12 +156,13 @@ class WorkersController extends Controller
             'name' => 'required|string|max:255', 'last_name' => 'nullable|string|max:255',
             'email' => ['required', 'email', Rule::unique('users', 'email')->ignore($user?->id)],
             'password' => ($creating && !$user ? 'required' : 'nullable') . '|string|min:8|confirmed',
-            'role_id' => ['required', Rule::exists('roles', 'id')->where(fn ($q) => $q->whereIn('name', $roles))],
-            'factory_id' => 'nullable|exists:factories,id', 'phone' => 'required|string|max:20',
+            'phone' => 'required|string|max:20',
             'second_phone' => 'nullable|string|max:20', 'address' => 'nullable|string|max:255',
         ];
         if ($request->has('company_access')) abort_unless($request->user()->is_platform_admin, 403);
-        return $request->validate($rules);
+        $validated = $request->validate($rules);
+        $assignments = MembershipAssignments::validate($request->all(), $roles);
+        return [...$validated, ...$assignments[0], 'assignments' => $assignments];
     }
 
     private function contactData(array $data): array

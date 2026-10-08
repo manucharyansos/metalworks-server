@@ -4,12 +4,8 @@ namespace App\Support;
 
 use App\Models\Company;
 use App\Models\CompanyMembership;
-use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rule;
-use Illuminate\Validation\ValidationException;
 
 final class CompanyStaffAccess
 {
@@ -29,16 +25,15 @@ final class CompanyStaffAccess
             }
             abort_unless($company->is_active, 422, 'Company is inactive.');
             app(CompanyContext::class)->run($company, function () use ($row, $company, $user, $request) {
-                $validated = Validator::make($row, [
-                    'role_id' => ['required', Rule::exists('roles', 'id')->where(fn ($q) => $q->whereIn('name', ['admin', 'manager', 'engineer', 'laser', 'bend', 'powder_catting']))],
-                    'factory_id' => 'nullable|integer|exists:factories,id',
-                ])->validate();
-                $factoryRole = in_array(Role::whereKey($validated['role_id'])->value('name'), ['laser', 'bend', 'powder_catting'], true);
-                if ($factoryRole && empty($validated['factory_id'])) throw ValidationException::withMessages(['company_access' => ['Select a workshop for each operator.']]);
+                $assignments = MembershipAssignments::validate($row, MembershipAssignments::STAFF_ROLES);
                 $membership = CompanyMembership::firstOrNew(['company_id' => $company->id, 'user_id' => $user->id]);
-                $roleChanged = $membership->exists && (int) $membership->role_id !== (int) $validated['role_id'];
-                $membership->fill(['role_id' => $validated['role_id'], 'factory_id' => $factoryRole ? $validated['factory_id'] : null, 'is_active' => true])->save();
-                if ($roleChanged) $membership->permissions()->detach();
+                $reactivating = $membership->exists && !$membership->is_active;
+                $samePrimary = (int) $membership->role_id === $assignments[0]['role_id'] && (int) $membership->factory_id === (int) $assignments[0]['factory_id'];
+                if (!$membership->exists) $membership->fill([...$assignments[0], 'is_active' => true])->save();
+                else $membership->update(['is_active' => true]);
+                // The current company's worker form owns its full assignments.
+                // Older all-company forms must not collapse unchanged multi-role access.
+                if (isset($row['assignments']) || !$samePrimary || $reactivating) MembershipAssignments::sync($membership, $assignments, $reactivating || (!isset($row['assignments']) && !$samePrimary));
                 // Employment contact data belongs to each company separately.
                 $user->worker()->firstOrCreate([], [
                     'last_name' => $request->input('last_name'),
@@ -54,7 +49,8 @@ final class CompanyStaffAccess
 
     public static function rows(User $user): array
     {
-        return CompanyMembership::where('user_id', $user->id)->get(['company_id', 'role_id', 'factory_id', 'is_active'])
-            ->map(fn ($row) => ['company_id' => $row->company_id, 'role_id' => $row->role_id, 'factory_id' => $row->factory_id, 'enabled' => $row->is_active])->all();
+        return CompanyMembership::where('user_id', $user->id)->get(['id', 'user_id', 'company_id', 'role_id', 'factory_id', 'is_active'])
+            ->map(fn ($row) => ['company_id' => $row->company_id, 'role_id' => $row->role_id, 'factory_id' => $row->factory_id, 'enabled' => $row->is_active,
+                'assignments' => app(CompanyContext::class)->run(Company::findOrFail($row->company_id), fn () => MembershipAssignments::rows($row))])->all();
     }
 }

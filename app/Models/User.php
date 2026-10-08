@@ -82,7 +82,7 @@ class User extends Authenticatable
         $context = app(CompanyContext::class);
         if (!$context->id() || !$this->id) return $value === null ? null : (int) $value;
         if ($this->is_platform_admin) return (int) Role::where('name', 'admin')->value('id');
-        return $context->membership($this->id)?->role_id;
+        return $context->assignment($this->id)?->role_id ?? $context->membership($this->id)?->role_id;
     }
 
     public function getFactoryIdAttribute($value): ?int
@@ -90,6 +90,7 @@ class User extends Authenticatable
         $context = app(CompanyContext::class);
         if (!$context->id() || !$this->id) return $value === null ? null : (int) $value;
         if ($this->is_platform_admin) return null;
+        if ($assignment = $context->assignment($this->id)) return $assignment->factory_id;
         return $context->membership($this->id)?->factory_id;
     }
 
@@ -100,7 +101,13 @@ class User extends Authenticatable
         return $query->whereIn('users.id', function ($q) use ($id, $names, $exclude) {
             $q->select('cm.user_id')->from('company_memberships as cm')->join('roles as cr', 'cr.id', '=', 'cm.role_id')
                 ->where('cm.company_id', $id)->where('cm.is_active', true);
-            $exclude ? $q->whereNotIn('cr.name', $names) : $q->whereIn('cr.name', $names);
+            if (Schema::hasTable('membership_assignments')) {
+                $q->whereExists(function ($assignments) use ($names, $exclude) {
+                    $assignments->selectRaw('1')->from('membership_assignments as ma')->join('roles as ar', 'ar.id', '=', 'ma.role_id')
+                        ->whereColumn('ma.membership_id', 'cm.id');
+                    $exclude ? $assignments->whereNotIn('ar.name', $names) : $assignments->whereIn('ar.name', $names);
+                });
+            } else $exclude ? $q->whereNotIn('cr.name', $names) : $q->whereIn('cr.name', $names);
         });
     }
 
@@ -110,11 +117,18 @@ class User extends Authenticatable
         if (!$id) return $factoryId ? $query->where('factory_id', $factoryId) : $query->whereNotNull('factory_id');
         return $query->whereIn('users.id', function ($q) use ($id, $factoryId) {
             $q->select('user_id')->from('company_memberships')->where('company_id', $id)->where('is_active', true);
-            $factoryId ? $q->where('factory_id', $factoryId) : $q->whereNotNull('factory_id');
+            if (Schema::hasTable('membership_assignments')) {
+                $q->whereExists(function ($assignments) use ($factoryId) {
+                    $assignments->selectRaw('1')->from('membership_assignments as ma')->whereColumn('ma.membership_id', 'company_memberships.id');
+                    $factoryId ? $assignments->where('ma.factory_id', $factoryId) : $assignments->whereNotNull('ma.factory_id');
+                });
+            } else $factoryId ? $q->where('factory_id', $factoryId) : $q->whereNotNull('factory_id');
         });
     }
 
     public function memberships() { return $this->hasMany(CompanyMembership::class); }
+    public function workAssignments(): array { return \App\Support\MembershipAssignments::rows(app(CompanyContext::class)->membership($this->id)); }
+    public function workRoleNames(): array { return \App\Support\MembershipAssignments::roleNames(app(CompanyContext::class)->membership($this->id)); }
     public function getCurrentMembershipIdAttribute(): ?int { return app(CompanyContext::class)->membership($this->id)?->id; }
 
     /**

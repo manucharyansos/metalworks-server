@@ -5,14 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\{Company, CompanyMembership, Factory, Role, User};
 use App\Support\CompanyContext;
+use App\Support\MembershipAssignments;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\{DB, Validator};
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\DB;
 
 class CompanyAccessController extends Controller
 {
     private const ROLES = ['authenticatedUser', 'manager', 'engineer', 'laser', 'bend', 'powder_catting'];
-    private const OPERATORS = ['laser', 'bend', 'powder_catting'];
 
     public function show(Request $request, User $user)
     {
@@ -26,12 +25,13 @@ class CompanyAccessController extends Controller
             'companies' => $companies->map(function (Company $company) use ($memberships, $request) {
                 $membership = $memberships->get($company->id);
                 $readOnly = $company->id === app(CompanyContext::class)->id()
-                    || (!$request->user()->is_platform_admin && $membership?->role?->name === 'admin');
+                    || (!$request->user()->is_platform_admin && in_array('admin', MembershipAssignments::roleNames($membership), true));
                 return [
                     'id' => $company->id, 'name' => $company->name, 'read_only' => $readOnly,
                     'factories' => Factory::withoutGlobalScope('company')->where('company_id', $company->id)->orderBy('name')->get(['id', 'name']),
                     'access' => ['company_id' => $company->id, 'enabled' => (bool) $membership?->is_active,
-                        'role_id' => $membership?->role_id, 'factory_id' => $membership?->factory_id],
+                        'role_id' => $membership?->role_id, 'factory_id' => $membership?->factory_id,
+                        'assignments' => app(CompanyContext::class)->run($company, fn () => MembershipAssignments::rows($membership))],
                 ];
             }),
         ])->header('Cache-Control', 'private, no-store');
@@ -43,7 +43,7 @@ class CompanyAccessController extends Controller
         $data = $request->validate([
             'access' => 'required|array|min:1', 'access.*.company_id' => 'required|integer|distinct',
             'access.*.enabled' => 'required|boolean', 'access.*.role_id' => 'nullable|integer',
-            'access.*.factory_id' => 'nullable|integer',
+            'access.*.factory_id' => 'nullable|integer', 'access.*.assignments' => 'sometimes|array|max:50',
         ]);
         DB::transaction(function () use ($request, $user, $data): void {
             // Lock the actor's memberships while rechecking destination rights.
@@ -60,25 +60,21 @@ class CompanyAccessController extends Controller
                 $unchanged = (bool) $membership?->is_active === (bool) $row['enabled']
                     && (int) $membership?->role_id === (int) ($row['role_id'] ?? null)
                     && (int) $membership?->factory_id === (int) ($row['factory_id'] ?? null);
-                if ($unchanged) continue;
+                if ($unchanged && !array_key_exists('assignments', $row)) continue;
                 abort_if($company->id === app(CompanyContext::class)->id(), 409, 'Edit the selected company through its employee or client form.');
-                abort_if(!$request->user()->is_platform_admin && $membership?->role?->name === 'admin', 403, 'Administrator access is managed by the platform administrator.');
+                abort_if(!$request->user()->is_platform_admin && in_array('admin', MembershipAssignments::roleNames($membership), true), 403, 'Administrator access is managed by the platform administrator.');
                 if (!$row['enabled']) {
                     $membership?->update(['is_active' => false]);
                     continue;
                 }
                 app(CompanyContext::class)->run($company, function () use ($row, $membership, $request, $user): void {
-                    $validated = Validator::make($row, [
-                        'role_id' => ['required', 'integer', Rule::exists('roles', 'id')->where(fn ($q) => $q->whereIn('name', $this->roles($request->user())))],
-                        'factory_id' => 'nullable|integer|exists:factories,id',
-                    ])->validate();
-                    $role = Role::findOrFail($validated['role_id']);
-                    $operator = in_array($role->name, self::OPERATORS, true);
-                    Validator::make($validated, ['factory_id' => $operator ? 'required|integer|exists:factories,id' : 'nullable'])->validate();
-                    $resetGrants = $membership && (!$membership->is_active || (int) $membership->role_id !== (int) $role->id);
+                    $assignments = MembershipAssignments::validate($row, $this->roles($request->user()));
+                    $role = Role::findOrFail($assignments[0]['role_id']);
+                    $resetGrants = $membership && (!$membership->is_active || (!isset($row['assignments']) && (int) $membership->role_id !== (int) $role->id));
                     $membership ??= new CompanyMembership(['company_id' => app(CompanyContext::class)->id(), 'user_id' => $user->id]);
-                    $membership->fill(['is_active' => true, 'role_id' => $role->id, 'factory_id' => $operator ? $validated['factory_id'] : null])->save();
-                    if ($resetGrants) $membership->permissions()->detach();
+                    if (!$membership->exists) $membership->fill([...$assignments[0], 'is_active' => true])->save();
+                    else $membership->update(['is_active' => true]);
+                    MembershipAssignments::sync($membership, $assignments, (bool) $resetGrants);
                     app(CompanyContext::class)->forgetMembership($user->id);
                     // Only shared identity is reused; each company's contacts and
                     // historical orders remain in that company's own profile.
@@ -95,7 +91,10 @@ class CompanyAccessController extends Controller
     {
         $query = Company::where('is_active', true)->orderBy('id');
         if (!$actor->is_platform_admin) $query->whereHas('memberships', fn ($q) => $q->where('user_id', $actor->id)->where('is_active', true)
-            ->whereHas('role', fn ($roles) => $roles->whereIn('name', ['admin', 'manager'])));
+            ->where(function ($roles) {
+                $roles->whereHas('role', fn ($q) => $q->whereIn('name', ['admin', 'manager']))
+                    ->orWhereHas('assignments.role', fn ($q) => $q->whereIn('name', ['admin', 'manager']));
+            }));
         return $query->get();
     }
 
