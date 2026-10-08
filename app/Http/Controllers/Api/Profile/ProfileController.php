@@ -38,7 +38,7 @@ class ProfileController extends Controller
                     'name' => $user->role->name,
                     'value' => $user->role->value,
                 ] : null,
-                'factory_id' => $user->factory_id,
+                'factory_id' => app(\App\Support\CompanyContext::class)->id() ? $user->factory_id : null,
                 'factory' => $user->factory ? [
                     'id' => $user->factory->id,
                     'name' => $user->factory->name,

@@ -175,6 +175,17 @@ class CompanyWorkspaceTest extends TestCase
         $this->getJson('/api/workers')->assertForbidden();
     }
 
+    public function test_revoked_legacy_operator_is_not_routed_to_an_old_workshop(): void
+    {
+        $user = $this->account($this->a, 'revoked@example.invalid', 'laser');
+        $factory = $this->in($this->a, fn () => Factory::firstOrFail());
+        $user->update(['factory_id' => $factory->id]);
+        $user->memberships()->update(['factory_id' => $factory->id, 'is_active' => false]);
+        Sanctum::actingAs($user);
+        $this->getJson('/api/user')->assertOk()->assertJsonPath('factory_id', null)->assertJsonPath('company', null)->assertJsonPath('companies', []);
+        $this->getJson('/api/profile')->assertOk()->assertJsonPath('user.factory_id', null);
+    }
+
     public function test_privatization_verifies_content_and_preserves_unrelated_public_assets(): void
     {
         Storage::disk('public')->put('orders/legacy.txt', 'old private upload');
