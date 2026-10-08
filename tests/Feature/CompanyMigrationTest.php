@@ -14,7 +14,8 @@ class CompanyMigrationTest extends TestCase
     private function legacyInstallation(): array
     {
         $latest = database_path('migrations/2026_10_07_150000_add_company_workspaces.php');
-        $previous = array_values(array_filter(glob(database_path('migrations/*.php')), fn ($file) => $file !== $latest));
+        $previous = array_values(array_filter(glob(database_path('migrations/*.php')), fn ($file) => basename($file) < basename($latest)));
+        \Illuminate\Foundation\Testing\RefreshDatabaseState::$migrated = false;
         // A historical enum change predates these workspaces. Use Laravel's
         // native MySQL DDL rather than DBAL's unsupported enum conversion.
         $native = \Illuminate\Database\Schema\Builder::$alwaysUsesNativeSchemaOperationsIfPossible;
