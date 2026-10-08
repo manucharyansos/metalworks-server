@@ -11,8 +11,9 @@ class RegistrationRequest extends Model
     protected $fillable = [
         'name', 'last_name', 'patronymic', 'email', 'password_hash', 'type',
         'job_title', 'status', 'existing_user_id', 'user_id', 'reviewed_by', 'reviewed_at',
+        'locale', 'notification_status', 'notification_sent_at',
     ];
 
     protected $hidden = ['password_hash', 'existing_user_id'];
-    protected $casts = ['reviewed_at' => 'datetime'];
+    protected $casts = ['reviewed_at' => 'datetime', 'notification_sent_at' => 'datetime'];
 }

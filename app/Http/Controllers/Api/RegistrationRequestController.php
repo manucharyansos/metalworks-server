@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\{Company, CompanyMembership, Factory, RegistrationRequest, Role, User};
 use App\Support\CompanyContext;
+use App\Support\RegistrationApprovalMail;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\{DB, Hash, RateLimiter, Schema};
@@ -65,14 +66,15 @@ class RegistrationRequestController extends Controller
                 if ($existing && CompanyMembership::where('company_id', $company->id)->where('user_id', $existing->id)->where('is_active', true)->exists()) {
                     throw ValidationException::withMessages(['email' => ['This account already has access to the selected company.']]);
                 }
-                $application = RegistrationRequest::where('email', $data['email'])->lockForUpdate()->first();
+                $employee = (bool) $data['is_employee'];
+                $type = $employee ? 'employee' : 'client';
+                $application = RegistrationRequest::where('email', $data['email'])->where('type', $type)->lockForUpdate()->first();
                 if ($application?->status === 'pending' && !$existing && !Hash::check($data['password'], $application->password_hash ?? '')) {
                     throw ValidationException::withMessages(['email' => ['A request for this email is already awaiting review.']]);
                 }
                 if ($application?->status === 'approved') {
                     throw ValidationException::withMessages(['email' => ['Please contact the company manager about your existing access.']]);
                 }
-                $employee = (bool) $data['is_employee'];
                 $values = [
                     'name' => $data['name'], 'last_name' => $data['last_name'] ?? null,
                     'patronymic' => $data['patronymic'] ?? null, 'email' => $data['email'],
@@ -80,6 +82,8 @@ class RegistrationRequestController extends Controller
                     'password_hash' => $existing ? null : Hash::make($data['password']),
                     'existing_user_id' => $existing?->id, 'status' => 'pending',
                     'reviewed_by' => null, 'reviewed_at' => null,
+                    'locale' => in_array(app()->getLocale(), ['hy', 'ru', 'en'], true) ? app()->getLocale() : 'hy',
+                    'notification_status' => null, 'notification_sent_at' => null,
                 ];
                 $application ? $application->update($values) : RegistrationRequest::create($values);
             }, 3);
@@ -156,10 +160,21 @@ class RegistrationRequestController extends Controller
             } else {
                 $user->client()->firstOrCreate([], ['name' => $application->name, 'last_name' => $application->last_name, 'phone' => '', 'type' => 'physPerson']);
             }
-            $application->update(['status' => 'approved', 'user_id' => $user->id, 'reviewed_by' => $request->user()->id, 'reviewed_at' => now(), 'password_hash' => null]);
+            $application->update(['status' => 'approved', 'user_id' => $user->id, 'reviewed_by' => $request->user()->id, 'reviewed_at' => now(), 'password_hash' => null, 'notification_status' => 'pending']);
             return $user;
         }, 3);
-        return response()->json(['status' => 'approved', 'user_id' => $user->id, 'message' => 'Registration approved.']);
+        // Delivery happens after the account transaction. A mail failure never
+        // rolls back approval or reports the account itself as unapproved.
+        $notification = app(RegistrationApprovalMail::class)->send($registrationRequest->fresh());
+        return response()->json(['status' => 'approved', 'user_id' => $user->id, 'notification_status' => $notification, 'message' => 'Registration approved.']);
+    }
+
+    public function notify(Request $request, RegistrationRequest $registrationRequest): JsonResponse
+    {
+        abort_unless($registrationRequest->status === 'approved', 409, 'Approve the request before sending its notification.');
+        abort_unless(Company::whereKey($registrationRequest->company_id)->where('is_active', true)->exists()
+            && CompanyMembership::where('company_id', $registrationRequest->company_id)->where('user_id', $registrationRequest->user_id)->where('is_active', true)->exists(), 409, 'Company access is no longer active.');
+        return response()->json(['status' => 'approved', 'notification_status' => app(RegistrationApprovalMail::class)->send($registrationRequest)]);
     }
 
     public function reject(Request $request, RegistrationRequest $registrationRequest): JsonResponse
