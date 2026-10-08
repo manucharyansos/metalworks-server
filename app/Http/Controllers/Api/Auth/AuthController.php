@@ -212,26 +212,19 @@ class AuthController extends Controller
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $user->load(['role', 'factory']);
+        if (app(\App\Support\CompanyContext::class)->id()) $user->load(['role', 'factory']);
+        else $user->setRelation('role', Role::where('name', 'authenticatedUser')->first())->setRelation('factory', null)->setRelation('worker', null);
         $role = $user->role?->name;
 
-        if (in_array($role, ['admin', 'manager'], true)) {
+        $context = app(\App\Support\CompanyContext::class);
+        if ($context->id() && in_array($role, ['admin', 'manager'], true)) {
             $permissions = Permission::query()->orderBy('slug')->pluck('slug');
-        } elseif (
-            Schema::hasTable('permission_user')
-            && Schema::hasColumn('permission_user', 'allowed')
-        ) {
-            $permissions = Permission::query()
-                ->join('permission_user', 'permissions.id', '=', 'permission_user.permission_id')
-                ->where('permission_user.user_id', $user->id)
-                ->where('permission_user.allowed', true)
-                ->orderBy('permissions.slug')
-                ->pluck('permissions.slug')
-                ->unique()
-                ->values();
-        } else {
-            $permissions = collect();
-        }
+        } elseif ($context->id()) {
+            $permissions = $user->permissions()->wherePivot('allowed', true)->pluck('slug')
+                ->filter(fn ($slug) => \App\Support\PermissionScope::allows($role, $slug))->values();
+        } else { $permissions = collect(); }
+        $companies = \App\Models\Company::where('is_active', true);
+        if (!$user->is_platform_admin) $companies->whereHas('memberships', fn ($q) => $q->where('user_id', $user->id)->where('is_active', true));
 
         return response()->json([
             'id' => $user->id,
@@ -247,6 +240,10 @@ class AuthController extends Controller
                 'name' => $user->factory->name,
             ] : null,
             'permissions' => $permissions,
+            'last_name' => $user->last_name ?: $user->worker?->last_name,
+            'is_platform_admin' => (bool) $user->is_platform_admin,
+            'company' => $context->company()?->summary(),
+            'companies' => $companies->orderBy('id')->get()->map(fn ($c) => $c->summary()),
         ], 200);
     }
 }

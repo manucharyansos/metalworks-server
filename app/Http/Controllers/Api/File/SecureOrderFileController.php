@@ -105,10 +105,6 @@ class SecureOrderFileController extends Controller
             return 'private';
         }
 
-        if (Storage::disk('public')->exists($path)) {
-            return 'public';
-        }
-
         return null;
     }
 }

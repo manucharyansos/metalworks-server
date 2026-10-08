@@ -88,3 +88,6 @@ jobs:
 
       - name: Run CAD model file policy regression tests
         run: php artisan test --filter=CadModelFilePolicyTest
+
+      - name: Run company isolation and membership regression tests
+        run: php artisan test --filter=Company

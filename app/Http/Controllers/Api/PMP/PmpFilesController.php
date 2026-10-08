@@ -92,11 +92,11 @@ class PmpFilesController extends Controller
                 ], 409);
             }
 
-            $path = "MetalWorks/PMP_{$pmp->group}.{$remote->remote_number}/{$factory->value}";
-            Storage::disk('public')->makeDirectory($path);
+            $path = "companies/" . app(\App\Support\CompanyContext::class)->id() . "/PMP_{$pmp->group}.{$remote->remote_number}/{$factory->value}";
+            Storage::disk('private')->makeDirectory($path);
 
             $uniqueName = Str::uuid()->toString() . ($extension !== '' ? ".{$extension}" : '');
-            $storedPath = $file->storeAs($path, $uniqueName, 'public');
+            $storedPath = $file->storeAs($path, $uniqueName, 'private');
 
             $record = PmpFiles::create([
                 'pmp_id' => $pmp->id,
@@ -118,7 +118,7 @@ class PmpFilesController extends Controller
             throw $e;
         } catch (\Throwable $e) {
             if ($storedPath) {
-                Storage::disk('public')->delete($storedPath);
+                Storage::disk('private')->delete($storedPath);
             }
 
             Log::error('PMP file upload failed', [

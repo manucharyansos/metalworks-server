@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class RemoteNumber extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\BelongsToCompany;
 
     protected $fillable = ['remote_number', 'remote_number_name', 'pmp_id'];
 

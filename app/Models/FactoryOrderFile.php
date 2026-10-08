@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class FactoryOrderFile extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\BelongsToCompany;
 
     protected $fillable = ['factory_order_id', 'path', 'original_name', 'quantity', 'material_type', 'thickness',];
 

@@ -25,7 +25,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->scoped(\App\Support\CompanyContext::class);
+        // ValidationServiceProvider is deferred and can replace a direct
+        // presence binding. Install the verifier when its factory resolves.
+        $this->app->afterResolving('validator', function ($validator, $app): void {
+            $validator->setPresenceVerifier(new \App\Support\CompanyPresenceVerifier($app['db']));
+        });
     }
 
     /**

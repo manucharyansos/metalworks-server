@@ -22,7 +22,7 @@ class FactoryController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $query = Factory::with('operators:id,name,factory_id');
+        $query = Factory::with('operators:users.id,users.name,users.factory_id');
 
         if ($user?->factory_id && $user->role?->name !== 'admin') {
             $query->whereKey($user->factory_id);
@@ -376,10 +376,10 @@ class FactoryController extends Controller
             return response()->json(['error' => 'File not found or access denied'], 404);
         }
 
-        $fileContent = Storage::disk('public')->get($decodedPath);
+        $fileContent = Storage::disk('private')->get($decodedPath);
         $originalName = basename($decodedPath);
-        $fileSize = Storage::disk('public')->size($decodedPath);
-        $mimeType = Storage::disk('public')->mimeType($decodedPath);
+        $fileSize = Storage::disk('private')->size($decodedPath);
+        $mimeType = Storage::disk('private')->mimeType($decodedPath);
 
         return response()->json([
             'path' => $decodedPath,
@@ -397,7 +397,7 @@ class FactoryController extends Controller
             return response()->json(['error' => 'File not found or access denied'], 404);
         }
 
-        $fullPath = Storage::disk('public')->path($decodedPath);
+        $fullPath = Storage::disk('private')->path($decodedPath);
 
         return response()->download($fullPath, basename($decodedPath));
     }
@@ -410,7 +410,7 @@ class FactoryController extends Controller
             return null;
         }
 
-        if (!Storage::disk('public')->exists($decodedPath)) {
+        if (!Storage::disk('private')->exists($decodedPath)) {
             return null;
         }
 

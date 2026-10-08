@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Category extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\BelongsToCompany;
 
     protected $fillable = ['name'];
 

@@ -53,6 +53,9 @@ class UserSeeder extends Seeder
             $user->role_id = $role->id;
             $user->password = Hash::make($password);
             $user->save();
+            if ($roleName === 'admin' && \Illuminate\Support\Facades\Schema::hasColumn('users', 'is_platform_admin')) {
+                $user->forceFill(['is_platform_admin' => true])->save();
+            }
 
             $this->command?->info(ucfirst($roleName) . " account synced from environment: {$email}");
         }

@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PmpFiles extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\BelongsToCompany;
 
     protected $fillable = [
         'pmp_id',

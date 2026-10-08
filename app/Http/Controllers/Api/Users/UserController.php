@@ -18,9 +18,7 @@ class UserController extends Controller
         $users = User::query()
             ->with(['role', 'factory', 'worker'])
             ->whereDoesntHave('client')
-            ->whereHas('role', function ($roleQuery) {
-                $roleQuery->whereNotIn('name', ['authenticatedUser', 'guestUser']);
-            })
+            ->forRoles(['authenticatedUser', 'guestUser'], true)
             ->orderBy('name')
             ->get();
 
@@ -67,6 +65,7 @@ class UserController extends Controller
 
     private function ensureStaffAccount(User $user): void
     {
+        abort_unless(app(\App\Support\CompanyContext::class)->membership($user->id)?->is_active, 404);
         $user->loadMissing(['role', 'client']);
 
         abort_if(

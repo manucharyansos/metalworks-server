@@ -65,7 +65,7 @@ class MaterialController extends Controller
         ]);
 
         if ($request->hasFile('image')) {
-            $data['image'] = $request->file('image')->store('materials', 'public');
+            $data['image'] = $request->file('image')->store('companies/' . app(\App\Support\CompanyContext::class)->id() . '/materials', 'private');
         }
 
         $material = Material::create($data);
@@ -93,15 +93,15 @@ class MaterialController extends Controller
         $newImage = null;
 
         if ($request->hasFile('image')) {
-            $newImage = $request->file('image')->store('materials', 'public');
+            $newImage = $request->file('image')->store('companies/' . app(\App\Support\CompanyContext::class)->id() . '/materials', 'private');
             $data['image'] = $newImage;
         }
 
         try {
             $material->update($data);
         } catch (\Throwable $e) {
-            if ($newImage && Storage::disk('public')->exists($newImage)) {
-                Storage::disk('public')->delete($newImage);
+            if ($newImage && Storage::disk('private')->exists($newImage)) {
+                Storage::disk('private')->delete($newImage);
             }
             throw $e;
         }
@@ -110,9 +110,9 @@ class MaterialController extends Controller
             $newImage &&
             $oldImage &&
             $oldImage !== $newImage &&
-            Storage::disk('public')->exists($oldImage)
+            Storage::disk('private')->exists($oldImage)
         ) {
-            Storage::disk('public')->delete($oldImage);
+            Storage::disk('private')->delete($oldImage);
         }
 
         return response()->json([
@@ -127,8 +127,8 @@ class MaterialController extends Controller
         $image = $material->image;
         $material->delete();
 
-        if ($image && Storage::disk('public')->exists($image)) {
-            Storage::disk('public')->delete($image);
+        if ($image && Storage::disk('private')->exists($image)) {
+            Storage::disk('private')->delete($image);
         }
 
         return response()->json([

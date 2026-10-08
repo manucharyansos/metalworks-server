@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ActivityLog extends Model
 {
+    use \App\Models\Concerns\BelongsToCompany;
     protected $fillable = [
         'user_id',
         'category',

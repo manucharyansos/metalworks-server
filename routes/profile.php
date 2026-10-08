@@ -9,7 +9,10 @@ Route::middleware(['auth:sanctum', 'detect.device', 'setlocale'])->prefix('profi
     Route::patch('/', [ProfileController::class, 'update']);
 
     Route::get('/identity', function (Request $request) {
-        $user = $request->user()->loadMissing(['role', 'factory', 'worker']);
+        $user = $request->user();
+
+        if (app(\App\Support\CompanyContext::class)->id()) $user->loadMissing(['role', 'factory', 'worker']);
+        else $user->setRelation('role', null)->setRelation('factory', null)->setRelation('worker', null);
 
         $lastName = $user->last_name ?: $user->worker?->last_name;
         $phone = $user->phone ?: $user->worker?->phone;

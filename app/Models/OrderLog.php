@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class OrderLog extends Model
 {
+    use \App\Models\Concerns\BelongsToCompany;
     protected $fillable = [
         'order_id',
         'user_id',

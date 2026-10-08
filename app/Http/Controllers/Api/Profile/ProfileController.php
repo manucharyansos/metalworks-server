@@ -20,7 +20,7 @@ class ProfileController extends Controller
 {
     public function show(Request $request): JsonResponse
     {
-        $user = $request->user()->load(['role', 'client', 'factory']);
+        $user = $this->profileUser($request);
 
         return response()->json([
             'user' => [
@@ -46,15 +46,15 @@ class ProfileController extends Controller
                 'client' => $user->client,
             ],
             'capabilities' => [
-                'client_orders' => optional($user->role)->name === 'authenticatedUser' || (bool) $user->client,
-                'factory_work' => !empty($user->factory_id),
+                'client_orders' => app(\App\Support\CompanyContext::class)->id() && (optional($user->role)->name === 'authenticatedUser' || (bool) $user->client),
+                'factory_work' => app(\App\Support\CompanyContext::class)->id() && !empty($user->factory_id),
             ],
         ]);
     }
 
     public function update(Request $request): JsonResponse
     {
-        $user = $request->user()->loadMissing(['role', 'client']);
+        $user = $this->profileUser($request);
         $currentEmail = Str::lower(trim((string) $user->email));
 
         $request->merge([
@@ -120,7 +120,7 @@ class ProfileController extends Controller
             }
 
             $user->client->update($clientData);
-        } elseif (optional($user->role)->name === 'authenticatedUser' && $user->phone) {
+        } elseif (app(\App\Support\CompanyContext::class)->id() && optional($user->role)->name === 'authenticatedUser' && $user->phone) {
             $user->client()->create([
                 'name' => $user->name,
                 'last_name' => $user->last_name,
@@ -286,7 +286,7 @@ class ProfileController extends Controller
 
     public function orders(Request $request): JsonResponse
     {
-        $user = $request->user()->loadMissing(['role', 'client']);
+        $user = $this->profileUser($request);
         $isClient = optional($user->role)->name === 'authenticatedUser' || (bool) $user->client;
 
         abort_unless($isClient, 403, 'Forbidden');
@@ -352,6 +352,13 @@ class ProfileController extends Controller
     private function emailVerificationCacheKey(int $userId, string $email): string
     {
         return 'profile-email-verification:' . $userId . ':' . hash('sha256', Str::lower($email));
+    }
+
+    private function profileUser(Request $request): \App\Models\User
+    {
+        $user = $request->user();
+        if (app(\App\Support\CompanyContext::class)->id()) return $user->load(['role', 'client', 'factory']);
+        return $user->setRelation('role', \App\Models\Role::where('name', 'authenticatedUser')->first())->setRelation('client', null)->setRelation('factory', null);
     }
 
     private function nullableTrim($value): ?string

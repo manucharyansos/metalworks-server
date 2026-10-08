@@ -47,8 +47,8 @@ class UserPermissionController extends Controller
 
         $selectedIds = [];
         if ($this->assignmentsSupported() && $allowedIds !== []) {
-            $selectedIds = DB::table('permission_user')
-                ->where('user_id', $user->id)
+            $selectedIds = DB::table('membership_permissions')
+                ->where('membership_id', $user->current_membership_id)
                 ->where('allowed', true)
                 ->whereIn('permission_id', $allowedIds)
                 ->pluck('permission_id')
@@ -141,8 +141,8 @@ class UserPermissionController extends Controller
             // Clear all known business grants first. This also removes stale
             // permissions left behind after an employee changes role.
             if ($catalogPermissionIds !== []) {
-                DB::table('permission_user')
-                    ->where('user_id', $user->id)
+                DB::table('membership_permissions')
+                    ->where('membership_id', $user->current_membership_id)
                     ->whereIn('permission_id', $catalogPermissionIds)
                     ->delete();
             }
@@ -154,7 +154,7 @@ class UserPermissionController extends Controller
             $now = now();
             $rows = array_map(
                 fn (int $permissionId): array => [
-                    'user_id' => $user->id,
+                    'membership_id' => $user->current_membership_id,
                     'permission_id' => $permissionId,
                     'allowed' => true,
                     'created_at' => $now,
@@ -163,7 +163,7 @@ class UserPermissionController extends Controller
                 $permissionIds
             );
 
-            DB::table('permission_user')->insert($rows);
+            DB::table('membership_permissions')->insert($rows);
         });
 
         // Pivot-table changes do not fire Eloquent model observers, so record
@@ -214,6 +214,7 @@ class UserPermissionController extends Controller
 
     private function ensureStaffAccount(User $user): void
     {
+        abort_unless(app(\App\Support\CompanyContext::class)->membership($user->id)?->is_active, 404);
         $user->loadMissing(['role', 'client']);
 
         abort_if(
@@ -227,7 +228,7 @@ class UserPermissionController extends Controller
 
     private function assignmentsSupported(): bool
     {
-        return Schema::hasTable('permission_user')
-            && Schema::hasColumn('permission_user', 'allowed');
+        return Schema::hasTable('membership_permissions')
+            && Schema::hasColumn('membership_permissions', 'allowed');
     }
 }

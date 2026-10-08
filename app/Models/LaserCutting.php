@@ -7,5 +7,5 @@ use Illuminate\Database\Eloquent\Model;
 
 class LaserCutting extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\BelongsToCompany;
 }

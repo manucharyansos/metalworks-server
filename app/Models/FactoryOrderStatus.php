@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class FactoryOrderStatus extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\BelongsToCompany;
 
     protected $fillable = ['key', 'name', 'status_label', 'value', 'color', 'icon', 'requires_reason', 'sort_order', 'is_active'];
 }

@@ -11,6 +11,7 @@ class VisitorController extends Controller
 {
     public function getDeviceStats(): JsonResponse
     {
+        abort_unless(request()->user()?->is_platform_admin, 403);
         $totalVisitors = Visitor::count();
 
         // Device counts

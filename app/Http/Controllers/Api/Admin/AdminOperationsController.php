@@ -28,7 +28,7 @@ class AdminOperationsController extends Controller
             $weekEnd = (clone $today)->addDays(7)->endOfDay();
             $thirtyDaysAgo = now()->subDays(30);
 
-            $orderSummary = DB::table('orders as o')
+            $orderSummary = DB::table('orders as o')->where('o.company_id', app(\App\Support\CompanyContext::class)->id())
                 ->leftJoin('dates as d', 'd.order_id', '=', 'o.id')
                 ->selectRaw('COUNT(DISTINCT o.id) as total_orders')
                 ->selectRaw(
@@ -56,7 +56,7 @@ class AdminOperationsController extends Controller
                 ->first();
 
             [$openSql, $openBindings] = $this->openFactoryConditionSql('fo');
-            $factoryStepSummary = DB::table('factory_orders as fo')
+            $factoryStepSummary = DB::table('factory_orders as fo')->where('fo.company_id', app(\App\Support\CompanyContext::class)->id())
                 ->selectRaw(
                     "SUM(CASE WHEN {$openSql} AND fo.operator_id IS NULL THEN 1 ELSE 0 END) as unassigned_factory_steps",
                     $openBindings
@@ -79,7 +79,7 @@ class AdminOperationsController extends Controller
                 'unassigned_factory_steps' => (int) ($factoryStepSummary->unassigned_factory_steps ?? 0),
                 'awaiting_admin_confirmation' => (int) ($factoryStepSummary->awaiting_admin_confirmation ?? 0),
                 'factories' => Factory::count(),
-                'factory_operators' => User::query()->whereNotNull('factory_id')->count(),
+                'factory_operators' => User::query()->assignedToFactory()->count(),
             ];
 
             $factoryStats = $this->factoryStats($now, $today, $tomorrow, $thirtyDaysAgo);
@@ -114,7 +114,7 @@ class AdminOperationsController extends Controller
 
             $operators = User::query()
                 ->with(['role:id,name,value', 'factory:id,name,value'])
-                ->whereNotNull('factory_id')
+                ->assignedToFactory()
                 ->orderBy('name')
                 ->get(['id', 'name', 'email', 'role_id', 'factory_id'])
                 ->map(function (User $operator) use ($operatorStats) {
@@ -179,7 +179,7 @@ class AdminOperationsController extends Controller
                 'attention_orders' => $attentionOrders,
                 'filters' => [
                     'factories' => Factory::query()->orderBy('name')->get(['id', 'name', 'value']),
-                    'operators' => User::query()->whereNotNull('factory_id')->orderBy('name')->get(['id', 'name', 'factory_id']),
+                    'operators' => User::query()->assignedToFactory()->orderBy('name')->get(['id', 'name', 'factory_id']),
                     'factory_statuses' => FactoryOrderStatus::query()
                         ->where('is_active', true)
                         ->whereNotNull('value')
@@ -340,7 +340,7 @@ class AdminOperationsController extends Controller
     {
         [$openSql, $openBindings] = $this->openFactoryConditionSql('fo');
 
-        return DB::table('factory_orders as fo')
+        return DB::table('factory_orders as fo')->where('fo.company_id', app(\App\Support\CompanyContext::class)->id())
             ->leftJoin('orders as o', 'o.id', '=', 'fo.order_id')
             ->leftJoin('dates as d', 'd.order_id', '=', 'o.id')
             ->whereNotNull('fo.factory_id')
@@ -360,7 +360,7 @@ class AdminOperationsController extends Controller
     {
         [$openSql, $openBindings] = $this->openFactoryConditionSql('fo');
 
-        return DB::table('factory_orders as fo')
+        return DB::table('factory_orders as fo')->where('fo.company_id', app(\App\Support\CompanyContext::class)->id())
             ->leftJoin('orders as o', 'o.id', '=', 'fo.order_id')
             ->leftJoin('dates as d', 'd.order_id', '=', 'o.id')
             ->whereNotNull('fo.operator_id')

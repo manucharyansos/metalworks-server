@@ -8,7 +8,11 @@ return new class extends Migration {
     public function up(): void
     {
         Schema::table('clients', function (Blueprint $table) {
-            $table->enum('type', ['physPerson', 'legalEntity'])
+            // SQLite uses a string column for the client type in test databases.
+            $column = Schema::getConnection()->getDriverName() === 'sqlite'
+                ? $table->string('type', 20)
+                : $table->enum('type', ['physPerson', 'legalEntity']);
+            $column
                 ->default('physPerson')
                 ->change();
 

@@ -7,5 +7,5 @@ use Illuminate\Database\Eloquent\Model;
 
 class BengingForming extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\BelongsToCompany;
 }

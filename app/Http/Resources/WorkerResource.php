@@ -16,6 +16,9 @@ class WorkerResource extends JsonResource
             'role'        => $this->role?->name ?? null,
             'factory_id'  => $this->factory_id,
             'factory'     => $this->factory?->name ?? null,
+            'is_platform_admin' => (bool) $this->is_platform_admin,
+            'company_access' => $this->when($request->user()?->is_platform_admin, fn () => \App\Support\CompanyStaffAccess::rows($this->resource)),
+            'can_edit_account' => (bool) ($request->user()?->is_platform_admin || $this->memberships()->where('is_active', true)->count() <= 1),
 
             'worker' => $this->whenLoaded('worker', function () {
                 return [
@@ -29,7 +32,7 @@ class WorkerResource extends JsonResource
             'created_at' => $this->created_at,
             'updated_at' => $this->updated_at,
 
-            'display_name' => trim($this->name . ' ' . ($this->worker?->last_name ?? '')),
+            'display_name' => trim($this->name . ' ' . ($this->worker?->last_name ?: $this->last_name ?? '')),
         ];
     }
 }

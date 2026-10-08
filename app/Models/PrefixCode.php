@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PrefixCode extends Model
 {
+    use \App\Models\Concerns\BelongsToCompany;
     protected $fillable = ['order_id', 'code'];
 
     public function order(): BelongsTo
