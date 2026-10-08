@@ -124,6 +124,17 @@ final class PermissionScope
         return in_array($slug, $scope['permissions'], true);
     }
 
+    public static function forRoles(array $roleNames): array
+    {
+        $scopes = array_map(fn ($name) => self::forRole($name), array_unique($roleNames));
+        $permissions = array_values(array_unique(array_merge([], ...array_column($scopes, 'permissions'))));
+        $groups = array_values(array_unique(array_merge([], ...array_column($scopes, 'groups'))));
+        return ['role' => $roleNames[0] ?? '', 'roles' => array_values(array_unique($roleNames)),
+            'full_access' => in_array(true, array_column($scopes, 'full_access'), true),
+            'permissions' => $permissions, 'groups' => $groups, 'default_group' => $groups[0] ?? null,
+            'dependencies' => self::dependenciesFor($permissions)];
+    }
+
     public static function isFullAccess(?string $roleName): bool
     {
         return in_array((string) $roleName, self::FULL_ACCESS_ROLES, true);
@@ -131,7 +142,12 @@ final class PermissionScope
 
     public static function expandWithDependencies(?string $roleName, array $slugs): array
     {
-        $scope = self::forRole($roleName);
+        return self::expandForRoles([(string) $roleName], $slugs);
+    }
+
+    public static function expandForRoles(array $roles, array $slugs): array
+    {
+        $scope = self::forRoles($roles);
         $allowed = array_flip($scope['permissions']);
         $selected = [];
 

@@ -28,7 +28,7 @@ class UserPermissionController extends Controller
         $this->ensureStaffAccount($user);
         $user->loadMissing('role');
 
-        $scope = PermissionScope::forRole($user->role?->name);
+        $scope = PermissionScope::forRoles($user->workRoleNames());
         $permissions = $this->assignablePermissions($user)->get();
 
         // Always display the canonical business label from config, even when an
@@ -66,6 +66,7 @@ class UserPermissionController extends Controller
             'role_permissions_used' => false,
             'permission_scope' => [
                 'role' => $scope['role'],
+                'roles' => $scope['roles'],
                 'full_access' => (bool) $scope['full_access'],
                 'groups' => $scope['groups'],
                 'default_group' => $scope['default_group'],
@@ -80,7 +81,7 @@ class UserPermissionController extends Controller
         $this->ensureStaffAccount($user);
         $user->loadMissing('role');
 
-        $scope = PermissionScope::forRole($user->role?->name);
+        $scope = PermissionScope::forRoles($user->workRoleNames());
 
         if ($scope['full_access']) {
             return response()->json([
@@ -119,8 +120,8 @@ class UserPermissionController extends Controller
             ->values()
             ->all();
 
-        $expandedSlugs = PermissionScope::expandWithDependencies(
-            $user->role?->name,
+        $expandedSlugs = PermissionScope::expandForRoles(
+            $user->workRoleNames(),
             $requestedSlugs
         );
 
@@ -199,7 +200,7 @@ class UserPermissionController extends Controller
 
     private function assignablePermissions(User $user)
     {
-        $scope = PermissionScope::forRole($user->role?->name);
+        $scope = PermissionScope::forRoles($user->workRoleNames());
 
         if ($scope['permissions'] === []) {
             return Permission::query()->whereRaw('1 = 0');
@@ -218,9 +219,7 @@ class UserPermissionController extends Controller
         $user->loadMissing(['role', 'client']);
 
         abort_if(
-            $user->client !== null
-                || $user->role === null
-                || in_array($user->role->name, ['authenticatedUser', 'guestUser'], true),
+            !array_intersect($user->workRoleNames(), \App\Support\MembershipAssignments::STAFF_ROLES),
             404,
             'Staff account not found.'
         );

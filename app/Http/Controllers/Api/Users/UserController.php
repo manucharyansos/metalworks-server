@@ -17,11 +17,11 @@ class UserController extends Controller
     {
         $users = User::query()
             ->with(['role', 'factory', 'worker'])
-            ->whereDoesntHave('client')
             ->forRoles(['authenticatedUser', 'guestUser'], true)
             ->orderBy('name')
             ->get();
 
+        $users->each(fn ($user) => $user->setAttribute('assignments', $user->workAssignments()));
         return response()->json([
             'data' => $users,
         ]);
@@ -43,6 +43,7 @@ class UserController extends Controller
 
         $user->load(['role', 'factory', 'worker']);
 
+        $user->setAttribute('assignments', $user->workAssignments());
         return response()->json($user);
     }
 
@@ -69,9 +70,7 @@ class UserController extends Controller
         $user->loadMissing(['role', 'client']);
 
         abort_if(
-            $user->client !== null
-                || $user->role === null
-                || in_array($user->role->name, ['authenticatedUser', 'guestUser'], true),
+            !array_intersect($user->workRoleNames(), \App\Support\MembershipAssignments::STAFF_ROLES),
             404,
             'Staff account not found.'
         );

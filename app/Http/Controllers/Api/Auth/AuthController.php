@@ -188,6 +188,7 @@ class AuthController extends Controller
         } else { $permissions = collect(); }
         $companies = \App\Models\Company::where('is_active', true);
         if (!$user->is_platform_admin) $companies->whereHas('memberships', fn ($q) => $q->where('user_id', $user->id)->where('is_active', true));
+        $assignments = $context->id() && !$user->is_platform_admin ? $user->workAssignments() : [];
 
         return response()->json([
             'id' => $user->id,
@@ -203,6 +204,9 @@ class AuthController extends Controller
                 'name' => $user->factory->name,
             ] : null,
             'permissions' => $permissions,
+            'assignments' => $assignments,
+            'assignment_id' => $context->assignment($user->id)?->id
+                ?? collect($assignments)->firstWhere('is_primary', true)['id'] ?? null,
             'last_name' => $user->last_name ?: $user->worker?->last_name,
             'is_platform_admin' => (bool) $user->is_platform_admin,
             'company' => $context->company()?->summary(),

@@ -53,6 +53,10 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::get('{user}', [\App\Http\Controllers\Api\CompanyAccessController::class, 'show']);
             Route::put('{user}', [\App\Http\Controllers\Api\CompanyAccessController::class, 'update']);
         });
+        Route::prefix('staff-assignments')->middleware('admin')->group(function () {
+            Route::get('{user}', [\App\Http\Controllers\Api\StaffAssignmentController::class, 'show']);
+            Route::put('{user}', [\App\Http\Controllers\Api\StaffAssignmentController::class, 'update']);
+        });
 
         /**
          * ─── ADMIN DASHBOARD ─────────────────────────────────
