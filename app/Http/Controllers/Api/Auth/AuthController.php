@@ -234,7 +234,7 @@ class AuthController extends Controller
                 'id' => $user->role->id,
                 'name' => $user->role->name,
             ] : null,
-            'factory_id' => $user->factory_id,
+            'factory_id' => $context->id() ? $user->factory_id : null,
             'factory' => $user->factory ? [
                 'id' => $user->factory->id,
                 'name' => $user->factory->name,
