@@ -9,20 +9,23 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Factory extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\BelongsToCompany;
 
     protected $fillable = ['name', 'value'];
 
     public function orders(): BelongsToMany
     {
         return $this->belongsToMany(Order::class, 'factory_orders', 'factory_id', 'order_id')
+            ->using(CompanyPivot::class)
             ->withPivot(['status', 'canceling', 'cancel_date', 'finish_date', 'operator_finish_date', 'admin_confirmation_date'])
             ->withTimestamps();
     }
 
-    public function operators(): HasMany
+    public function operators(): BelongsToMany
     {
-        return $this->hasMany(User::class, 'factory_id');
+        return $this->belongsToMany(User::class, 'company_memberships', 'factory_id', 'user_id')
+            ->wherePivot('company_id', app(\App\Support\CompanyContext::class)->id() ?: $this->company_id)
+            ->wherePivot('is_active', true);
     }
 
     public function pmpFiles(): HasMany

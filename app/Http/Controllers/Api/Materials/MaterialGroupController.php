@@ -29,7 +29,7 @@ class MaterialGroupController extends Controller
         if ($request->hasFile('image')) {
             $file = $request->file('image');
             $uniqueName = uniqid('', true) . '_' . basename($file->getClientOriginalName());
-            $data['image'] = $file->storeAs('categories', $uniqueName, 'public');
+            $data['image'] = $file->storeAs('companies/' . app(\App\Support\CompanyContext::class)->id() . '/categories', $uniqueName, 'private');
         }
 
         $materialGroup = MaterialGroup::create($data);
@@ -61,13 +61,13 @@ class MaterialGroupController extends Controller
         ]);
 
         if ($request->hasFile('image')) {
-            if ($materialGroup->image && Storage::disk('public')->exists($materialGroup->image)) {
-                Storage::disk('public')->delete($materialGroup->image);
+            if ($materialGroup->image && Storage::disk('private')->exists($materialGroup->image)) {
+                Storage::disk('private')->delete($materialGroup->image);
             }
 
             $file = $request->file('image');
             $uniqueName = uniqid('', true) . '_' . basename($file->getClientOriginalName());
-            $data['image'] = $file->storeAs('categories', $uniqueName, 'public');
+            $data['image'] = $file->storeAs('companies/' . app(\App\Support\CompanyContext::class)->id() . '/categories', $uniqueName, 'private');
         }
 
         $materialGroup->update($data);
@@ -83,8 +83,8 @@ class MaterialGroupController extends Controller
     {
         $this->authorizeMutation($request, 'materials.delete');
 
-        if ($materialGroup->image && Storage::disk('public')->exists($materialGroup->image)) {
-            Storage::disk('public')->delete($materialGroup->image);
+        if ($materialGroup->image && Storage::disk('private')->exists($materialGroup->image)) {
+            Storage::disk('private')->delete($materialGroup->image);
         }
 
         $materialGroup->delete();

@@ -109,7 +109,7 @@ class OrderController extends Controller
                         $fileName .= '.' . $extension;
                     }
 
-                    $path = $file->storeAs("uploads/orders/{$order->id}", $fileName, 'public');
+                    $path = $file->storeAs("companies/" . app(\App\Support\CompanyContext::class)->id() . "/orders/{$order->id}", $fileName, 'private');
                     $storedPaths[] = $path;
 
                     $order->files()->create([
@@ -144,7 +144,7 @@ class OrderController extends Controller
             ], 422);
         } catch (\Throwable $e) {
             foreach ($storedPaths as $path) {
-                Storage::disk('public')->delete($path);
+                Storage::disk('private')->delete($path);
             }
 
             Log::error('Order creation failed', [

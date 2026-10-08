@@ -13,7 +13,7 @@ use Illuminate\Validation\ValidationException;
 
 class Order extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\BelongsToCompany;
 
     protected $fillable = ['user_id', 'name', 'description', 'status', 'link_existing_files', 'creator_id', 'remote_number_id'];
 
@@ -83,6 +83,7 @@ class Order extends Model
     public function factories(): BelongsToMany
     {
         return $this->belongsToMany(Factory::class, 'factory_orders', 'order_id', 'factory_id')
+            ->using(CompanyPivot::class)
             ->withPivot(['status', 'canceling', 'cancel_date', 'finish_date', 'operator_finish_date', 'admin_confirmation_date'])
             ->withTimestamps();
     }
@@ -135,7 +136,7 @@ class Order extends Model
     {
         $isCustomer = User::query()
             ->whereKey($this->user_id)
-            ->whereHas('role', fn ($query) => $query->where('name', 'authenticatedUser'))
+            ->forRoles(['authenticatedUser'])
             ->exists();
 
         if (!$isCustomer) {

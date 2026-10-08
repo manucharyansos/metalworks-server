@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class SelectedFile extends Model
 {
+    use \App\Models\Concerns\BelongsToCompany;
     protected $table = 'selected_files';
 
     protected $fillable = [

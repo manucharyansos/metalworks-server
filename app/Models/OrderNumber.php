@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class OrderNumber extends Model
 {
+    use \App\Models\Concerns\BelongsToCompany;
     protected $fillable = ['order_id', 'number'];
 
     protected static function booted(): void

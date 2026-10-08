@@ -15,6 +15,10 @@ class OrderNumberGenerator
         }
 
         $period = now()->format('Y-m');
+        $companyId = app(CompanyContext::class)->id();
+        if (!$companyId && Schema::hasColumn('order_number_sequences', 'company_id')) {
+            $companyId = DB::table('companies')->where('slug', 'metalworks')->value('id');
+        }
 
         // Keep deployments backward-compatible if application code is briefly
         // deployed before the new migration has been executed.
@@ -23,6 +27,7 @@ class OrderNumberGenerator
         }
 
         DB::table('order_number_sequences')->insertOrIgnore([
+            ...($companyId ? ['company_id' => $companyId] : []),
             'period' => $period,
             'last_number' => 0,
             'created_at' => now(),
@@ -30,6 +35,7 @@ class OrderNumberGenerator
         ]);
 
         $sequence = DB::table('order_number_sequences')
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
             ->where('period', $period)
             ->lockForUpdate()
             ->first();
@@ -38,6 +44,7 @@ class OrderNumberGenerator
         $next = max((int) ($sequence->last_number ?? 0), $existingMax) + 1;
 
         DB::table('order_number_sequences')
+            ->when($companyId, fn ($q) => $q->where('company_id', $companyId))
             ->where('period', $period)
             ->update([
                 'last_number' => $next,
@@ -55,6 +62,7 @@ class OrderNumberGenerator
     private static function maxExistingSequence(string $period): int
     {
         return OrderNumber::query()
+            ->when(!app(CompanyContext::class)->id() && Schema::hasColumn('order_numbers', 'company_id'), fn ($q) => $q->where('company_id', DB::table('companies')->where('slug', 'metalworks')->value('id')))
             ->where('number', 'like', $period . '-%')
             ->pluck('number')
             ->reduce(function (int $max, string $number) use ($period): int {

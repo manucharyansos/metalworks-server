@@ -11,7 +11,7 @@ use Illuminate\Validation\ValidationException;
 
 class FactoryOrder extends Model
 {
-    use HasFactory;
+    use HasFactory, \App\Models\Concerns\BelongsToCompany;
 
     protected $fillable = [
         'order_id',
@@ -49,7 +49,7 @@ class FactoryOrder extends Model
             ) {
                 $operatorMatchesFactory = User::query()
                     ->whereKey($factoryOrder->operator_id)
-                    ->where('factory_id', $factoryOrder->factory_id)
+                    ->assignedToFactory((int) $factoryOrder->factory_id)
                     ->exists();
 
                 if (!$operatorMatchesFactory) {
@@ -69,6 +69,7 @@ class FactoryOrder extends Model
     public function files(): BelongsToMany
     {
         return $this->belongsToMany(PmpFiles::class, 'factory_order_files')
+            ->using(CompanyPivot::class)
             ->withPivot(['quantity', 'material_type', 'thickness'])
             ->withTimestamps();
     }

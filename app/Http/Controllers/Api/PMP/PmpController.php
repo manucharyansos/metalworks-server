@@ -84,7 +84,7 @@ class PmpController extends Controller
         if ($wasCreated) {
             foreach (Factory::all() as $factory) {
                 $factoryName = str_replace(' ', '_', $factory->value);
-                Storage::disk('public')->makeDirectory("MetalWorks/PMP_{$factoryName}");
+                Storage::disk('private')->makeDirectory("companies/" . app(\App\Support\CompanyContext::class)->id() . "/PMP_{$factoryName}");
             }
         }
 

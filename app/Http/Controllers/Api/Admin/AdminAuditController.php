@@ -65,7 +65,7 @@ class AdminAuditController extends Controller
 
             if (!empty($validated['role'])) {
                 $role = $validated['role'];
-                $query->whereHas('user.role', fn (Builder $roleQuery) => $roleQuery->where('name', $role));
+                $query->whereHas('user', fn (Builder $userQuery) => $userQuery->forRoles([$role]));
             }
 
             if (!empty($validated['category'])) {
@@ -217,8 +217,7 @@ class AdminAuditController extends Controller
     {
         return ActivityLog::query()->where(function (Builder $query) {
             $query->whereNull('user_id')
-                ->orWhereHas('user.role', fn (Builder $roleQuery) => $roleQuery
-                    ->whereNotIn('name', ['authenticatedUser', 'guestUser']));
+                ->orWhereHas('user', fn (Builder $userQuery) => $userQuery->forRoles(['authenticatedUser', 'guestUser'], true));
         });
     }
 }
