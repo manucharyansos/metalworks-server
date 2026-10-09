@@ -147,14 +147,20 @@ class CompanyRegistrationFollowupTest extends TestCase
         $this->getJson('/api/user', ['X-Company-ID' => $this->a->id])->assertOk()->assertJsonPath('role.name', 'engineer')->assertJsonPath('permissions.0', 'pmp.view');
     }
 
-    public function test_client_can_be_added_as_operator_with_the_destination_workshop(): void
+    public function test_client_company_editor_cannot_assign_employee_positions_or_workshops(): void
     {
         $person = $this->account($this->a, 'client-followup@example.invalid', 'authenticatedUser');
         $this->manageSecond(); $this->actingManager();
         $factory = Factory::withoutGlobalScope('company')->where('company_id', $this->b->id)->firstOrFail();
         $row = $this->access($this->b, 'laser', $factory->id);
-        $this->putJson('/api/company-access/' . $person->id, ['access' => [$row]])->assertOk();
-        $this->assertDatabaseHas('workers', ['company_id' => $this->b->id, 'user_id' => $person->id]);
+        $url = '/api/company-access/' . $person->id;
+        $this->getJson($url)->assertOk()->assertJsonPath('user.type', 'client')->assertJsonCount(1, 'roles')->assertJsonCount(0, 'companies.1.factories');
+        $this->putJson($url, ['access' => [$row]])->assertUnprocessable();
+        $this->putJson($url, ['access' => [$this->access($this->b, 'authenticatedUser', $factory->id)]])->assertUnprocessable();
+        $this->putJson($url, ['access' => [['company_id' => $this->b->id, 'enabled' => true]]])->assertOk();
+        $this->assertDatabaseMissing('workers', ['company_id' => $this->b->id, 'user_id' => $person->id]);
+        $this->assertDatabaseHas('clients', ['company_id' => $this->b->id, 'user_id' => $person->id]);
+        $this->assertDatabaseHas('company_memberships', ['company_id' => $this->b->id, 'user_id' => $person->id, 'role_id' => $this->role('authenticatedUser'), 'factory_id' => null]);
         $this->assertDatabaseHas('company_memberships', ['company_id' => $this->a->id, 'user_id' => $person->id, 'role_id' => $this->role('authenticatedUser')]);
     }
 
@@ -169,7 +175,7 @@ class CompanyRegistrationFollowupTest extends TestCase
         $factory = Factory::withoutGlobalScope('company')->where('company_id', $this->a->id)->firstOrFail();
         $this->putJson($url, ['access' => [$this->access($this->b, 'laser', $factory->id)]])->assertUnprocessable();
         $this->putJson($url, ['access' => [$this->access($this->b, 'laser')]])->assertUnprocessable();
-        $this->putJson($url, ['access' => [$this->access($this->a, 'laser', $factory->id)]])->assertStatus(409);
+        $this->putJson($url, ['access' => [$this->access($this->a, 'laser', $factory->id)]])->assertOk();
         $this->assertDatabaseMissing('company_memberships', ['user_id' => $person->id, 'company_id' => $this->b->id]);
     }
 
@@ -198,6 +204,85 @@ class CompanyRegistrationFollowupTest extends TestCase
         $membership->permissions()->attach($permission->id, ['allowed' => true]);
         $this->putJson('/api/company-access/' . $person->id, ['access' => [$this->access($this->b, 'authenticatedUser')]])->assertOk();
         $this->assertDatabaseMissing('membership_permissions', ['membership_id' => $membership->id]);
+    }
+
+    public function test_managers_and_company_admins_review_all_managed_company_requests_in_one_list(): void
+    {
+        config(['mail.default' => 'smtp', 'mail.from.address' => 'workspace@example.invalid']);
+        Mail::fake();
+        foreach ([$this->a, $this->b] as $company) {
+            $this->postJson('/api/register', $this->application(['email' => 'client-'.$company->id.'@example.invalid', 'company_id' => $company->id]))->assertStatus(202);
+            $this->postJson('/api/register', $this->application(['email' => 'staff-'.$company->id.'@example.invalid', 'company_id' => $company->id, 'is_employee' => true, 'last_name' => 'Surname', 'job_title' => 'Welder']))->assertStatus(202);
+        }
+        $this->postJson('/api/register', $this->application(['email' => 'private@example.invalid', 'company_id' => $this->c->id]))->assertStatus(202);
+        $this->manageSecond();
+        foreach (['manager', 'admin'] as $role) {
+            $membership = CompanyMembership::where('user_id', $this->manager->id)->where('company_id', $this->a->id)->firstOrFail();
+            app(CompanyContext::class)->run($this->a, fn () => \App\Support\MembershipAssignments::sync($membership, [['role_id' => $this->role($role), 'factory_id' => null]]));
+            $this->actingManager();
+            $this->getJson('/api/registration-requests')->assertOk()->assertJsonCount(4, 'data')->assertJsonCount(2, 'companies')->assertJsonPath('counts.pending', 4)->assertDontSee('private@example.invalid')->assertDontSee('Private Third');
+            $this->getJson('/api/registration-requests?type=employee')->assertOk()->assertJsonCount(2, 'data');
+            $this->getJson('/api/registration-requests?company_id='.$this->b->id)->assertOk()->assertJsonCount(2, 'data')->assertJsonPath('counts.pending', 2);
+        }
+        $application = RegistrationRequest::where('email', 'staff-'.$this->b->id.'@example.invalid')->firstOrFail();
+        $factory = Factory::withoutGlobalScope('company')->where('company_id', $this->b->id)->firstOrFail();
+        $options = $this->getJson('/api/registration-requests/options?company_id='.$this->b->id)->assertOk();
+        $this->assertContains($factory->id, array_column($options->json('factories'), 'id'));
+        $this->postJson('/api/registration-requests/'.$application->id.'/approve', ['assignments' => [['role_id' => $this->role('laser'), 'factory_id' => $factory->id]]])->assertOk()->assertJsonPath('notification_status', 'sent');
+        Mail::assertSent(RegistrationApproved::class, 1);
+        $this->assertDatabaseHas('workers', ['company_id' => $this->b->id, 'user_id' => $application->fresh()->user_id]);
+        $this->assertDatabaseMissing('company_memberships', ['company_id' => $this->a->id, 'user_id' => $application->fresh()->user_id]);
+        $private = RegistrationRequest::where('email', 'private@example.invalid')->firstOrFail();
+        $this->getJson('/api/registration-requests?company_id='.$this->c->id)->assertForbidden();
+        $this->getJson('/api/registration-requests/options?company_id='.$this->c->id)->assertForbidden();
+        $this->postJson('/api/registration-requests/'.$private->id.'/approve')->assertNotFound();
+        $this->postJson('/api/registration-requests/'.$private->id.'/reject')->assertNotFound();
+    }
+
+    public function test_access_from_another_managed_company_edits_that_company_without_switching_the_workspace(): void
+    {
+        $person = $this->account($this->b, 'other-source@example.invalid', 'engineer');
+        $this->manageSecond(); $this->actingManager();
+        $url = '/api/company-access/'.$person->id.'?source_company_id='.$this->b->id;
+        $this->getJson('/api/company-access/'.$person->id)->assertNotFound();
+        $this->getJson($url)->assertOk()->assertJsonPath('current_company_id', $this->b->id)->assertJsonPath('user.type', 'employee');
+        $factories = Factory::withoutGlobalScope('company')->where('company_id', $this->b->id)->orderBy('id')->take(2)->get();
+        $assignments = [['role_id' => $this->role('engineer'), 'factory_id' => null], ...$factories->map(fn ($factory) => ['role_id' => $this->role('laser'), 'factory_id' => $factory->id])->all()];
+        $this->putJson($url, ['access' => [['company_id' => $this->b->id, 'enabled' => true, 'assignments' => $assignments]]])->assertOk();
+        $membership = CompanyMembership::where('user_id', $person->id)->where('company_id', $this->b->id)->firstOrFail();
+        $this->assertSame(3, $membership->assignments()->count());
+        $this->assertDatabaseMissing('company_memberships', ['company_id' => $this->a->id, 'user_id' => $person->id]);
+        $this->getJson('/api/company-access/'.$person->id.'?source_company_id='.$this->c->id)->assertForbidden();
+        CompanyMembership::where('user_id', $this->manager->id)->where('company_id', $this->b->id)->update(['is_active' => false]);
+        $this->getJson($url)->assertForbidden();
+        $this->putJson($url, ['access' => [['company_id' => $this->a->id, 'enabled' => true, 'role_id' => $this->role('manager')]]])->assertForbidden();
+        $this->assertSame(3, $membership->assignments()->count());
+    }
+
+    public function test_client_editor_preserves_existing_employee_access_in_another_company(): void
+    {
+        $person = $this->account($this->a, 'mixed-access@example.invalid', 'authenticatedUser');
+        $membership = CompanyMembership::create(['company_id' => $this->b->id, 'user_id' => $person->id, 'role_id' => $this->role('engineer')]);
+        $this->manageSecond(); $this->actingManager();
+        $url = '/api/company-access/'.$person->id;
+        $this->getJson($url)->assertOk()->assertJsonPath('companies.1.read_only', true);
+        $this->putJson($url, ['access' => [['company_id' => $this->b->id, 'enabled' => false]]])->assertForbidden();
+        $this->putJson($url, ['access' => [$this->access($this->b, 'authenticatedUser')]])->assertForbidden();
+        $this->assertSame($this->role('engineer'), $membership->fresh()->role_id);
+        $this->assertTrue($membership->fresh()->is_active);
+    }
+
+    public function test_localized_approval_email_has_a_login_button_and_neutral_copy(): void
+    {
+        foreach (['hy', 'ru', 'en'] as $locale) {
+            $mail = new RegistrationApproved('QA Person', 'Second Works', $locale);
+            $html = $mail->render();
+            $this->assertStringContainsString('Second Works', $html);
+            $this->assertStringNotContainsString('Laravel', $html);
+            $this->assertStringContainsString('/work/'.($locale === 'hy' ? '' : $locale.'/').'login/', $html);
+            $this->assertDoesNotMatchRegularExpression('/manager|менеджер|մենեջեր/ui', $html);
+            $this->assertStringNotContainsString('new-password', $html);
+        }
     }
 
     private function actingManager(): void { Sanctum::actingAs($this->manager); $this->withHeader('X-Company-ID', (string) $this->a->id); }

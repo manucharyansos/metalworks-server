@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\{Company, CompanyMembership, Factory, RegistrationRequest, Role, User};
 use App\Support\CompanyContext;
+use App\Support\CompanyManagement;
 use App\Support\RegistrationApprovalMail;
 use App\Support\MembershipAssignments;
 use Illuminate\Http\JsonResponse;
@@ -99,13 +100,19 @@ class RegistrationRequestController extends Controller
             'status' => ['nullable', Rule::in(['pending', 'approved', 'rejected'])],
             'type' => ['nullable', Rule::in(['employee', 'client'])],
             'page' => 'nullable|integer|min:1',
+            'company_id' => 'nullable|integer',
         ]);
-        $query = RegistrationRequest::query()->where('status', $data['status'] ?? 'pending');
+        $companies = CompanyManagement::companies($request->user());
+        if (!empty($data['company_id'])) abort_unless($companies->contains('id', $data['company_id']), 403, 'Company access denied.');
+        $base = RegistrationRequest::withoutGlobalScope('company')->whereIn('company_id', $companies->modelKeys());
+        if (!empty($data['company_id'])) $base->where('company_id', $data['company_id']);
+        $query = (clone $base)->with('company:id,name')->where('status', $data['status'] ?? 'pending');
         if (!empty($data['type'])) $query->where('type', $data['type']);
         $page = $query->orderByDesc('id')->paginate(20);
-        $counts = RegistrationRequest::select('status', DB::raw('count(*) as total'))->groupBy('status')->pluck('total', 'status');
+        $counts = (clone $base)->select('status', DB::raw('count(*) as total'))->groupBy('status')->pluck('total', 'status');
         return response()->json([
             'data' => $page->items(),
+            'companies' => $companies->map->only(['id', 'name'])->values(),
             'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'total' => $page->total()],
             'counts' => ['pending' => (int) ($counts['pending'] ?? 0), 'approved' => (int) ($counts['approved'] ?? 0), 'rejected' => (int) ($counts['rejected'] ?? 0)],
         ]);
@@ -113,13 +120,21 @@ class RegistrationRequestController extends Controller
 
     public function options(Request $request): JsonResponse
     {
-        return response()->json([
+        $data = $request->validate(['company_id' => 'nullable|integer']);
+        $company = CompanyManagement::companies($request->user())->find($data['company_id'] ?? app(CompanyContext::class)->id());
+        abort_unless($company, 403, 'Company access denied.');
+        return app(CompanyContext::class)->run($company, fn () => response()->json([
             'roles' => Role::whereIn('name', $this->allowedRoles($request))->orderBy('name')->get(['id', 'name', 'value']),
             'factories' => Factory::orderBy('name')->get(['id', 'name', 'value']),
-        ]);
+        ]));
     }
 
-    public function approve(Request $request, RegistrationRequest $registrationRequest): JsonResponse
+    public function approve(Request $request, string $registrationRequest): JsonResponse
+    {
+        return $this->withApplication($request, $registrationRequest, fn ($application) => $this->approveApplication($request, $application));
+    }
+
+    private function approveApplication(Request $request, RegistrationRequest $registrationRequest): JsonResponse
     {
         $employee = $registrationRequest->type === 'employee';
         if (!$employee) $request->validate(['role_id' => 'prohibited', 'factory_id' => 'prohibited', 'assignments' => 'prohibited']);
@@ -129,6 +144,8 @@ class RegistrationRequestController extends Controller
         $role = Role::findOrFail($data['role_id']);
         $operator = in_array($role->name, self::OPERATOR_ROLES, true);
         $user = DB::transaction(function () use ($request, $registrationRequest, $role, $operator, $data, $employee, $assignments): User {
+            CompanyMembership::where('user_id', $request->user()->id)->orderBy('id')->lockForUpdate()->get();
+            abort_unless(CompanyManagement::companies($request->user())->contains('id', $registrationRequest->company_id), 403, 'Company access denied.');
             $application = RegistrationRequest::whereKey($registrationRequest->id)->lockForUpdate()->firstOrFail();
             abort_unless($application->status === 'pending', 409, 'This request has already been reviewed.');
             abort_unless($application->type === $registrationRequest->type, 409, 'The request type has changed. Refresh the list before reviewing it.');
@@ -169,7 +186,12 @@ class RegistrationRequestController extends Controller
         return response()->json(['status' => 'approved', 'user_id' => $user->id, 'notification_status' => $notification, 'message' => 'Registration approved.']);
     }
 
-    public function notify(Request $request, RegistrationRequest $registrationRequest): JsonResponse
+    public function notify(Request $request, string $registrationRequest): JsonResponse
+    {
+        return $this->withApplication($request, $registrationRequest, fn ($application) => $this->notifyApplication($application));
+    }
+
+    private function notifyApplication(RegistrationRequest $registrationRequest): JsonResponse
     {
         abort_unless($registrationRequest->status === 'approved', 409, 'Approve the request before sending its notification.');
         abort_unless(Company::whereKey($registrationRequest->company_id)->where('is_active', true)->exists()
@@ -177,14 +199,29 @@ class RegistrationRequestController extends Controller
         return response()->json(['status' => 'approved', 'notification_status' => app(RegistrationApprovalMail::class)->send($registrationRequest)]);
     }
 
-    public function reject(Request $request, RegistrationRequest $registrationRequest): JsonResponse
+    public function reject(Request $request, string $registrationRequest): JsonResponse
+    {
+        return $this->withApplication($request, $registrationRequest, fn ($application) => $this->rejectApplication($request, $application));
+    }
+
+    private function rejectApplication(Request $request, RegistrationRequest $registrationRequest): JsonResponse
     {
         DB::transaction(function () use ($request, $registrationRequest): void {
+            CompanyMembership::where('user_id', $request->user()->id)->orderBy('id')->lockForUpdate()->get();
+            abort_unless(CompanyManagement::companies($request->user())->contains('id', $registrationRequest->company_id), 403, 'Company access denied.');
             $application = RegistrationRequest::whereKey($registrationRequest->id)->lockForUpdate()->firstOrFail();
             abort_unless($application->status === 'pending', 409, 'This request has already been reviewed.');
             $application->update(['status' => 'rejected', 'reviewed_by' => $request->user()->id, 'reviewed_at' => now(), 'password_hash' => null]);
         }, 3);
         return response()->json(['status' => 'rejected', 'message' => 'Registration request rejected.']);
+    }
+
+    private function withApplication(Request $request, string $id, \Closure $callback): JsonResponse
+    {
+        $application = RegistrationRequest::withoutGlobalScope('company')
+            ->whereIn('company_id', CompanyManagement::companies($request->user())->modelKeys())->findOrFail($id);
+        $company = Company::findOrFail($application->company_id);
+        return app(CompanyContext::class)->run($company, fn () => $callback($application));
     }
 
     private function allowedRoles(Request $request): array
