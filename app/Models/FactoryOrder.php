@@ -25,11 +25,28 @@ class FactoryOrder extends Model
         'operator_id',
         'confirmation_required', 'confirmation_method', 'evidence_text', 'evidence_photo_path',
         'engineer_confirmation_at', 'engineer_confirmation_user_id', 'completed_at',
+        'depends_on_id',
     ];
 
     protected $casts = ['confirmation_required' => 'boolean'];
-    protected $hidden = ['evidence_photo_path'];
-    protected $appends = ['awaiting_engineer_confirmation', 'has_evidence_photo'];
+    protected $hidden = ['evidence_photo_path', 'dependsOn'];
+    protected $appends = ['awaiting_engineer_confirmation', 'has_evidence_photo', 'is_blocked'];
+
+    public function dependsOn(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'depends_on_id');
+    }
+
+    public function isWorkCompleted(): bool
+    {
+        return (bool) $this->completed_at || (in_array($this->status, ['finished', 'completed', 'done'], true)
+            && (!$this->confirmation_required || $this->engineer_confirmation_at));
+    }
+
+    public function getIsBlockedAttribute(): bool
+    {
+        return $this->depends_on_id && !$this->dependsOn?->isWorkCompleted();
+    }
 
     public function getAwaitingEngineerConfirmationAttribute(): bool
     {

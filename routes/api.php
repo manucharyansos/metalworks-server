@@ -49,6 +49,9 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
 
         Route::get('user',   [AuthController::class, 'me']);
         Route::post('logout',[AuthController::class, 'logout']);
+        Route::get('task-workload', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'workload']);
+        Route::put('tasks/{order}/workshops/{factoryOrder}/operator', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'assign'])->middleware('permission:orders.update');
+        Route::post('tasks/{order}/workshops', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'addWork'])->middleware('permission:orders.update');
         Route::prefix('company-access')->middleware('admin')->group(function () {
             Route::get('{user}', [\App\Http\Controllers\Api\CompanyAccessController::class, 'show']);
             Route::put('{user}', [\App\Http\Controllers\Api\CompanyAccessController::class, 'update']);
