@@ -109,36 +109,7 @@ class SecureLegacyFileController extends Controller
 
     private function canAccessPmpFile(Request $request, PmpFiles $file): bool
     {
-        $user = $request->user();
-
-        if (!$user) {
-            return false;
-        }
-
-        if ($user->role?->name === 'admin') {
-            return true;
-        }
-
-        if (!$user->factory_id && $user->hasPermission('pmp_files.view')) {
-            return true;
-        }
-
-        if (
-            !$user->factory_id ||
-            !$user->hasPermission('factory.download') ||
-            (int) $file->factory_id !== (int) $user->factory_id
-        ) {
-            return false;
-        }
-
-        return FactoryOrder::query()
-            ->where('factory_id', $user->factory_id)
-            ->where(function ($query) use ($user) {
-                $query->whereNull('operator_id')
-                    ->orWhere('operator_id', $user->id);
-            })
-            ->whereHas('files', fn ($query) => $query->whereKey($file->id))
-            ->exists();
+        return $request->user() && \App\Support\TaskAccess::canDownloadPmp($request->user(), $file);
     }
 
     private function serve(

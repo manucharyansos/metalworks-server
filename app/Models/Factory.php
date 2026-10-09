@@ -11,7 +11,14 @@ class Factory extends Model
 {
     use HasFactory, \App\Models\Concerns\BelongsToCompany;
 
-    protected $fillable = ['name', 'value'];
+    protected $fillable = ['name', 'value', 'is_reference'];
+
+    protected $appends = ['is_reference'];
+
+    public function getIsReferenceAttribute($value): bool
+    {
+        return (bool) $value || in_array(strtoupper((string) $this->value), config('companies.reference_factory_values', ['INFO', 'PDF']), true);
+    }
 
     public function orders(): BelongsToMany
     {

@@ -67,7 +67,7 @@ class OrderController extends Controller
                     'creator_id' => $request->user()->id,
                     'name' => $validatedData['name'],
                     'description' => $validatedData['description'],
-                    'status' => $validatedData['status'] ?? 'pending',
+                    'status' => 'pending',
                 ]);
 
                 $order->orderNumber()->create([
@@ -153,12 +153,12 @@ class OrderController extends Controller
             ]);
 
             return response()->json([
-                'message' => 'Սխալ պատվերի ստեղծման ընթացքում',
+                'message' => 'Սխալ առաջադրանքի ստեղծման ընթացքում',
             ], 500);
         }
     }
 
-    public function show($id): JsonResponse
+    public function show(Request $request, $id): JsonResponse
     {
         $order = Order::with([
             'orderNumber',
@@ -175,7 +175,8 @@ class OrderController extends Controller
             'factoryOrders.operator:id,name',
         ])->findOrFail($id);
 
-        return response()->json($order);
+        abort_unless(\App\Support\TaskAccess::canView($request->user(), $order), 403);
+        return response()->json(\App\Support\TaskAccess::restrictOperatorRelations($order, $request->user()));
     }
 
     public function update(Request $request, $id): JsonResponse
@@ -195,6 +196,9 @@ class OrderController extends Controller
                 /** @var \App\Models\Order $order */
                 $order = Order::findOrFail($id);
 
+                if (($validatedData['status'] ?? null) === 'completed' && $order->factoryOrders()->whereNull('completed_at')->whereNotIn('status', ['canceled', 'cancelled'])->exists()) {
+                    throw ValidationException::withMessages(['status' => ['Ավարտը պետք է ուղարկի օպերատորը և, անհրաժեշտության դեպքում, հաստատի ստեղծող ինժեները։']]);
+                }
                 $oldStatus = $order->status;
                 $oldName = $order->name;
                 $oldDesc = $order->description;
@@ -299,8 +303,8 @@ class OrderController extends Controller
                     'user_id' => $request->user()?->id,
                     'action' => 'order.updated',
                     'message' => $changes
-                        ? 'Պատվերը թարմացվել է (' . implode(', ', $changes) . ')'
-                        : 'Պատվերը թարմացվել է առանց էական փոփոխությունների',
+                        ? 'Առաջադրանքը թարմացվել է (' . implode(', ', $changes) . ')'
+                        : 'Առաջադրանքը թարմացվել է առանց էական փոփոխությունների',
                     'meta' => [
                         'from_status' => $oldStatus,
                         'to_status' => $order->status,
@@ -318,7 +322,7 @@ class OrderController extends Controller
 
             return response()->json([
                 'order' => $order,
-                'message' => 'Պատվերը հաջողությամբ թարմացվել է',
+                'message' => 'Առաջադրանքը հաջողությամբ թարմացվել է',
             ], 200);
         } catch (ValidationException $e) {
             return response()->json([
@@ -332,7 +336,7 @@ class OrderController extends Controller
             ]);
 
             return response()->json([
-                'message' => 'Սխալ պատվերի թարմացման ընթացքում',
+                'message' => 'Սխալ առաջադրանքի թարմացման ընթացքում',
             ], 500);
         }
     }

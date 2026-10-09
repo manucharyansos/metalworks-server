@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Log;
 class AdminOperationsController extends Controller
 {
     private const CLOSED_ORDER_STATUSES = ['completed', 'canceled', 'cancelled'];
-    private const DONE_FACTORY_STATUSES = ['finished', 'completed', 'done', 'confirmed'];
+    private const DONE_FACTORY_STATUSES = ['finished', 'completed', 'done'];
     private const CANCELED_FACTORY_STATUSES = ['canceled', 'cancelled'];
 
     public function dashboard(Request $request): JsonResponse
@@ -62,7 +62,7 @@ class AdminOperationsController extends Controller
                     $openBindings
                 )
                 ->selectRaw(
-                    "SUM(CASE WHEN fo.status IN (?, ?, ?, ?) AND fo.admin_confirmation_date IS NULL THEN 1 ELSE 0 END) as awaiting_admin_confirmation",
+                    "SUM(CASE WHEN fo.status IN (?, ?, ?) AND fo.confirmation_required = 1 AND fo.engineer_confirmation_at IS NULL THEN 1 ELSE 0 END) as awaiting_admin_confirmation",
                     self::DONE_FACTORY_STATUSES
                 )
                 ->first();
@@ -78,6 +78,7 @@ class AdminOperationsController extends Controller
                 'without_deadline' => (int) ($orderSummary->without_deadline ?? 0),
                 'unassigned_factory_steps' => (int) ($factoryStepSummary->unassigned_factory_steps ?? 0),
                 'awaiting_admin_confirmation' => (int) ($factoryStepSummary->awaiting_admin_confirmation ?? 0),
+                'awaiting_engineer_confirmation' => (int) ($factoryStepSummary->awaiting_admin_confirmation ?? 0),
                 'factories' => Factory::count(),
                 'factory_operators' => User::query()->assignedToFactory()->count(),
             ];
@@ -161,7 +162,7 @@ class AdminOperationsController extends Controller
                         ->orWhereHas('factoryOrders', fn (Builder $factoryQuery) => $factoryQuery->whereNull('operator_id'))
                         ->orWhereHas('factoryOrders', fn (Builder $factoryQuery) => $factoryQuery
                             ->whereIn('status', self::DONE_FACTORY_STATUSES)
-                            ->whereNull('admin_confirmation_date'));
+                            ->where('confirmation_required', true)->whereNull('engineer_confirmation_at'));
                 })
                 ->latest('id')
                 ->limit(12)
@@ -280,9 +281,9 @@ class AdminOperationsController extends Controller
             if (($validated['confirmation'] ?? null) === 'waiting') {
                 $query->whereHas('factoryOrders', fn (Builder $q) => $q
                     ->whereIn('status', self::DONE_FACTORY_STATUSES)
-                    ->whereNull('admin_confirmation_date'));
+                    ->where('confirmation_required', true)->whereNull('engineer_confirmation_at'));
             } elseif (($validated['confirmation'] ?? null) === 'confirmed') {
-                $query->whereHas('factoryOrders', fn (Builder $q) => $q->whereNotNull('admin_confirmation_date'));
+                $query->whereHas('factoryOrders', fn (Builder $q) => $q->whereNotNull('engineer_confirmation_at'));
             }
 
             $this->applyTimeRange($query, $validated['time_range'] ?? null);
@@ -350,8 +351,8 @@ class AdminOperationsController extends Controller
             ->selectRaw("SUM(CASE WHEN {$openSql} AND d.finish_date IS NOT NULL AND d.finish_date < ? THEN 1 ELSE 0 END) as overdue_orders", [...$openBindings, $now])
             ->selectRaw("SUM(CASE WHEN {$openSql} AND d.finish_date >= ? AND d.finish_date < ? THEN 1 ELSE 0 END) as due_today", [...$openBindings, $today, $tomorrow])
             ->selectRaw("SUM(CASE WHEN {$openSql} AND fo.operator_id IS NULL THEN 1 ELSE 0 END) as unassigned_orders", $openBindings)
-            ->selectRaw("SUM(CASE WHEN fo.status IN (?, ?, ?, ?) AND fo.admin_confirmation_date IS NULL THEN 1 ELSE 0 END) as awaiting_admin_confirmation", self::DONE_FACTORY_STATUSES)
-            ->selectRaw('SUM(CASE WHEN fo.admin_confirmation_date >= ? THEN 1 ELSE 0 END) as completed_30d', [$thirtyDaysAgo])
+            ->selectRaw("SUM(CASE WHEN fo.status IN (?, ?, ?) AND fo.confirmation_required = 1 AND fo.engineer_confirmation_at IS NULL THEN 1 ELSE 0 END) as awaiting_admin_confirmation", self::DONE_FACTORY_STATUSES)
+            ->selectRaw('SUM(CASE WHEN fo.completed_at >= ? THEN 1 ELSE 0 END) as completed_30d', [$thirtyDaysAgo])
             ->get()
             ->keyBy(fn ($row) => (int) $row->factory_id);
     }
@@ -369,20 +370,15 @@ class AdminOperationsController extends Controller
             ->selectRaw("SUM(CASE WHEN {$openSql} THEN 1 ELSE 0 END) as active_orders", $openBindings)
             ->selectRaw("SUM(CASE WHEN {$openSql} AND d.finish_date IS NOT NULL AND d.finish_date < ? THEN 1 ELSE 0 END) as overdue_orders", [...$openBindings, $now])
             ->selectRaw("SUM(CASE WHEN {$openSql} AND d.finish_date >= ? AND d.finish_date < ? THEN 1 ELSE 0 END) as due_today", [...$openBindings, $today, $tomorrow])
-            ->selectRaw('SUM(CASE WHEN fo.admin_confirmation_date >= ? THEN 1 ELSE 0 END) as completed_30d', [$thirtyDaysAgo])
+            ->selectRaw('SUM(CASE WHEN fo.completed_at >= ? THEN 1 ELSE 0 END) as completed_30d', [$thirtyDaysAgo])
             ->get()
             ->keyBy(fn ($row) => (int) $row->operator_id);
     }
 
     private function openFactoryConditionSql(string $alias): array
     {
-        $allClosed = array_merge(self::DONE_FACTORY_STATUSES, self::CANCELED_FACTORY_STATUSES);
-        $closedPlaceholders = implode(', ', array_fill(0, count($allClosed), '?'));
-        $donePlaceholders = implode(', ', array_fill(0, count(self::DONE_FACTORY_STATUSES), '?'));
-
-        $sql = "({$alias}.status IS NULL OR {$alias}.status NOT IN ({$closedPlaceholders}) OR ({$alias}.status IN ({$donePlaceholders}) AND {$alias}.admin_confirmation_date IS NULL))";
-
-        return [$sql, [...$allClosed, ...self::DONE_FACTORY_STATUSES]];
+        $sql = "({$alias}.completed_at IS NULL AND ({$alias}.status IS NULL OR {$alias}.status NOT IN (?, ?)))";
+        return [$sql, self::CANCELED_FACTORY_STATUSES];
     }
 
     private function factoryHealth(int $active, int $overdue, int $unassigned, int $awaitingAdmin): string

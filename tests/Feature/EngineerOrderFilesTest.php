@@ -48,7 +48,7 @@ class EngineerOrderFilesTest extends TestCase
         $this->subgroup = RemoteNumber::create(['pmp_id' => $this->pmp->id, 'remote_number' => '01', 'remote_number_name' => 'Selected']);
         $this->otherSubgroup = RemoteNumber::create(['pmp_id' => $this->pmp->id, 'remote_number' => '02', 'remote_number_name' => 'Other']);
         $this->otherPmpSubgroup = RemoteNumber::create(['pmp_id' => $this->otherPmp->id, 'remote_number' => '01', 'remote_number_name' => 'Other group']);
-        $this->factory = Factory::create(['name' => 'INFO', 'value' => 'INFO']);
+        $this->factory = Factory::create(['name' => 'Laser', 'value' => 'IQS']);
     }
 
     protected function tearDown(): void
@@ -225,11 +225,15 @@ class EngineerOrderFilesTest extends TestCase
             'orders' => function (Blueprint $t) {
                 $t->unsignedBigInteger('user_id'); $t->unsignedBigInteger('creator_id'); $t->unsignedBigInteger('remote_number_id')->nullable();
                 $t->string('name'); $t->text('description'); $t->string('status'); $t->boolean('link_existing_files');
+                $t->boolean('confirmation_required')->default(false); $t->string('confirmation_method')->nullable(); $t->json('reference_file_visibility')->nullable();
             },
             'selected_files' => function (Blueprint $t) { $t->unsignedBigInteger('order_id'); $t->unsignedBigInteger('pmp_file_id'); $t->integer('quantity'); },
             'factory_orders' => function (Blueprint $t) {
                 $t->unsignedBigInteger('order_id'); $t->unsignedBigInteger('factory_id'); $t->unsignedBigInteger('operator_id')->nullable();
-                $t->string('status'); $t->boolean('canceling');
+                $t->string('status'); $t->boolean('canceling')->default(false);
+                $t->boolean('confirmation_required')->default(false); $t->string('confirmation_method')->nullable();
+                $t->text('evidence_text')->nullable(); $t->string('evidence_photo_path')->nullable();
+                $t->timestamp('engineer_confirmation_at')->nullable(); $t->unsignedBigInteger('engineer_confirmation_user_id')->nullable(); $t->timestamp('completed_at')->nullable();
                 foreach (['cancel_date', 'finish_date', 'operator_finish_date', 'admin_confirmation_date'] as $field) $t->timestamp($field)->nullable();
             },
             'factory_order_files' => function (Blueprint $t) {
@@ -239,6 +243,7 @@ class EngineerOrderFilesTest extends TestCase
             'order_numbers' => function (Blueprint $t) { $t->unsignedBigInteger('order_id'); $t->string('number'); },
             'prefix_codes' => function (Blueprint $t) { $t->unsignedBigInteger('order_id'); $t->string('code'); },
             'dates' => function (Blueprint $t) { $t->unsignedBigInteger('order_id'); $t->timestamp('finish_date'); },
+            'order_logs' => function (Blueprint $t) { $t->unsignedBigInteger('order_id'); $t->unsignedBigInteger('user_id')->nullable(); $t->string('action'); $t->text('message'); $t->json('meta')->nullable(); },
             'order_number_sequences' => function (Blueprint $t) { $t->string('period')->unique(); $t->unsignedInteger('last_number'); },
         ];
         foreach ($tables as $name => $columns) {

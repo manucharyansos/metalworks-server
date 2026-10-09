@@ -12,6 +12,7 @@ use App\Models\PrefixCode;
 use App\Models\RemoteNumber;
 use App\Models\SelectedFile;
 use App\Models\User;
+use App\Support\TaskWorkflow;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -38,6 +39,7 @@ class EngineerController extends Controller
                 'selectedFiles.pmpFile',
                 'client.user',
                 'creator:id,name',
+                'logs.user:id,name',
             ])->where('creator_id', $user->id);
 
             if ($search !== '') {
@@ -49,7 +51,7 @@ class EngineerController extends Controller
                 });
             }
 
-            $page = $query->orderByDesc('created_at')->paginate($perPage);
+            $page = $query->when($request->query('confirmation') === 'waiting', fn ($q) => $q->whereHas('factoryOrders', fn ($s) => $s->awaitingEngineer()))->orderByDesc('created_at')->paginate($perPage);
 
             return response()->json([
                 'orders' => $page->items(),
@@ -126,7 +128,7 @@ class EngineerController extends Controller
                 'factory_operators' => 'nullable|array',
                 'factory_operators.*.factory_id' => 'required|exists:factories,id',
                 'factory_operators.*.user_id' => 'required|exists:users,id',
-            ]);
+            ] + TaskWorkflow::rules());
 
             $pmp = Pmp::with('files.factory')->findOrFail($validatedData['pmp_id']);
             $this->validateRemoteBelongsToPmp($validatedData['remote_number_id'] ?? null, $pmp->id);
@@ -137,6 +139,7 @@ class EngineerController extends Controller
 
             $selectedFiles = $this->resolveSelectedFiles($validatedData, $pmp);
             $this->validateSelectedFilesBelongToPmp($selectedFiles, $pmp, $validatedData['remote_number_id'] ?? null);
+            TaskWorkflow::validateFiles($selectedFiles, $pmp, $validatedData['reference_file_visibility'] ?? []);
 
             $order = DB::transaction(function () use (
                 $request,
@@ -150,56 +153,17 @@ class EngineerController extends Controller
                     'creator_id' => $request->user()->id,
                     'name' => $validatedData['name'],
                     'description' => $validatedData['description'],
-                    'status' => $validatedData['status'] ?? 'pending',
+                    'status' => 'pending',
                     'remote_number_id' => $validatedData['remote_number_id'] ?? null,
                     'link_existing_files' => $validatedData['link_existing_files'],
-                ]);
+                    'reference_file_visibility' => $validatedData['reference_file_visibility'] ?? [],
+                ] + TaskWorkflow::settings($validatedData));
 
                 $order->orderNumber()->create(['number' => $this->generateOrderNumber()]);
                 $order->prefixCode()->create(['code' => $this->generateUniquePrefixCode()]);
                 $order->dates()->create(['finish_date' => $validatedData['finish_date']]);
 
-                foreach ($selectedFiles as $selectedFile) {
-                    $pmpFile = $pmp->files->firstWhere('id', $selectedFile['id']);
-
-                    SelectedFile::create([
-                        'order_id' => $order->id,
-                        'pmp_file_id' => $pmpFile->id,
-                        'quantity' => $selectedFile['quantity'],
-                    ]);
-
-                    $operatorData = $factoryOperators->get($pmpFile->factory_id);
-                    $operatorId = $operatorData['user_id'] ?? null;
-
-                    $factoryOrder = FactoryOrder::firstOrCreate(
-                        [
-                            'order_id' => $order->id,
-                            'factory_id' => $pmpFile->factory_id,
-                        ],
-                        [
-                            'status' => $validatedData['status'] ?? 'pending',
-                            'canceling' => false,
-                            'cancel_date' => null,
-                            'finish_date' => null,
-                            'operator_finish_date' => null,
-                            'admin_confirmation_date' => null,
-                            'operator_id' => $operatorId,
-                        ]
-                    );
-
-                    if ($operatorId && (int) $factoryOrder->operator_id !== (int) $operatorId) {
-                        $factoryOrder->operator_id = $operatorId;
-                        $factoryOrder->save();
-                    }
-
-                    $factoryOrder->files()->syncWithoutDetaching([
-                        $pmpFile->id => [
-                            'quantity' => $selectedFile['quantity'],
-                            'material_type' => $pmpFile->material_type,
-                            'thickness' => $pmpFile->thickness,
-                        ],
-                    ]);
-                }
+                TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $validatedData['reference_file_visibility'] ?? [], $factoryOperators);
 
                 return $order;
             });
@@ -228,8 +192,11 @@ class EngineerController extends Controller
                     'selectedFiles.pmpFile',
                     'client.user',
                     'creator:id,name',
+                'logs.user:id,name',
                 ]),
             ], 201);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            throw $e;
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {
@@ -285,6 +252,8 @@ class EngineerController extends Controller
                 'pmps' => $pmps,
                 'factories' => $factories,
             ], 200);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            throw $e;
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json(['error' => 'Order not found'], 404);
         } catch (\Throwable $e) {
@@ -313,11 +282,14 @@ class EngineerController extends Controller
                 'selected_files' => 'sometimes|array',
                 'selected_files.*.id' => 'required|exists:pmp_files,id',
                 'selected_files.*.quantity' => 'required|integer|min:1',
-            ]);
+            ] + TaskWorkflow::rules());
 
             $order = Order::findOrFail($id);
             $this->authorizeOwnedOrder($request, $order);
 
+            if ($order->factoryOrders()->whereNotIn('status', ['pending', 'waiting'])->exists()) {
+                throw ValidationException::withMessages(['order' => ['Առաջադրանքն արդեն ընդունված է։ Ֆայլերն ու հաստատման պայմանները փոփոխել հնարավոր չէ։']]);
+            }
             $pmp = Pmp::with('files.factory')->findOrFail($validatedData['pmp_id']);
             $this->validateRemoteBelongsToPmp($validatedData['remote_number_id'] ?? null, $pmp->id);
 
@@ -325,16 +297,19 @@ class EngineerController extends Controller
             if (!empty($selectedFiles)) {
                 $this->validateSelectedFilesBelongToPmp($selectedFiles, $pmp, $validatedData['remote_number_id'] ?? null);
             }
+            if (!empty($selectedFiles)) TaskWorkflow::validateFiles($selectedFiles, $pmp, $validatedData['reference_file_visibility'] ?? $order->reference_file_visibility ?? []);
 
             DB::transaction(function () use ($request, $validatedData, $order, $pmp, $selectedFiles) {
                 $order->update([
                     'user_id' => $validatedData['user_id'],
                     'name' => $validatedData['name'],
                     'description' => $validatedData['description'],
-                    'status' => $validatedData['status'] ?? $order->status,
+                    'status' => $order->status,
                     'remote_number_id' => $validatedData['remote_number_id'] ?? null,
                     'link_existing_files' => $validatedData['link_existing_files'] ?? $order->link_existing_files,
-                ]);
+                    'reference_file_visibility' => $validatedData['reference_file_visibility'] ?? $order->reference_file_visibility,
+                ] + TaskWorkflow::settings(array_merge($order->toArray(), $validatedData)));
+                $order->factoryOrders()->update(TaskWorkflow::settings($order->toArray()));
 
                 $order->dates()->updateOrCreate(
                     ['order_id' => $order->id],
@@ -343,42 +318,8 @@ class EngineerController extends Controller
 
                 if (($validatedData['link_existing_files'] ?? false) && !empty($selectedFiles)) {
                     $order->selectedFiles()->delete();
-                    foreach ($order->factoryOrders as $factoryOrder) {
-                        $factoryOrder->files()->detach();
-                    }
-
-                    foreach ($selectedFiles as $selectedFile) {
-                        $pmpFile = $pmp->files->firstWhere('id', $selectedFile['id']);
-
-                        SelectedFile::create([
-                            'order_id' => $order->id,
-                            'pmp_file_id' => $pmpFile->id,
-                            'quantity' => $selectedFile['quantity'],
-                        ]);
-
-                        $factoryOrder = FactoryOrder::firstOrCreate(
-                            [
-                                'order_id' => $order->id,
-                                'factory_id' => $pmpFile->factory_id,
-                            ],
-                            [
-                                'status' => $validatedData['status'] ?? 'pending',
-                                'canceling' => false,
-                                'cancel_date' => null,
-                                'finish_date' => null,
-                                'operator_finish_date' => null,
-                                'admin_confirmation_date' => null,
-                            ]
-                        );
-
-                        $factoryOrder->files()->syncWithoutDetaching([
-                            $pmpFile->id => [
-                                'quantity' => $selectedFile['quantity'],
-                                'material_type' => $pmpFile->material_type,
-                                'thickness' => $pmpFile->thickness,
-                            ],
-                        ]);
-                    }
+                    $order->factoryOrders()->each(function ($step) { $step->files()->detach(); $step->delete(); });
+                    TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $order->reference_file_visibility ?? [], collect());
                 }
             });
 
@@ -392,8 +333,11 @@ class EngineerController extends Controller
                     'factoryOrders.files',
                     'selectedFiles.pmpFile',
                     'creator:id,name',
+                'logs.user:id,name',
                 ]),
             ], 200);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            throw $e;
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
@@ -428,6 +372,8 @@ class EngineerController extends Controller
             });
 
             return response()->json(['message' => 'Order deleted successfully'], 200);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            throw $e;
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json(['error' => 'Order not found'], 404);
         } catch (\Throwable $e) {
@@ -471,7 +417,7 @@ class EngineerController extends Controller
     {
         $factoryOperators->each(function ($entry) {
             $operator = User::find($entry['user_id']);
-            if (!$operator || (int) $operator->factory_id !== (int) $entry['factory_id']) {
+            if (!$operator || !User::whereKey($operator->id)->assignedToFactory((int) $entry['factory_id'])->exists()) {
                 throw ValidationException::withMessages([
                     'factory_operators' => ['Ընտրված աշխատակիցը չի պատկանում ընտրված արտադրամասին։'],
                 ]);
@@ -498,7 +444,7 @@ class EngineerController extends Controller
         if (empty($selectedFiles)) {
             throw ValidationException::withMessages([
                 'selected_files' => [$validatedData['link_existing_files']
-                    ? 'Պատվեր ստեղծելու համար ընտրեք առնվազն մեկ ֆայլ։'
+                    ? 'Առաջադրանք ստեղծելու համար ընտրեք առնվազն մեկ ֆայլ։'
                     : 'Ընտրված PMP-ում կամ ենթախմբում ֆայլեր չկան։ Նախ ավելացրեք ֆայլեր։'],
             ]);
         }

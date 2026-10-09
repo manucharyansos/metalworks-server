@@ -76,7 +76,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::post('orders/update/{order}', [OrderController::class, 'update'])
                 ->name('orders.update');
 
-            Route::post('/factory-orders/{id}/confirm', [OrderController::class, 'confirm']);
+            Route::post('/factory-orders/{id}/confirm', [\App\Http\Controllers\Api\Order\TaskConfirmationController::class, 'retired']);
 
 
             Route::get('file-extensions', [FileExtensionController::class, 'index']);
@@ -219,6 +219,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::get('/factory-order-filters', [FactoryOrderStatusController::class, 'filters'])
                 ->middleware('permission:factory.view');
 
+            Route::post('updateOrder/{order}', [FactoryController::class, 'updateOrder'])->middleware('permission:factory.order_update');
             Route::put('updateOrder/{order}', [FactoryController::class, 'updateOrder'])
                 ->middleware('permission:factory.order_update');
 
@@ -228,6 +229,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
         });
 
         Route::group(['prefix' => 'engineers', 'middleware' => 'engineer'], function () {
+            Route::post('factory-orders/{factoryOrder}/confirm', [\App\Http\Controllers\Api\Order\TaskConfirmationController::class, 'confirm'])->whereNumber('factoryOrder')->middleware('permission:orders.view');
 
             Route::get('engineer',            [EngineerController::class, 'index'])->middleware('permission:orders.view');
             Route::get('engineer/create',     [EngineerController::class, 'create'])->middleware('permission:orders.create');

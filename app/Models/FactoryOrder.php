@@ -23,7 +23,25 @@ class FactoryOrder extends Model
         'operator_finish_date',
         'admin_confirmation_date',
         'operator_id',
+        'confirmation_required', 'confirmation_method', 'evidence_text', 'evidence_photo_path',
+        'engineer_confirmation_at', 'engineer_confirmation_user_id', 'completed_at',
     ];
+
+    protected $casts = ['confirmation_required' => 'boolean'];
+    protected $hidden = ['evidence_photo_path'];
+    protected $appends = ['awaiting_engineer_confirmation', 'has_evidence_photo'];
+
+    public function getAwaitingEngineerConfirmationAttribute(): bool
+    {
+        return $this->confirmation_required && in_array($this->status, ['finished', 'completed', 'done'], true) && !$this->engineer_confirmation_at;
+    }
+
+    public function getHasEvidencePhotoAttribute(): bool { return (bool) $this->evidence_photo_path; }
+
+    public function scopeAwaitingEngineer($query)
+    {
+        return $query->where('confirmation_required', true)->whereIn('status', ['finished', 'completed', 'done'])->whereNull('engineer_confirmation_at');
+    }
 
     protected static function booted(): void
     {
