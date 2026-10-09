@@ -16,4 +16,9 @@ class RegistrationRequest extends Model
 
     protected $hidden = ['password_hash', 'existing_user_id'];
     protected $casts = ['reviewed_at' => 'datetime', 'notification_sent_at' => 'datetime'];
+
+    public function company(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
 }
