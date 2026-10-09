@@ -11,7 +11,7 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 class AdminOrderExportController extends Controller
 {
     private const CLOSED_ORDER_STATUSES = ['completed', 'canceled', 'cancelled'];
-    private const DONE_FACTORY_STATUSES = ['finished', 'completed', 'done', 'confirmed'];
+    private const DONE_FACTORY_STATUSES = ['finished', 'completed', 'done'];
 
     public function __invoke(Request $request): StreamedResponse
     {
@@ -43,7 +43,7 @@ class AdminOrderExportController extends Controller
                 'creator:id,name',
             ]);
 
-        $filename = 'metalworks-orders-' . now()->format('Y-m-d-His') . '.csv';
+        $filename = 'metalworks-tasks-' . now()->format('Y-m-d-His') . '.csv';
 
         return response()->streamDownload(function () use ($query) {
             $handle = fopen('php://output', 'wb');
@@ -55,11 +55,11 @@ class AdminOrderExportController extends Controller
             fwrite($handle, "\xEF\xBB\xBF");
 
             fputcsv($handle, [
-                'Order ID',
-                'Order Number',
+                'Task ID',
+                'Task Number',
                 'Prefix',
                 'Name',
-                'Order Status',
+                'Task Status',
                 'Customer',
                 'Customer Email',
                 'Creator',
@@ -68,7 +68,7 @@ class AdminOrderExportController extends Controller
                 'Factories',
                 'Operators',
                 'Factory Statuses',
-                'Admin Confirmations',
+                'Engineer Confirmations',
             ]);
 
             $query->orderBy('orders.id')->chunkById(500, function ($orders) use ($handle) {
@@ -90,7 +90,7 @@ class AdminOrderExportController extends Controller
                         $factoryOrders->pluck('factory.name')->filter()->implode(' | '),
                         $factoryOrders->map(fn ($row) => $row->operator?->name ?: 'unassigned')->implode(' | '),
                         $factoryOrders->pluck('status')->filter()->implode(' | '),
-                        $factoryOrders->map(fn ($row) => $row->admin_confirmation_date ?: 'waiting')->implode(' | '),
+                        $factoryOrders->map(fn ($row) => $row->engineer_confirmation_at ?: ($row->confirmation_required ? ($row->awaiting_engineer_confirmation ? 'waiting' : 'not submitted') : 'not required'))->implode(' | '),
                     ]));
                 }
 
@@ -161,9 +161,9 @@ class AdminOrderExportController extends Controller
         if (($filters['confirmation'] ?? null) === 'waiting') {
             $query->whereHas('factoryOrders', fn (Builder $q) => $q
                 ->whereIn('status', self::DONE_FACTORY_STATUSES)
-                ->whereNull('admin_confirmation_date'));
+                ->where('confirmation_required', true)->whereNull('engineer_confirmation_at'));
         } elseif (($filters['confirmation'] ?? null) === 'confirmed') {
-            $query->whereHas('factoryOrders', fn (Builder $q) => $q->whereNotNull('admin_confirmation_date'));
+            $query->whereHas('factoryOrders', fn (Builder $q) => $q->whereNotNull('engineer_confirmation_at'));
         }
 
         $this->applyTimeRange($query, $filters['time_range'] ?? null);

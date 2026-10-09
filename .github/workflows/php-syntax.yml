@@ -139,4 +139,4 @@ jobs:
       - name: Discover packages with proc_open disabled
         run: php -d disable_functions=proc_open artisan package:discover --no-interaction
       - name: Verify interrupted migrations and registration approvals on InnoDB
-        run: vendor/bin/phpunit --filter='CompanyMigrationTest|RegistrationRequestsTest|CompanyRegistrationFollowupTest|CompanyStaffAssignmentsTest'
+        run: vendor/bin/phpunit --filter='CompanyMigrationTest|RegistrationRequestsTest|CompanyRegistrationFollowupTest|CompanyStaffAssignmentsTest|CompanyTaskWorkflowTest'

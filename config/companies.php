@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'reference_factory_values' => ['INFO', 'PDF'],
     // Authentication identities and the fixed role/permission catalog are shared.
     // Every business record belongs to one company, including child records.
     'tables' => [

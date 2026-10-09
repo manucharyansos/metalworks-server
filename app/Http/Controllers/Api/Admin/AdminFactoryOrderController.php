@@ -18,7 +18,7 @@ class AdminFactoryOrderController extends Controller
             'operator_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
-        if ($factoryOrder->admin_confirmation_date) {
+        if ($factoryOrder->completed_at || $factoryOrder->awaiting_engineer_confirmation) {
             return response()->json([
                 'message' => 'Հաստատված factory քայլի աշխատակցին այլևս հնարավոր չէ փոխել։',
             ], 422);
@@ -49,7 +49,7 @@ class AdminFactoryOrderController extends Controller
                 ->lockForUpdate()
                 ->findOrFail($factoryOrder->id);
 
-            if ($locked->admin_confirmation_date) {
+            if ($locked->completed_at || $locked->awaiting_engineer_confirmation) {
                 abort(422, 'Factory order is already confirmed.');
             }
 

@@ -15,7 +15,7 @@ class Order extends Model
 {
     use HasFactory, \App\Models\Concerns\BelongsToCompany;
 
-    protected $fillable = ['user_id', 'name', 'description', 'status', 'link_existing_files', 'creator_id', 'remote_number_id'];
+    protected $fillable = ['user_id', 'name', 'description', 'status', 'link_existing_files', 'creator_id', 'remote_number_id', 'confirmation_required', 'confirmation_method', 'reference_file_visibility'];
 
     protected static function booted(): void
     {
@@ -37,6 +37,8 @@ class Order extends Model
 
     protected $casts = [
         'link_existing_files' => 'boolean',
+        'confirmation_required' => 'boolean',
+        'reference_file_visibility' => 'array',
     ];
 
     public function creator(): BelongsTo
@@ -108,9 +110,9 @@ class Order extends Model
         return (new DateTime($value))->format('d/m/Y');
     }
 
-    public function updateStatusIfAllFactoriesAdminConfirmed(): void
+    public function updateStatusIfAllFactoriesCompleted(): void
     {
-        $factoryOrders = $this->factoryOrders;
+        $factoryOrders = $this->factoryOrders()->get();
 
         if ($factoryOrders->isEmpty()) {
             return;
@@ -119,15 +121,15 @@ class Order extends Model
         $allConfirmed = $factoryOrders->every(function ($fo) {
             $status = strtolower($fo->status ?? '');
 
-            $isFinished = in_array($status, ['finished', 'completed', 'done', 'confirmed'], true);
+            $isFinished = in_array($status, ['finished', 'completed', 'done'], true);
             $isCanceled = in_array($status, ['canceled', 'cancelled'], true);
 
-            return ($isFinished && !is_null($fo->admin_confirmation_date)) || $isCanceled;
+            return ($isFinished && (!$fo->confirmation_required || $fo->engineer_confirmation_at)) || $isCanceled;
         });
 
         if ($allConfirmed) {
             $this->status = 'completed';
-            $this->completed_at = now();
+            $this->completed_at = $this->completed_at ?: now();
             $this->save();
         }
     }
