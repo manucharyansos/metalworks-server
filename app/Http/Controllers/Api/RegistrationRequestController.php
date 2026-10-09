@@ -97,7 +97,7 @@ class RegistrationRequestController extends Controller
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'status' => ['nullable', Rule::in(['pending', 'approved', 'rejected'])],
+            'status' => ['nullable', Rule::in(['all', 'pending', 'approved', 'rejected'])],
             'type' => ['nullable', Rule::in(['employee', 'client'])],
             'page' => 'nullable|integer|min:1',
             'company_id' => 'nullable|integer',
@@ -106,13 +106,18 @@ class RegistrationRequestController extends Controller
         if (!empty($data['company_id'])) abort_unless($companies->contains('id', $data['company_id']), 403, 'Company access denied.');
         $base = RegistrationRequest::withoutGlobalScope('company')->whereIn('company_id', $companies->modelKeys());
         if (!empty($data['company_id'])) $base->where('company_id', $data['company_id']);
-        $query = (clone $base)->with('company:id,name')->where('status', $data['status'] ?? 'pending');
+        $status = $data['status'] ?? 'pending';
+        $query = (clone $base)->with('company:id,name');
+        if ($status !== 'all') $query->where('status', $status);
+        $typeCounts = (clone $query)->select('type', DB::raw('count(*) as total'))->groupBy('type')->pluck('total', 'type');
         if (!empty($data['type'])) $query->where('type', $data['type']);
         $page = $query->orderByDesc('id')->paginate(20);
         $counts = (clone $base)->select('status', DB::raw('count(*) as total'))->groupBy('status')->pluck('total', 'status');
         return response()->json([
             'data' => $page->items(),
             'companies' => $companies->map->only(['id', 'name'])->values(),
+            'unmanaged_companies' => CompanyManagement::unassignedDirectory($companies),
+            'type_counts' => ['client' => (int) ($typeCounts['client'] ?? 0), 'employee' => (int) ($typeCounts['employee'] ?? 0)],
             'meta' => ['current_page' => $page->currentPage(), 'last_page' => $page->lastPage(), 'total' => $page->total()],
             'counts' => ['pending' => (int) ($counts['pending'] ?? 0), 'approved' => (int) ($counts['approved'] ?? 0), 'rejected' => (int) ($counts['rejected'] ?? 0)],
         ]);

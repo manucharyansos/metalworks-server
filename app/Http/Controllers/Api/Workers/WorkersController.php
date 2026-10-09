@@ -5,10 +5,10 @@ namespace App\Http\Controllers\Api\Workers;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\WorkerResource;
 use App\Models\Factory;
-use App\Models\Company;
 use App\Models\CompanyMembership;
 use App\Support\CompanyContext;
 use App\Support\CompanyStaffAccess;
+use App\Support\CompanyManagement;
 use App\Support\MembershipAssignments;
 use Illuminate\Support\Facades\DB;
 use App\Models\Role;
@@ -61,16 +61,18 @@ class WorkersController extends Controller
 
         abort_unless($allowed, 403, 'Forbidden');
 
+        $companies = in_array($role, ['admin', 'manager'], true) ? CompanyManagement::companies($user) : new \Illuminate\Database\Eloquent\Collection();
+
         return response()->json([
             'roles' => Role::query()
                 ->whereIn('name', $user->is_platform_admin ? self::WORKER_ROLE_NAMES : array_diff(self::WORKER_ROLE_NAMES, ['admin']))
                 ->orderBy('name')
                 ->get(['id', 'name', 'value']),
-            'can_manage_companies' => (bool) $user->is_platform_admin,
-            'companies' => $user->is_platform_admin ? Company::where('is_active', true)->orderBy('name')->get()->map(fn ($c) => [
+            'can_manage_companies' => $companies->isNotEmpty(),
+            'companies' => $companies->map(fn ($c) => [
                 ...$c->summary(),
                 'factories' => Factory::withoutGlobalScope('company')->where('company_id', $c->id)->get(['id', 'name', 'value']),
-            ]) : [],
+            ]),
             'factories' => Factory::query()
                 ->orderBy('name')
                 ->get(['id', 'name', 'value']),
@@ -159,7 +161,7 @@ class WorkersController extends Controller
             'phone' => 'required|string|max:20',
             'second_phone' => 'nullable|string|max:20', 'address' => 'nullable|string|max:255',
         ];
-        if ($request->has('company_access')) abort_unless($request->user()->is_platform_admin, 403);
+        if ($request->has('company_access')) abort_unless(in_array($request->user()->role?->name, ['admin', 'manager'], true), 403);
         $validated = $request->validate($rules);
         $assignments = MembershipAssignments::validate($request->all(), $roles);
         return [...$validated, ...$assignments[0], 'assignments' => $assignments];

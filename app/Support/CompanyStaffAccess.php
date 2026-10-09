@@ -12,20 +12,30 @@ final class CompanyStaffAccess
     public static function sync(Request $request, User $user): void
     {
         if (!$request->has('company_access')) return;
-        abort_unless($request->user()->is_platform_admin, 403);
+        $actor = $request->user();
+        abort_unless(in_array($actor->role?->name, ['admin', 'manager'], true), 403);
         $data = $request->validate(['company_access' => 'present|array', 'company_access.*.company_id' => 'required|integer|distinct|exists:companies,id', 'company_access.*.enabled' => 'required|boolean']);
         abort_if($user->is_platform_admin, 422, 'Platform administrator access is managed separately.');
+        CompanyMembership::where('user_id', $actor->id)->orderBy('id')->lockForUpdate()->get();
+        $companies = CompanyManagement::companies($actor)->keyBy('id');
+        abort_unless($companies->has(app(CompanyContext::class)->id()), 403, 'Company access denied.');
         foreach ($data['company_access'] as $row) {
-            $company = Company::findOrFail($row['company_id']);
+            $company = $companies->get($row['company_id']);
+            abort_unless($company, 403, 'You cannot manage access to this company.');
             $original = $request->input('company_access');
             $row = collect($original)->firstWhere('company_id', $row['company_id']);
+            $membership = CompanyMembership::where('company_id', $company->id)->where('user_id', $user->id)->lockForUpdate()->first();
+            $roles = app(CompanyContext::class)->run($company, fn () => MembershipAssignments::roleNames($membership));
+            abort_if(!$actor->is_platform_admin && in_array('admin', $roles, true), 403, 'Administrator access is managed by the platform administrator.');
+            abort_if($company->id === app(CompanyContext::class)->id() && !$row['enabled'], 409, 'Remove access through the employee form.');
             if (!$row['enabled']) {
                 CompanyMembership::where('company_id', $company->id)->where('user_id', $user->id)->update(['is_active' => false]);
                 continue;
             }
             abort_unless($company->is_active, 422, 'Company is inactive.');
             app(CompanyContext::class)->run($company, function () use ($row, $company, $user, $request) {
-                $assignments = MembershipAssignments::validate($row, MembershipAssignments::STAFF_ROLES);
+                $allowed = $request->user()->is_platform_admin ? MembershipAssignments::STAFF_ROLES : array_values(array_diff(MembershipAssignments::STAFF_ROLES, ['admin']));
+                $assignments = MembershipAssignments::validate($row, $allowed);
                 $membership = CompanyMembership::firstOrNew(['company_id' => $company->id, 'user_id' => $user->id]);
                 $reactivating = $membership->exists && !$membership->is_active;
                 $samePrimary = (int) $membership->role_id === $assignments[0]['role_id'] && (int) $membership->factory_id === (int) $assignments[0]['factory_id'];
@@ -47,10 +57,11 @@ final class CompanyStaffAccess
         $user->unsetRelation('role')->unsetRelation('factory')->unsetRelation('worker');
     }
 
-    public static function rows(User $user): array
+    public static function rows(User $user, User $actor): array
     {
-        return CompanyMembership::where('user_id', $user->id)->get(['id', 'user_id', 'company_id', 'role_id', 'factory_id', 'is_active'])
+        return CompanyMembership::where('user_id', $user->id)->whereIn('company_id', CompanyManagement::companies($actor)->modelKeys())->get(['id', 'user_id', 'company_id', 'role_id', 'factory_id', 'is_active'])
             ->map(fn ($row) => ['company_id' => $row->company_id, 'role_id' => $row->role_id, 'factory_id' => $row->factory_id, 'enabled' => $row->is_active,
+                'read_only' => !$actor->is_platform_admin && app(CompanyContext::class)->run(Company::findOrFail($row->company_id), fn () => in_array('admin', MembershipAssignments::roleNames($row), true)),
                 'assignments' => app(CompanyContext::class)->run(Company::findOrFail($row->company_id), fn () => MembershipAssignments::rows($row))])->all();
     }
 }
