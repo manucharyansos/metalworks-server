@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\Order;
 
 use App\Http\Controllers\Controller;
 use App\Models\{FactoryOrder, Order, OrderLog};
+use App\Support\TaskWorkflow;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -17,9 +18,11 @@ class TaskConfirmationController extends Controller
             abort_unless($request->user()->role?->name === 'engineer' && (int) $order->creator_id === (int) $request->user()->id, 403);
             $step = FactoryOrder::whereKey($factoryOrder->id)->lockForUpdate()->firstOrFail();
             if ($step->engineer_confirmation_at) return $order; // Retrying cannot change the reviewer/date.
+            $methods = TaskWorkflow::evidenceMethods($step->confirmation_method);
             if (!$step->awaiting_engineer_confirmation || !$step->operator_finish_date
-                || ($step->confirmation_method === 'photo' && !$step->evidence_photo_path)
-                || ($step->confirmation_method === 'text' && !trim((string) $step->evidence_text))) {
+                || !$methods
+                || (in_array('photo', $methods, true) && !$step->evidence_photo_path)
+                || (in_array('text', $methods, true) && !trim((string) $step->evidence_text))) {
                 throw ValidationException::withMessages(['confirmation' => ['Ավարտը և պահանջված հավաստումը դեռ չեն ուղարկվել։']]);
             }
             $step->update(['engineer_confirmation_at' => now(), 'engineer_confirmation_user_id' => $request->user()->id, 'completed_at' => now()]);

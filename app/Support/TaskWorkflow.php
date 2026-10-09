@@ -11,12 +11,22 @@ final class TaskWorkflow
     {
         return [
             'confirmation_required' => 'sometimes|boolean',
-            'confirmation_method' => 'nullable|required_if:confirmation_required,true|in:photo,text',
+            'confirmation_method' => 'nullable|required_if:confirmation_required,true|in:photo,text,photo_text',
             'reference_file_visibility' => 'sometimes|array',
             'reference_file_visibility.*.file_id' => 'required|integer|distinct',
             'reference_file_visibility.*.factory_ids' => 'present|array',
             'reference_file_visibility.*.factory_ids.*' => 'required|integer',
         ];
+    }
+
+    public static function evidenceMethods(?string $method): array
+    {
+        return match ($method) {
+            'photo' => ['photo'],
+            'text' => ['text'],
+            'photo_text' => ['photo', 'text'],
+            default => [],
+        };
     }
 
     public static function settings(array $data): array
