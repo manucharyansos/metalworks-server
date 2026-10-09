@@ -28,7 +28,7 @@ class CompanyAccessController extends Controller
         return response()->json([
             'user' => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email, 'type' => $client ? 'client' : 'employee'],
             'current_company_id' => app(CompanyContext::class)->id(),
-            'roles' => Role::whereIn('name', $client ? ['authenticatedUser'] : $this->roles($request->user()))->orderBy('name')->get(['id', 'name', 'value']),
+            'roles' => $client ? [] : Role::whereIn('name', $this->roles($request->user()))->orderBy('name')->get(['id', 'name', 'value']),
             'companies' => $companies->map(function (Company $company) use ($memberships, $request, $client) {
                 $membership = $memberships->get($company->id);
                 $roleNames = app(CompanyContext::class)->run($company, fn () => MembershipAssignments::roleNames($membership));
@@ -38,9 +38,9 @@ class CompanyAccessController extends Controller
                     'id' => $company->id, 'name' => $company->name, 'read_only' => $readOnly,
                     'selection_locked' => $readOnly || $company->id === app(CompanyContext::class)->id(),
                     'factories' => $client ? [] : Factory::withoutGlobalScope('company')->where('company_id', $company->id)->orderBy('name')->get(['id', 'name']),
-                    'access' => ['company_id' => $company->id, 'enabled' => (bool) $membership?->is_active,
+                    'access' => ['company_id' => $company->id, 'enabled' => (bool) $membership?->is_active, ...($client ? [] : [
                         'role_id' => $membership?->role_id, 'factory_id' => $membership?->factory_id,
-                        'assignments' => app(CompanyContext::class)->run($company, fn () => MembershipAssignments::rows($membership))],
+                        'assignments' => app(CompanyContext::class)->run($company, fn () => MembershipAssignments::rows($membership))])],
                 ];
             }),
         ])->header('Cache-Control', 'private, no-store');
