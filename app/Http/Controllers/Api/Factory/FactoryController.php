@@ -161,6 +161,9 @@ class FactoryController extends Controller
                 $order = Order::whereKey($id)->lockForUpdate()->firstOrFail();
                 $step = $order->factoryOrders()->where('factory_id', $factoryId)->lockForUpdate()->firstOrFail();
                 abort_unless($management || !$step->operator_id || (int) $step->operator_id === (int) $user->id, 403);
+                if ($step->is_blocked && in_array($status, ['confirmed', 'finished'], true)) {
+                    throw ValidationException::withMessages(['factory_order.status' => ['Նախորդ արտադրամասի աշխատանքը դեռ չի ավարտվել։ Անհրաժեշտության դեպքում պետք է նաև ինժեների հաստատումը։']]);
+                }
                 if ($step->completed_at || in_array($step->status, ['finished', 'completed', 'done'], true)) {
                     throw ValidationException::withMessages(['factory_order.status' => ['Աշխատանքն արդեն ավարտված է կամ սպասում է ինժեների հաստատմանը։']]);
                 }

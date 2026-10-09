@@ -287,6 +287,9 @@ class EngineerController extends Controller
             $order = Order::findOrFail($id);
             $this->authorizeOwnedOrder($request, $order);
 
+            if ($order->logs()->whereIn('action', ['factory_order.work_added', 'factory_order.operator_changed'])->exists()) {
+                throw ValidationException::withMessages(['order' => ['Այս առաջադրանքի աշխատանքները կառավարեք արտադրամասային աշխատանքների բաժնից՝ պահպանելով հերթականությունն ու կատարողներին։']]);
+            }
             if ($order->factoryOrders()->whereNotIn('status', ['pending', 'waiting'])->exists()) {
                 throw ValidationException::withMessages(['order' => ['Առաջադրանքն արդեն ընդունված է։ Ֆայլերն ու հաստատման պայմանները փոփոխել հնարավոր չէ։']]);
             }
@@ -300,6 +303,11 @@ class EngineerController extends Controller
             if (!empty($selectedFiles)) TaskWorkflow::validateFiles($selectedFiles, $pmp, $validatedData['reference_file_visibility'] ?? $order->reference_file_visibility ?? []);
 
             DB::transaction(function () use ($request, $validatedData, $order, $pmp, $selectedFiles) {
+                $order = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+                if ($order->logs()->whereIn('action', ['factory_order.work_added', 'factory_order.operator_changed'])->exists()
+                    || $order->factoryOrders()->whereNotIn('status', ['pending', 'waiting'])->exists()) {
+                    throw ValidationException::withMessages(['order' => ['Արտադրամասային աշխատանքներն արդեն փոխվել են։ Թարմացրեք առաջադրանքը։']]);
+                }
                 $order->update([
                     'user_id' => $validatedData['user_id'],
                     'name' => $validatedData['name'],

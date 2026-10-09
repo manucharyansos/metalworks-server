@@ -24,9 +24,8 @@ final class TaskAccess
     {
         if ($user->role?->name === 'admin' || (!$user->factory_id && in_array($user->role?->name, ['engineer', 'manager'], true) && $user->hasPermission('pmp_files.view'))) return true;
         if (!$user->factory_id || !$user->hasPermission('factory.download')) return false;
-        // Reference files are linked only to explicitly selected steps. Normal
-        // production files must additionally belong to the selected workshop.
-        if (!$file->factory?->is_reference && (int) $file->factory_id !== (int) $user->factory_id) return false;
+        // A file is available only through a task step in the selected workshop.
+        // Routing the same drawing to another workshop explicitly adds that link.
         return self::operatorSteps(FactoryOrder::query(), $user)->whereHas('files', fn ($q) => $q->whereKey($file->id))->exists();
     }
 
