@@ -154,7 +154,10 @@ class CompanyRegistrationFollowupTest extends TestCase
         $factory = Factory::withoutGlobalScope('company')->where('company_id', $this->b->id)->firstOrFail();
         $row = $this->access($this->b, 'laser', $factory->id);
         $url = '/api/company-access/' . $person->id;
-        $this->getJson($url)->assertOk()->assertJsonPath('user.type', 'client')->assertJsonCount(1, 'roles')->assertJsonCount(0, 'companies.1.factories');
+        $response = $this->getJson($url)->assertOk()->assertJsonPath('user.type', 'client')->assertJsonCount(0, 'roles')->assertJsonCount(0, 'companies.1.factories');
+        foreach ($response->json('companies') as $company) {
+            $this->assertSame(['company_id', 'enabled'], array_keys($company['access']));
+        }
         $this->putJson($url, ['access' => [$row]])->assertUnprocessable();
         $this->putJson($url, ['access' => [$this->access($this->b, 'authenticatedUser', $factory->id)]])->assertUnprocessable();
         $this->putJson($url, ['access' => [['company_id' => $this->b->id, 'enabled' => true]]])->assertOk();
