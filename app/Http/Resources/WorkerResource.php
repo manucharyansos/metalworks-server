@@ -18,7 +18,7 @@ class WorkerResource extends JsonResource
             'factory'     => $this->factory?->name ?? null,
             'assignments' => $this->resource->workAssignments(),
             'is_platform_admin' => (bool) $this->is_platform_admin,
-            'company_access' => $this->when($request->user()?->is_platform_admin, fn () => \App\Support\CompanyStaffAccess::rows($this->resource)),
+            'company_access' => $this->when(in_array($request->user()?->role?->name, ['admin', 'manager'], true), fn () => \App\Support\CompanyStaffAccess::rows($this->resource, $request->user())),
             'can_edit_account' => (bool) ($request->user()?->is_platform_admin || $this->memberships()->where('is_active', true)->count() <= 1),
 
             'worker' => $this->whenLoaded('worker', function () {

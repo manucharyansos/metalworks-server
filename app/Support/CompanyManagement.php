@@ -20,4 +20,12 @@ final class CompanyManagement
         }
         return $query->get();
     }
+
+    public static function unassignedDirectory(Collection $managed): Collection
+    {
+        // Company names are already public on the registration directory. No
+        // membership, workshop or request data is exposed for these companies.
+        return Company::where('is_active', true)->whereNotIn('id', $managed->modelKeys())
+            ->orderBy('id')->get(['id', 'name']);
+    }
 }

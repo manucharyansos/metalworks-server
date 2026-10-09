@@ -28,6 +28,7 @@ class CompanyAccessController extends Controller
         return response()->json([
             'user' => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email, 'type' => $client ? 'client' : 'employee'],
             'current_company_id' => app(CompanyContext::class)->id(),
+            'unmanaged_companies' => CompanyManagement::unassignedDirectory($companies),
             'roles' => $client ? [] : Role::whereIn('name', $this->roles($request->user()))->orderBy('name')->get(['id', 'name', 'value']),
             'companies' => $companies->map(function (Company $company) use ($memberships, $request, $client) {
                 $membership = $memberships->get($company->id);
