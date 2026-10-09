@@ -189,6 +189,17 @@ class CompanyTaskRoutingTest extends TestCase
         $this->assign($order, $laser, $this->secondOperator->id)->assertUnprocessable();
     }
 
+    public function test_added_workshop_inherits_both_required_evidence_methods(): void
+    {
+        $order = $this->createTask(['confirmation_required' => true, 'confirmation_method' => 'photo_text']);
+        $laser = $order->factoryOrders()->firstOrFail();
+        $this->add($order, ['depends_on_id' => $laser->id])->assertCreated();
+        $bend = $order->factoryOrders()->where('factory_id', $this->factories['DLD']->id)->firstOrFail();
+        $this->assertTrue($bend->confirmation_required);
+        $this->assertSame('photo_text', $bend->confirmation_method);
+        $this->assertTrue($bend->is_blocked);
+    }
+
     public function test_routing_rejects_foreign_files_unused_files_duplicate_links_reference_only_work_and_cycles(): void
     {
         $order = $this->createTask(['selected_files' => [['id'=>$this->files['DXF']->id,'quantity'=>1], ['id'=>$this->files['INFO']->id,'quantity'=>1]]]); $laser = $order->factoryOrders()->firstOrFail();

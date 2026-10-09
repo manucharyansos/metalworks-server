@@ -170,15 +170,18 @@ class FactoryController extends Controller
                 if ($status === 'finished') {
                     abort_unless((int) $user->factory_id === $factoryId && (!$step->operator_id || (int) $step->operator_id === (int) $user->id), 403, 'Ավարտը կարող է ուղարկել միայն այս արտադրամասի կատարողը։');
                     if ($step->confirmation_required) {
-                        if ($step->confirmation_method === 'text') {
+                        $methods = \App\Support\TaskWorkflow::evidenceMethods($step->confirmation_method);
+                        if (!$methods) throw ValidationException::withMessages(['confirmation_method' => ['Հավաստման մեթոդը բացակայում է։']]);
+                        if (in_array('text', $methods, true)) {
                             $text = trim((string) ($data['factory_order']['evidence_text'] ?? ''));
                             if ($text === '') throw ValidationException::withMessages(['factory_order.evidence_text' => ['Գրեք կատարված աշխատանքի հավաստումը։']]);
                             $step->evidence_text = $text;
-                        } elseif ($step->confirmation_method === 'photo') {
+                        }
+                        if (in_array('photo', $methods, true)) {
                             if (!$request->hasFile('evidence_photo')) throw ValidationException::withMessages(['evidence_photo' => ['Ավելացրեք կատարված աշխատանքի նկարը։']]);
                             $storedPath = $request->file('evidence_photo')->store('companies/'.$order->company_id.'/task-evidence/'.$step->id, 'private');
                             $step->evidence_photo_path = $storedPath;
-                        } else throw ValidationException::withMessages(['confirmation_method' => ['Հավաստման մեթոդը բացակայում է։']]);
+                        }
                     }
                     $step->operator_finish_date = now();
                     $step->finish_date = now();

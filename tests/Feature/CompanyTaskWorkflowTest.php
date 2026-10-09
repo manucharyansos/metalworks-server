@@ -171,6 +171,57 @@ class CompanyTaskWorkflowTest extends TestCase
         $this->get('/api/secure-files/pmp/'.$this->files['DLD']->id, $this->headers())->assertOk();
     }
 
+    public function test_combined_evidence_requires_both_inputs_and_is_reviewed_together_by_the_creator(): void
+    {
+        $order = $this->createTask(['confirmation_required' => true, 'confirmation_method' => 'photo_text']);
+        $step = $order->factoryOrders()->firstOrFail();
+        $this->assertSame('photo_text', $order->confirmation_method);
+        $this->assertSame('photo_text', $step->confirmation_method);
+        $photo = fn () => UploadedFile::fake()->createWithContent('completion.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lT8AAAAASUVORK5CYII='));
+        $initialFiles = Storage::disk('private')->allFiles();
+
+        $this->as($this->operator);
+        $this->act($order, 'finished', ['evidence_text' => 'Text alone is not enough'])->assertUnprocessable()->assertJsonValidationErrors('evidence_photo');
+        $this->post('/api/factories/updateOrder/'.$order->id, [
+            'factory_id' => $step->factory_id, 'factory_order' => ['status' => 'finished', 'evidence_text' => '  '], 'evidence_photo' => $photo(),
+        ], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('factory_order.evidence_text');
+        $this->assertSame('pending', $step->fresh()->status);
+        $this->assertNull($step->fresh()->evidence_text);
+        $this->assertNull($step->fresh()->evidence_photo_path);
+        $this->assertSame($initialFiles, Storage::disk('private')->allFiles());
+
+        $this->post('/api/factories/updateOrder/'.$order->id, [
+            'factory_id' => $step->factory_id, 'factory_order' => ['status' => 'finished', 'evidence_text' => '  Both photo and checked dimensions.  '], 'evidence_photo' => $photo(),
+        ], $this->headers())->assertOk()->assertJsonPath('factory_orders.0.awaiting_engineer_confirmation', true)
+            ->assertJsonPath('factory_orders.0.evidence_text', 'Both photo and checked dimensions.')->assertJsonPath('factory_orders.0.has_evidence_photo', true);
+        $this->assertSame('pending', $order->fresh()->status);
+        Storage::disk('private')->assertExists($step->fresh()->evidence_photo_path);
+        $this->as($this->admin); $this->approve($step)->assertForbidden();
+        $this->as($this->otherEngineer); $this->approve($step)->assertForbidden();
+        $this->as($this->engineer);
+        $this->getJson('/api/engineers/engineer?confirmation=waiting', $this->headers())->assertOk()
+            ->assertJsonPath('orders.0.factory_orders.0.confirmation_method', 'photo_text')
+            ->assertJsonPath('orders.0.factory_orders.0.evidence_text', 'Both photo and checked dimensions.')
+            ->assertJsonPath('orders.0.factory_orders.0.has_evidence_photo', true);
+        $this->get('/api/secure-files/evidence/'.$step->id, $this->headers())->assertOk();
+        $this->approve($step)->assertOk()->assertJsonPath('order.status', 'completed');
+        $stamp = $step->fresh()->engineer_confirmation_at;
+        $this->approve($step)->assertOk();
+        $this->assertSame($stamp, $step->fresh()->engineer_confirmation_at);
+    }
+
+    public function test_combined_confirmation_cannot_approve_a_partial_stored_proof(): void
+    {
+        $order = $this->createTask(['confirmation_required' => true, 'confirmation_method' => 'photo_text']);
+        $step = $order->factoryOrders()->firstOrFail();
+        $step->update(['status' => 'finished', 'operator_finish_date' => now(), 'evidence_text' => 'Text only']);
+        $this->approve($step)->assertUnprocessable()->assertJsonValidationErrors('confirmation');
+        $step->update(['evidence_text' => '  ', 'evidence_photo_path' => 'companies/'.$this->company->id.'/proof.png']);
+        $this->approve($step)->assertUnprocessable()->assertJsonValidationErrors('confirmation');
+        $this->assertNull($step->fresh()->engineer_confirmation_at);
+        $this->assertSame('pending', $order->fresh()->status);
+    }
+
     public function test_multiple_reference_files_can_be_shared_with_the_same_workshop(): void
     {
         $order = $this->createTask(['selected_files' => array_map(fn ($f) => ['id' => $f->id, 'quantity' => 1], $this->files),
