@@ -49,6 +49,9 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
 
         Route::get('user',   [AuthController::class, 'me']);
         Route::post('logout',[AuthController::class, 'logout']);
+        Route::get('notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);
+        Route::post('notifications/read', [\App\Http\Controllers\Api\NotificationController::class, 'read']);
+        Route::post('task-requests/{taskChangeRequest}/withdraw', [\App\Http\Controllers\Api\Order\TaskChangeRequestController::class, 'withdraw'])->whereNumber('taskChangeRequest')->middleware('permission:factory.order_update');
         Route::get('task-workload', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'workload']);
         Route::put('tasks/{order}/workshops/{factoryOrder}/operator', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'assign'])->middleware('permission:orders.update');
         Route::post('tasks/{order}/workshops', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'addWork'])->middleware('permission:orders.update');
@@ -233,6 +236,8 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
 
         Route::group(['prefix' => 'engineers', 'middleware' => 'engineer'], function () {
             Route::post('factory-orders/{factoryOrder}/confirm', [\App\Http\Controllers\Api\Order\TaskConfirmationController::class, 'confirm'])->whereNumber('factoryOrder')->middleware('permission:orders.view');
+            Route::post('factory-orders/{factoryOrder}/return', [\App\Http\Controllers\Api\Order\TaskConfirmationController::class, 'returnForRework'])->whereNumber('factoryOrder')->middleware('permission:orders.view');
+            Route::post('task-requests/{taskChangeRequest}/decision', [\App\Http\Controllers\Api\Order\TaskChangeRequestController::class, 'decide'])->whereNumber('taskChangeRequest')->middleware('permission:orders.view');
 
             Route::get('engineer',            [EngineerController::class, 'index'])->middleware('permission:orders.view');
             Route::get('engineer/create',     [EngineerController::class, 'create'])->middleware('permission:orders.create');

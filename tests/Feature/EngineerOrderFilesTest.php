@@ -245,6 +245,17 @@ class EngineerOrderFilesTest extends TestCase
             'dates' => function (Blueprint $t) { $t->unsignedBigInteger('order_id'); $t->timestamp('finish_date'); },
             'order_logs' => function (Blueprint $t) { $t->unsignedBigInteger('order_id'); $t->unsignedBigInteger('user_id')->nullable(); $t->string('action'); $t->text('message'); $t->json('meta')->nullable(); },
             'order_number_sequences' => function (Blueprint $t) { $t->string('period')->unique(); $t->unsignedInteger('last_number'); },
+            'task_change_requests' => function (Blueprint $t) {
+                $t->unsignedBigInteger('order_id'); $t->unsignedBigInteger('factory_order_id'); $t->unsignedBigInteger('requested_by');
+                $t->string('type'); $t->string('reason')->nullable(); $t->string('operator_note')->nullable(); $t->date('proposed_date')->nullable();
+                $t->dateTime('previous_deadline')->nullable(); $t->string('status')->default('pending'); $t->unsignedBigInteger('decided_by')->nullable();
+                $t->timestamp('decided_at')->nullable(); $t->string('resolution')->nullable(); $t->string('decision_note')->nullable();
+            },
+            'task_notifications' => function (Blueprint $t) {
+                $t->unsignedBigInteger('user_id'); $t->unsignedBigInteger('actor_id')->nullable(); $t->string('type');
+                $t->unsignedBigInteger('order_id')->nullable(); $t->unsignedBigInteger('factory_order_id')->nullable();
+                $t->string('message', 1000); $t->json('data')->nullable(); $t->timestamp('read_at')->nullable();
+            },
         ];
         foreach ($tables as $name => $columns) {
             Schema::create($name, function (Blueprint $table) use ($name, $columns): void {

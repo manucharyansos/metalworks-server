@@ -92,6 +92,9 @@ jobs:
       - name: Run company isolation and membership regression tests
         run: php artisan test --filter=Company
 
+      - name: Run task requests and notification regression tests
+        run: php artisan test --filter=TaskApprovalCycleTest
+
       - name: Run manager-approved registration regression tests
         run: php artisan test --filter=RegistrationRequestsTest
 
@@ -139,4 +142,4 @@ jobs:
       - name: Discover packages with proc_open disabled
         run: php -d disable_functions=proc_open artisan package:discover --no-interaction
       - name: Verify interrupted migrations and registration approvals on InnoDB
-        run: vendor/bin/phpunit --filter='CompanyMigrationTest|RegistrationRequestsTest|CompanyRegistrationFollowupTest|CompanyStaffAssignmentsTest|CompanyTaskWorkflowTest|CompanyTaskRoutingTest'
+        run: vendor/bin/phpunit --filter='CompanyMigrationTest|RegistrationRequestsTest|CompanyRegistrationFollowupTest|CompanyStaffAssignmentsTest|CompanyTaskWorkflowTest|CompanyTaskRoutingTest|TaskApprovalCycleTest'

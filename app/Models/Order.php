@@ -28,6 +28,11 @@ class Order extends Model
                 $order->assertCustomerUser();
             }
         });
+
+        static::deleting(function (Order $order): void {
+            TaskChangeRequest::where('order_id', $order->id)->delete();
+            TaskNotification::where('order_id', $order->id)->delete();
+        });
     }
 
     public function logs(): HasMany
@@ -128,8 +133,11 @@ class Order extends Model
         });
 
         if ($allConfirmed) {
-            $this->status = 'completed';
-            $this->completed_at = $this->completed_at ?: now();
+            // Every workshop job rejected means nothing was produced: the task is
+            // canceled, not completed. A mix of finished and rejected jobs is done.
+            $allCanceled = $factoryOrders->every(fn ($fo) => in_array(strtolower($fo->status ?? ''), ['canceled', 'cancelled'], true));
+            $this->status = $allCanceled ? 'canceled' : 'completed';
+            $this->completed_at = $allCanceled ? null : ($this->completed_at ?: now());
             $this->save();
         }
     }
