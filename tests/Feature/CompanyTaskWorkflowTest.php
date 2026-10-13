@@ -497,6 +497,18 @@ class CompanyTaskWorkflowTest extends TestCase
         $this->assertSame('urgent', $step->fresh()->priority); $this->assertSame('2026-10-18', $step->fresh()->deadline);
         $this->assertSame($id, $step->files()->first()->pivot->task_file_revision_id); $this->assertDatabaseCount('task_file_revisions', 2);
     }
+
+    public function test_an_operator_cannot_finish_from_a_stale_file_version_snapshot(): void
+    {
+        $order = $this->createTask(); $this->as($this->operator); $this->act($order, 'confirmed')->assertOk();
+        $this->as($this->engineer); $response = $this->uploadVersion($order, 'new.txt', 'Revised drawing')->assertCreated();
+        $revisionId = $response->json('files.0.task_file_revision_id');
+        $this->as($this->operator);
+        $this->act($order, 'finished', ['expected_file_versions' => json_encode([$this->files['DXF']->id => 0])])->assertConflict()
+            ->assertJsonPath('order.factory_orders.0.files.0.pivot.task_file_revision_id', $revisionId);
+        $this->assertSame('confirmed', $order->factoryOrders()->first()->status);
+        $this->act($order, 'finished', ['expected_file_versions' => json_encode([$this->files['DXF']->id => $revisionId])])->assertOk()->assertJsonPath('status', 'completed');
+    }
     private function changeEvidence(Order $order, bool $required, ?string $method, ?bool $previousRequired = null, ?string $previousMethod = null)
     {
         return $this->putJson('/api/tasks/'.$order->id.'/evidence-requirements', ['confirmation_required' => $required, 'confirmation_method' => $method,
