@@ -143,7 +143,7 @@ class EngineerController extends Controller
 
             $selectedFiles = $this->resolveSelectedFiles($validatedData, $pmp);
             $this->validateSelectedFilesBelongToPmp($selectedFiles, $pmp, $validatedData['remote_number_id'] ?? null);
-            TaskWorkflow::validateFiles($selectedFiles, $pmp, $validatedData['reference_file_visibility'] ?? []);
+            TaskWorkflow::validateFiles($selectedFiles, $pmp, $validatedData['reference_file_visibility'] ?? [], $validatedData['workshop_settings'] ?? []);
 
             $order = DB::transaction(function () use (
                 $request,
@@ -167,7 +167,7 @@ class EngineerController extends Controller
                 $order->prefixCode()->create(['code' => $this->generateUniquePrefixCode()]);
                 $order->dates()->create(['finish_date' => $validatedData['finish_date']]);
 
-                TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $validatedData['reference_file_visibility'] ?? [], $factoryOperators);
+                TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $validatedData['reference_file_visibility'] ?? [], $factoryOperators, $validatedData['workshop_settings'] ?? []);
 
                 return $order;
             });
@@ -297,7 +297,7 @@ class EngineerController extends Controller
             $order = Order::findOrFail($id);
             $this->authorizeOwnedOrder($request, $order);
 
-            if ($order->logs()->whereIn('action', ['factory_order.work_added', 'factory_order.operator_changed'])->exists()) {
+            if ($order->logs()->whereIn('action', ['factory_order.work_added', 'factory_order.operator_changed', 'factory_order.evidence_requirements_changed', 'order.file_version_changed'])->exists()) {
                 throw ValidationException::withMessages(['order' => ['Այս առաջադրանքի աշխատանքները կառավարեք արտադրամասային աշխատանքների բաժնից՝ պահպանելով հերթականությունն ու կատարողներին։']]);
             }
             if ($order->factoryOrders()->whereNotIn('status', ['pending', 'waiting'])->exists()) {
@@ -317,7 +317,7 @@ class EngineerController extends Controller
 
             DB::transaction(function () use ($request, $validatedData, $order, $pmp, $selectedFiles) {
                 $order = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
-                if ($order->logs()->whereIn('action', ['factory_order.work_added', 'factory_order.operator_changed'])->exists()
+                if ($order->logs()->whereIn('action', ['factory_order.work_added', 'factory_order.operator_changed', 'factory_order.evidence_requirements_changed', 'order.file_version_changed'])->exists()
                     || $order->factoryOrders()->whereNotIn('status', ['pending', 'waiting'])->exists()
                     || $order->factoryOrders()->whereHas('changeRequests', fn ($r) => $r->pending())->exists()) {
                     throw ValidationException::withMessages(['order' => ['Արտադրամասային աշխատանքներն արդեն փոխվել են։ Թարմացրեք առաջադրանքը։']]);
@@ -331,7 +331,7 @@ class EngineerController extends Controller
                     'link_existing_files' => $validatedData['link_existing_files'] ?? $order->link_existing_files,
                     'reference_file_visibility' => $validatedData['reference_file_visibility'] ?? $order->reference_file_visibility,
                 ] + TaskWorkflow::settings(array_merge($order->toArray(), $validatedData)));
-                $order->factoryOrders()->update(TaskWorkflow::settings($order->toArray()));
+                if ($order->wasChanged(['confirmation_required', 'confirmation_method'])) $order->factoryOrders()->update(TaskWorkflow::settings($order->toArray()));
 
                 $order->dates()->updateOrCreate(
                     ['order_id' => $order->id],

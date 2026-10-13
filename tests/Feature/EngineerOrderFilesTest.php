@@ -237,6 +237,7 @@ class EngineerOrderFilesTest extends TestCase
                 foreach (['cancel_date', 'finish_date', 'operator_finish_date', 'admin_confirmation_date'] as $field) $t->timestamp($field)->nullable();
             },
             'factory_order_files' => function (Blueprint $t) {
+                $t->unsignedBigInteger('task_file_revision_id')->nullable();
                 $t->unsignedBigInteger('factory_order_id'); $t->unsignedBigInteger('pmp_files_id'); $t->integer('quantity');
                 $t->string('material_type')->nullable(); $t->string('thickness')->nullable();
             },

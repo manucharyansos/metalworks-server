@@ -89,12 +89,15 @@ final class TaskRouting
             $operatorId = array_key_exists('operator_id', $data) ? $data['operator_id'] : $step?->operator_id;
             $operator = self::operator($operatorId, (int) $factory->id);
             $step ??= new FactoryOrder(['order_id' => $order->id, 'factory_id' => $factory->id, 'status' => 'pending'] + TaskWorkflow::settings($order->toArray()));
+            foreach (['deadline', 'priority'] as $field) if (array_key_exists($field, $data)) $step->$field = $data[$field];
+            if (array_key_exists('confirmation_required', $data)) $step->fill(TaskWorkflow::settings($data));
             $previousOperatorId = $step->operator_id;
             $step->fill(['operator_id' => $operator?->id, 'depends_on_id' => $predecessorId])->save();
             $shares = collect($order->reference_file_visibility ?? [])->keyBy('file_id');
             foreach ($data['files'] as $item) {
                 $file = $files->get($item['id']);
-                $step->files()->attach($file->id, ['quantity' => $item['quantity'], 'material_type' => $file->material_type, 'thickness' => $file->thickness]);
+                $revisionId = $order->selectedFiles()->where('pmp_file_id', $file->id)->value('task_file_revision_id');
+                $step->files()->attach($file->id, ['quantity' => $item['quantity'], 'material_type' => $file->material_type, 'thickness' => $file->thickness, 'task_file_revision_id' => $revisionId]);
                 if ($file->factory->is_reference) {
                     $row = $shares->get($file->id, ['file_id' => $file->id, 'factory_ids' => []]);
                     $row['factory_ids'] = array_values(array_unique([...$row['factory_ids'], $factory->id]));
@@ -123,8 +126,9 @@ final class TaskRouting
             ->whereNotIn('task.status', ['canceled', 'cancelled'])
             ->select('factory_orders.factory_id', 'factory_orders.operator_id')
             ->selectRaw("SUM(CASE WHEN {$open} THEN 1 ELSE 0 END) as active_tasks")
-            ->selectRaw("SUM(CASE WHEN {$open} AND deadline.finish_date < ? THEN 1 ELSE 0 END) as overdue_tasks", [now()])
-            ->selectRaw("SUM(CASE WHEN {$open} AND deadline.finish_date >= ? AND deadline.finish_date < ? THEN 1 ELSE 0 END) as due_today", [now()->startOfDay(), now()->addDay()->startOfDay()])
+            ->selectRaw("SUM(CASE WHEN {$open} AND COALESCE(factory_orders.deadline, deadline.finish_date) < ? THEN 1 ELSE 0 END) as overdue_tasks", [today()->toDateString()])
+            ->selectRaw("SUM(CASE WHEN {$open} AND DATE(COALESCE(factory_orders.deadline, deadline.finish_date)) = ? THEN 1 ELSE 0 END) as due_today", [today()->toDateString()])
+            ->selectRaw("SUM(CASE WHEN {$open} AND factory_orders.priority = 'urgent' THEN 1 ELSE 0 END) as urgent_tasks")
             ->selectRaw("SUM(CASE WHEN factory_orders.confirmation_required = 1 AND factory_orders.engineer_confirmation_at IS NULL AND factory_orders.status IN ('finished', 'completed', 'done') THEN 1 ELSE 0 END) as awaiting_review")
             ->groupBy('factory_orders.factory_id', 'factory_orders.operator_id')->get();
         $factories = Factory::with(['operators' => fn ($q) => $q->forRoles(MembershipAssignments::OPERATORS)->select('users.id', 'users.name')])
@@ -135,7 +139,7 @@ final class TaskRouting
                     'operators' => $factory->operators->map(function ($operator) use ($rows) {
                         $row = $rows->firstWhere('operator_id', $operator->id);
                         return ['id' => $operator->id, 'name' => $operator->name, 'active_tasks' => (int) ($row?->active_tasks ?? 0),
-                            'overdue_tasks' => (int) ($row?->overdue_tasks ?? 0), 'due_today' => (int) ($row?->due_today ?? 0), 'awaiting_review' => (int) ($row?->awaiting_review ?? 0)];
+                            'overdue_tasks' => (int) ($row?->overdue_tasks ?? 0), 'due_today' => (int) ($row?->due_today ?? 0), 'urgent_tasks' => (int) ($row?->urgent_tasks ?? 0), 'awaiting_review' => (int) ($row?->awaiting_review ?? 0)];
                     })->sortBy('active_tasks')->values()->all()];
             })->values()->all();
         return ['company_id' => app(CompanyContext::class)->id(), 'generated_at' => now()->toIso8601String(), 'factories' => $factories];

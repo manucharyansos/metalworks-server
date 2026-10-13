@@ -4,11 +4,44 @@ namespace App\Http\Controllers\Api\Order;
 
 use App\Http\Controllers\Controller;
 use App\Models\{FactoryOrder, Order};
-use App\Support\{TaskNotifier, TaskRouting};
+use App\Support\{TaskEvidenceRequirements, TaskNotifier, TaskRouting, TaskWorkflow};
 use Illuminate\Http\Request;
 
 class TaskRoutingController extends Controller
 {
+    public function workshopSettings(Request $request, Order $order, FactoryOrder $factoryOrder)
+    {
+        TaskRouting::authorize($request->user(), $order);
+        abort_unless((int) $factoryOrder->order_id === (int) $order->id, 404);
+        $data = $request->validate([
+            'confirmation_required' => 'required|boolean',
+            'confirmation_method' => TaskWorkflow::rules()['confirmation_method'],
+            'previous_confirmation_required' => 'required|boolean',
+            'previous_confirmation_method' => 'nullable|required_if:previous_confirmation_required,true|in:photo,text,photo_text',
+            'deadline' => 'present|nullable|date_format:Y-m-d', 'priority' => 'required|in:normal,high,urgent',
+            'previous_deadline' => 'present|nullable|date_format:Y-m-d', 'previous_priority' => 'required|in:normal,high,urgent',
+        ]);
+        [$order, $changes] = TaskEvidenceRequirements::update($request->user(), $order, $data, $factoryOrder->id);
+        foreach ($changes as $change) TaskNotifier::evidenceRequirementsChanged($request->user(), $order,
+            $change['step'], $change['from'], $change['needs_supplement']);
+        return response()->json(['order' => TaskRouting::order($order), 'workload' => TaskRouting::workload()]);
+    }
+
+    public function evidenceRequirements(Request $request, Order $order)
+    {
+        TaskRouting::authorize($request->user(), $order);
+        $data = $request->validate([
+            'confirmation_required' => 'required|boolean',
+            'confirmation_method' => TaskWorkflow::rules()['confirmation_method'],
+            'previous_confirmation_required' => 'required|boolean',
+            'previous_confirmation_method' => 'nullable|required_if:previous_confirmation_required,true|in:photo,text,photo_text',
+        ]);
+        [$order, $changes] = TaskEvidenceRequirements::update($request->user(), $order, $data);
+        foreach ($changes as $change) TaskNotifier::evidenceRequirementsChanged($request->user(), $order,
+            $change['step'], $change['from'], $change['needs_supplement']);
+        return response()->json(['order' => TaskRouting::order($order)]);
+    }
+
     public function workload(Request $request)
     {
         abort_unless(in_array($request->user()->role?->name, ['admin', 'manager', 'engineer'], true), 403);
@@ -31,6 +64,8 @@ class TaskRoutingController extends Controller
     {
         TaskRouting::authorize($request->user(), $order);
         $data = $request->validate(['factory_id' => 'required|integer|exists:factories,id',
+            'deadline' => 'nullable|date_format:Y-m-d', 'priority' => 'sometimes|in:normal,high,urgent',
+            'confirmation_required' => 'sometimes|boolean', 'confirmation_method' => TaskWorkflow::rules()['confirmation_method'],
             'operator_id' => 'sometimes|nullable|integer|exists:users,id',
             'depends_on_id' => 'nullable|integer|exists:factory_orders,id',
             'files' => 'required|array|min:1|max:200', 'files.*.id' => 'required|integer|distinct|exists:pmp_files,id',

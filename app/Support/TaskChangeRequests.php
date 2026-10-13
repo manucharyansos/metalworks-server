@@ -28,7 +28,7 @@ final class TaskChangeRequests
             'reason' => $type === TaskChangeRequest::REJECT ? $data['reason'] : null,
             'operator_note' => ($data['note'] ?? null) ? trim($data['note']) : null,
             'proposed_date' => $type === TaskChangeRequest::DEADLINE ? $data['date'] : null,
-            'previous_deadline' => $order->dates?->finish_date,
+            'previous_deadline' => $step->deadline ?: $order->dates?->finish_date,
             'status' => TaskChangeRequest::PENDING,
         ]);
         // Asking about a job takes it, like any other operator action.
@@ -92,8 +92,9 @@ final class TaskChangeRequests
                     throw ValidationException::withMessages(['proposed_date' => ['Առաջարկվող ժամկետն արդեն անցել է։ Կատարողը պետք է ուղարկի նոր հարցում։']]);
                 }
                 $date = $locked->proposed_date->format('Y-m-d');
-                $order->dates()->updateOrCreate(['order_id' => $order->id], ['finish_date' => $date]);
-                $step->update(['status' => 'date_changed', 'cancel_date' => $date, 'canceling' => '']);
+                if ($step->deadline) $step->deadline = $date;
+                else $order->dates()->updateOrCreate(['order_id' => $order->id], ['finish_date' => $date]);
+                $step->fill(['status' => 'date_changed', 'cancel_date' => $date, 'canceling' => ''])->save();
                 $resolution = 'deadline_changed';
             } elseif ($approve) {
                 $resolution = $data['resolution'] ?? 'canceled';

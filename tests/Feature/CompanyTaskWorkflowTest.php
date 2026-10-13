@@ -291,6 +291,242 @@ class CompanyTaskWorkflowTest extends TestCase
         $this->assertNull($step->fresh()->admin_confirmation_date);
     }
 
+    public function test_workshops_have_independent_proof_deadline_and_priority_at_creation(): void
+    {
+        $order = $this->createTask(['selected_files' => [['id' => $this->files['DXF']->id, 'quantity' => 1], ['id' => $this->files['DLD']->id, 'quantity' => 1]],
+            'workshop_settings' => [
+                ['factory_id' => $this->factories['DXF']->id, 'confirmation_required' => true, 'confirmation_method' => 'photo', 'deadline' => '2026-10-18', 'priority' => 'urgent'],
+                ['factory_id' => $this->factories['DLD']->id, 'confirmation_required' => true, 'confirmation_method' => 'photo_text', 'deadline' => '2026-10-19', 'priority' => 'high'],
+            ]]);
+        $steps = $order->factoryOrders()->get()->keyBy('factory_id');
+        $this->assertSame('photo', $steps[$this->factories['DXF']->id]->confirmation_method);
+        $this->assertSame('photo_text', $steps[$this->factories['DLD']->id]->confirmation_method);
+        $this->assertSame('2026-10-18', $steps[$this->factories['DXF']->id]->deadline);
+        $this->assertSame('urgent', $steps[$this->factories['DXF']->id]->priority);
+        $this->assertFalse($order->confirmation_required);
+        $this->as($this->engineer);
+        $invalid = ['factory_id' => $this->factories['INFO']->id, 'confirmation_required' => false, 'priority' => 'normal'];
+        $this->postJson('/api/engineers/engineer', $this->payload(['workshop_settings' => [$invalid]]), $this->headers())->assertUnprocessable()->assertJsonValidationErrors('workshop_settings');
+        $invalid['factory_id'] = $this->factories['DXF']->id; $invalid['confirmation_required'] = true;
+        $this->postJson('/api/engineers/engineer', $this->payload(['workshop_settings' => [$invalid]]), $this->headers())->assertUnprocessable()->assertJsonValidationErrors('workshop_settings.0.confirmation_method');
+    }
+
+    public function test_accepted_task_can_require_both_proofs_and_only_its_assigned_operator_is_notified(): void
+    {
+        $order = $this->createTask();
+        $this->as($this->operator); $this->act($order, 'confirmed')->assertOk();
+        $step = $order->factoryOrders()->firstOrFail();
+        $this->as($this->engineer);
+        $this->changeEvidence($order, true, 'photo_text')->assertOk()->assertJsonPath('order.factory_orders.0.confirmation_method', 'photo_text');
+        $this->assertSame('confirmed', $step->fresh()->status);
+        $this->assertSame(1, $step->files()->count());
+        $this->assertSame(1, \App\Models\TaskNotification::where('type', 'step.evidence_requirements_changed')->where('user_id', $this->operator->id)->count());
+        $this->assertSame(0, \App\Models\TaskNotification::where('type', 'step.evidence_requirements_changed')->where('user_id', $this->bendOperator->id)->count());
+        $this->as($this->operator); $this->act($order, 'finished')->assertUnprocessable();
+    }
+
+    public function test_workshop_change_does_not_change_another_workshop_or_the_task_defaults(): void
+    {
+        $order = $this->createTask(['selected_files' => [['id' => $this->files['DXF']->id, 'quantity' => 1], ['id' => $this->files['DLD']->id, 'quantity' => 1]]]);
+        $step = $order->factoryOrders()->where('factory_id', $this->factories['DXF']->id)->firstOrFail();
+        $this->changeWorkshop($order, $step, ['confirmation_required' => true, 'confirmation_method' => 'text', 'deadline' => '2026-10-17', 'priority' => 'urgent'])->assertOk();
+        $this->assertFalse($order->fresh()->confirmation_required);
+        $other = $order->factoryOrders()->where('factory_id', $this->factories['DLD']->id)->firstOrFail();
+        $this->assertFalse($other->confirmation_required); $this->assertNull($other->deadline); $this->assertSame('normal', $other->priority);
+        $this->assertSame('text', $step->fresh()->confirmation_method);
+    }
+
+    public function test_new_photo_requirement_returns_submitted_text_for_supplement_and_retains_it(): void
+    {
+        $order = $this->createTask(['confirmation_required' => true, 'confirmation_method' => 'text']);
+        $this->as($this->operator); $this->act($order, 'finished', ['evidence_text' => 'Already inspected'])->assertOk();
+        $step = $order->factoryOrders()->firstOrFail();
+        $this->as($this->engineer); $this->changeEvidence($order, true, 'photo_text')->assertOk();
+        $step->refresh(); $this->assertSame('confirmed', $step->status); $this->assertNull($step->operator_finish_date);
+        $this->assertSame('Already inspected', $step->evidence_text); $this->assertNotNull($step->return_note);
+        $this->approve($step)->assertUnprocessable();
+        $this->as($this->operator);
+        $this->post('/api/factories/updateOrder/'.$order->id, ['factory_id' => $step->factory_id, 'factory_order' => ['status' => 'finished'], 'evidence_photo' => $this->proofPhoto()], $this->headers())->assertOk();
+        $this->assertSame('Already inspected', $step->fresh()->evidence_text);
+        $this->as($this->engineer); $this->approve($step)->assertOk()->assertJsonPath('order.status', 'completed');
+    }
+
+    public function test_new_text_requirement_retains_the_submitted_photo_and_does_not_require_uploading_it_again(): void
+    {
+        $order = $this->createTask(['confirmation_required' => true, 'confirmation_method' => 'photo']);
+        $this->as($this->operator);
+        $this->post('/api/factories/updateOrder/'.$order->id, ['factory_id' => $this->factories['DXF']->id, 'factory_order' => ['status' => 'finished'], 'evidence_photo' => $this->proofPhoto()], $this->headers())->assertOk();
+        $step = $order->factoryOrders()->firstOrFail(); $path = $step->evidence_photo_path;
+        $this->as($this->engineer); $this->changeEvidence($order, true, 'photo_text')->assertOk();
+        $this->as($this->operator); $this->act($order, 'finished', ['evidence_text' => 'Measurements checked'])->assertOk();
+        $this->assertSame($path, $step->fresh()->evidence_photo_path); Storage::disk('private')->assertExists($path);
+        $this->as($this->engineer); $this->approve($step)->assertOk();
+    }
+
+    public function test_disabling_review_completes_submitted_work_without_erasing_its_evidence(): void
+    {
+        $order = $this->createTask(['confirmation_required' => true, 'confirmation_method' => 'text']);
+        $this->as($this->operator); $this->act($order, 'finished', ['evidence_text' => 'Complete'])->assertOk();
+        $step = $order->factoryOrders()->firstOrFail();
+        $this->as($this->engineer); $this->changeEvidence($order, false, null)->assertOk()->assertJsonPath('order.status', 'completed');
+        $this->assertSame('Complete', $step->fresh()->evidence_text); $this->assertNotNull($step->fresh()->completed_at);
+        $this->assertNull($step->fresh()->engineer_confirmation_at);
+    }
+
+    public function test_adding_evidence_reopens_operator_only_completion_but_never_revokes_engineer_approval(): void
+    {
+        $order = $this->createTask(); $this->as($this->operator); $this->act($order, 'finished')->assertOk();
+        $step = $order->factoryOrders()->firstOrFail();
+        $this->as($this->engineer); $this->changeEvidence($order, true, 'text')->assertOk()->assertJsonPath('order.status', 'pending');
+        $this->assertSame('confirmed', $step->fresh()->status); $this->assertNull($step->fresh()->completed_at);
+        $this->as($this->operator); $this->act($order, 'finished', ['evidence_text' => 'Done'])->assertOk();
+        $this->as($this->engineer); $this->approve($step)->assertOk(); $approval = $step->fresh()->engineer_confirmation_at;
+        $this->changeEvidence($order, true, 'photo', true, 'text')->assertOk()->assertJsonPath('order.status', 'completed');
+        $this->assertSame($approval, $step->fresh()->engineer_confirmation_at); $this->assertSame('text', $step->fresh()->confirmation_method);
+        $this->changeWorkshop($order, $step, ['priority' => 'urgent'])->assertUnprocessable();
+    }
+
+    public function test_settings_have_stale_edit_protection_and_retries_do_not_duplicate_notifications(): void
+    {
+        $order = $this->createTask(); $this->as($this->operator); $this->act($order, 'confirmed')->assertOk();
+        $this->as($this->engineer); $this->changeEvidence($order, true, 'text')->assertOk();
+        $this->changeEvidence($order, true, 'text')->assertOk();
+        $this->changeEvidence($order, true, 'photo')->assertConflict();
+        $this->assertSame('text', $order->fresh()->confirmation_method);
+        $this->assertSame(1, \App\Models\TaskNotification::where('type', 'step.evidence_requirements_changed')->count());
+        $this->as($this->operator); $this->changeEvidence($order, false, null, true, 'text')->assertForbidden();
+        $this->as($this->otherEngineer); $this->changeEvidence($order, false, null, true, 'text')->assertForbidden();
+        $this->as($this->admin); $this->changeEvidence($order, false, null, true, 'text')->assertOk();
+    }
+
+    public function test_file_versions_are_private_task_copies_and_new_work_inherits_the_current_version(): void
+    {
+        $order = $this->createTask();
+        $base = Storage::disk('private')->get($this->files['DXF']->path);
+        $response = $this->uploadVersion($order, 'updated.txt', 'Revised dimensions')->assertCreated();
+        $versions = $response->json('files.0.versions'); $this->assertCount(2, $versions);
+        $revision = $versions[0]; $this->assertSame(2, $revision['version']); $this->assertArrayNotHasKey('file_path', $revision);
+        $this->assertSame($base, Storage::disk('private')->get($this->files['DXF']->path));
+        $step = $order->factoryOrders()->firstOrFail(); $this->assertSame($revision['id'], $step->files()->first()->pivot->task_file_revision_id);
+        $this->postJson('/api/tasks/'.$order->id.'/workshops', ['factory_id' => $this->factories['DLD']->id, 'files' => [['id' => $this->files['DXF']->id, 'quantity' => 1]]], $this->headers())->assertCreated();
+        $bend = $order->factoryOrders()->where('factory_id', $this->factories['DLD']->id)->firstOrFail();
+        $this->assertSame($revision['id'], $bend->files()->first()->pivot->task_file_revision_id);
+        $this->get('/api/secure-files/task-revisions/'.$revision['id'], $this->headers())->assertOk()->assertHeader('X-Content-Type-Options', 'nosniff');
+        $this->as($this->operator); $this->act($order, 'confirmed')->assertOk();
+        $this->get('/api/secure-files/task-revisions/'.$revision['id'], $this->headers())->assertOk();
+        $this->as($this->otherEngineer); $this->getJson('/api/secure-files/task-revisions/'.$revision['id'], $this->headers())->assertForbidden();
+        $this->as($this->customer); $this->getJson('/api/secure-files/task-revisions/'.$revision['id'], $this->headers())->assertForbidden();
+        $this->as($this->engineer);
+        $this->getJson('/api/secure-files/task-revisions/'.$revision['id'], ['X-Company-ID' => $this->otherCompany->id])->assertForbidden();
+    }
+
+    public function test_file_changes_preserve_finished_work_and_notify_only_affected_operators(): void
+    {
+        $order = $this->createTask();
+        $this->postJson('/api/tasks/'.$order->id.'/workshops', ['factory_id' => $this->factories['DLD']->id, 'operator_id' => $this->bendOperator->id, 'files' => [['id' => $this->files['DXF']->id, 'quantity' => 1]]], $this->headers())->assertCreated();
+        $this->as($this->operator); $this->act($order, 'finished')->assertOk();
+        $finished = $order->factoryOrders()->where('factory_id', $this->factories['DXF']->id)->firstOrFail();
+        $this->as($this->engineer); $response = $this->uploadVersion($order, 'changed.txt', 'New file')->assertCreated();
+        $originalId = $response->json('files.0.versions.1.id'); $currentId = $response->json('files.0.versions.0.id');
+        $this->assertSame($originalId, $finished->files()->first()->pivot->task_file_revision_id);
+        $this->assertNotNull($finished->fresh()->completed_at);
+        $bend = $order->factoryOrders()->where('factory_id', $this->factories['DLD']->id)->firstOrFail();
+        $this->assertSame($currentId, $bend->files()->first()->pivot->task_file_revision_id);
+        $this->assertSame(1, \App\Models\TaskNotification::where('type', 'step.file_version_changed')->where('user_id', $this->bendOperator->id)->count());
+        $this->assertSame(0, \App\Models\TaskNotification::where('type', 'step.file_version_changed')->where('user_id', $this->operator->id)->count());
+    }
+
+    public function test_file_versions_can_restore_previous_bytes_and_reject_stale_or_invalid_uploads(): void
+    {
+        $order = $this->createTask();
+        $this->uploadVersion($order, 'wrong.pdf', 'Different extension')->assertUnprocessable()->assertJsonValidationErrors('file');
+        $this->assertDatabaseCount('task_file_revisions', 0);
+        $response = $this->uploadVersion($order, 'new.txt', '<html><script>alert(1)</script></html>')->assertCreated();
+        $new = $response->json('files.0.versions.0.id'); $original = $response->json('files.0.versions.1.id');
+        $this->get('/api/secure-files/task-revisions/'.$new, $this->headers())->assertOk()->assertHeader('Content-Type', 'text/plain; charset=UTF-8');
+        $this->uploadVersion($order, 'another.txt', 'Stale upload')->assertConflict();
+        $this->assertDatabaseCount('task_file_revisions', 2);
+        $url = '/api/tasks/'.$order->id.'/files/'.$this->files['DXF']->id.'/version';
+        $this->putJson($url, ['revision_id' => $original, 'previous_revision_id' => $new], $this->headers())->assertOk()->assertJsonPath('files.0.task_file_revision_id', $original);
+        $this->uploadVersion($order, 'newer.txt', 'Third revision', $original)->assertCreated()->assertJsonPath('files.0.versions.0.version', 3);
+        $foreign = $this->createTask();
+        $this->putJson('/api/tasks/'.$foreign->id.'/files/'.$this->files['DXF']->id.'/version', ['revision_id' => $original, 'previous_revision_id' => null], $this->headers())->assertNotFound();
+    }
+
+    public function test_custom_workshop_deadline_is_used_by_workload_and_deadline_approvals(): void
+    {
+        $order = $this->createTask(); $this->as($this->operator); $this->act($order, 'confirmed')->assertOk();
+        $step = $order->factoryOrders()->firstOrFail(); $this->as($this->engineer);
+        $this->changeWorkshop($order, $step, ['deadline' => today()->subDay()->toDateString(), 'priority' => 'urgent'])->assertOk();
+        $response = $this->getJson('/api/task-workload', $this->headers())->assertOk();
+        $stats = collect($response->json('factories'))->firstWhere('id', $step->factory_id)['operators'];
+        $stats = collect($stats)->firstWhere('id', $this->operator->id);
+        $this->assertSame(1, $stats['overdue_tasks']); $this->assertSame(1, $stats['urgent_tasks']);
+        $this->as($this->operator);
+        $request = $this->act($order, 'date_changed', ['cancel_date' => today()->addDays(4)->toDateString()])->assertOk()->json('change_request.id');
+        $this->as($this->engineer);
+        $this->postJson('/api/engineers/task-requests/'.$request.'/decision', ['decision' => 'approve'], $this->headers())->assertOk();
+        $this->assertSame(today()->addDays(4)->toDateString(), $step->fresh()->deadline);
+        $this->assertSame('2026-10-20', substr($order->dates->finish_date, 0, 10));
+    }
+
+    private function proofPhoto(): UploadedFile
+    {
+        return UploadedFile::fake()->createWithContent('proof.png', base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aN3sAAAAASUVORK5CYII='));
+    }
+
+    public function test_a_stale_operator_finish_returns_the_new_requirements_without_changing_work(): void
+    {
+        $order = $this->createTask(); $this->as($this->operator); $this->act($order, 'confirmed')->assertOk();
+        $this->as($this->engineer); $this->changeEvidence($order, true, 'text')->assertOk();
+        $this->as($this->operator);
+        $this->act($order, 'finished', ['expected_confirmation_required' => 0])->assertConflict()
+            ->assertJsonPath('order.factory_orders.0.confirmation_method', 'text')->assertJsonMissingPath('order.logs');
+        $this->assertSame('confirmed', $order->factoryOrders()->first()->status);
+        $this->act($order, 'finished', ['expected_confirmation_required' => 1, 'expected_confirmation_method' => 'text', 'evidence_text' => 'Checked'])->assertOk();
+    }
+
+    public function test_planning_migration_retries_preserve_revisions_and_workshop_settings(): void
+    {
+        $order = $this->createTask(); $step = $order->factoryOrders()->firstOrFail();
+        $this->changeWorkshop($order, $step, ['deadline' => '2026-10-18', 'priority' => 'urgent'])->assertOk();
+        $this->uploadVersion($order, 'new.txt', 'Updated content')->assertCreated();
+        $id = $step->files()->first()->pivot->task_file_revision_id;
+        $migration = require database_path('migrations/2026_10_13_130000_add_workshop_planning_and_task_file_revisions.php');
+        $migration->up(); $migration->up();
+        $this->assertSame('urgent', $step->fresh()->priority); $this->assertSame('2026-10-18', $step->fresh()->deadline);
+        $this->assertSame($id, $step->files()->first()->pivot->task_file_revision_id); $this->assertDatabaseCount('task_file_revisions', 2);
+    }
+
+    public function test_an_operator_cannot_finish_from_a_stale_file_version_snapshot(): void
+    {
+        $order = $this->createTask(); $this->as($this->operator); $this->act($order, 'confirmed')->assertOk();
+        $this->as($this->engineer); $response = $this->uploadVersion($order, 'new.txt', 'Revised drawing')->assertCreated();
+        $revisionId = $response->json('files.0.task_file_revision_id');
+        $this->as($this->operator);
+        $this->act($order, 'finished', ['expected_file_versions' => json_encode([$this->files['DXF']->id => 0])])->assertConflict()
+            ->assertJsonPath('order.factory_orders.0.files.0.pivot.task_file_revision_id', $revisionId);
+        $this->assertSame('confirmed', $order->factoryOrders()->first()->status);
+        $this->act($order, 'finished', ['expected_file_versions' => json_encode([$this->files['DXF']->id => $revisionId])])->assertOk()->assertJsonPath('status', 'completed');
+    }
+    private function changeEvidence(Order $order, bool $required, ?string $method, ?bool $previousRequired = null, ?string $previousMethod = null)
+    {
+        return $this->putJson('/api/tasks/'.$order->id.'/evidence-requirements', ['confirmation_required' => $required, 'confirmation_method' => $method,
+            'previous_confirmation_required' => $previousRequired ?? $order->confirmation_required, 'previous_confirmation_method' => $previousMethod ?? $order->confirmation_method], $this->headers());
+    }
+    private function changeWorkshop(Order $order, FactoryOrder $step, array $extra)
+    {
+        return $this->putJson('/api/tasks/'.$order->id.'/workshops/'.$step->id.'/settings', array_replace([
+            'confirmation_required' => $step->confirmation_required, 'confirmation_method' => $step->confirmation_method, 'deadline' => $step->deadline, 'priority' => $step->priority,
+            'previous_confirmation_required' => $step->confirmation_required, 'previous_confirmation_method' => $step->confirmation_method,
+            'previous_deadline' => $step->deadline, 'previous_priority' => $step->priority,
+        ], $extra), $this->headers());
+    }
+    private function uploadVersion(Order $order, string $name, string $bytes, ?int $previousId = null)
+    {
+        return $this->post('/api/tasks/'.$order->id.'/files/'.$this->files['DXF']->id.'/versions', ['file' => UploadedFile::fake()->createWithContent($name, $bytes),
+            'previous_revision_id' => $previousId, 'note' => 'Updated drawing'], $this->headers());
+    }
     private function in(Company $company, callable $callback): mixed { return app(CompanyContext::class)->run($company, $callback); }
     private function headers(): array { return ['X-Company-ID' => (string) $this->company->id, 'Accept' => 'application/json']; }
     private function as(User $user): void { app(CompanyContext::class)->set(null); $user->unsetRelation('role')->unsetRelation('factory'); Sanctum::actingAs($user); }

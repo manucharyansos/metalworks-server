@@ -36,6 +36,7 @@ trait BelongsToCompany
                 'factory_id' => 'factories', 'order_id' => 'orders', 'pmp_id' => 'pmps',
                 'remote_number_id' => 'remote_numbers', 'pmp_file_id' => 'pmp_files',
                 'pmp_files_id' => 'pmp_files', 'factory_order_id' => 'factory_orders',
+                'task_file_revision_id' => 'task_file_revisions',
                 'material_category_id' => 'material_categories', 'material_group_id' => 'material_groups',
                 'material_type_id' => 'material_types', 'material_id' => 'materials',
             ];

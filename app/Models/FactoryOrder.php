@@ -27,7 +27,7 @@ class FactoryOrder extends Model
         'operator_id',
         'confirmation_required', 'confirmation_method', 'evidence_text', 'evidence_photo_path',
         'engineer_confirmation_at', 'engineer_confirmation_user_id', 'completed_at',
-        'depends_on_id', 'return_note', 'returned_at',
+        'depends_on_id', 'return_note', 'returned_at', 'deadline', 'priority',
     ];
 
     protected $casts = ['confirmation_required' => 'boolean'];
@@ -123,7 +123,7 @@ class FactoryOrder extends Model
     {
         return $this->belongsToMany(PmpFiles::class, 'factory_order_files')
             ->using(CompanyPivot::class)
-            ->withPivot(['quantity', 'material_type', 'thickness'])
+            ->withPivot(['quantity', 'material_type', 'thickness', 'task_file_revision_id'])
             ->withTimestamps();
     }
 
