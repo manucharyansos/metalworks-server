@@ -32,6 +32,7 @@ class OrderController extends Controller
                 'creator:id,name',
                 'logs.user',
                 'factoryOrders.operator:id,name',
+                'factoryOrders.pendingRequest',
             ])->get();
 
             return response()->json(['orders' => $orders], 200);
@@ -176,6 +177,7 @@ class OrderController extends Controller
             'client',
             'logs.user',
             'factoryOrders.operator:id,name',
+            'factoryOrders.pendingRequest',
         ])->findOrFail($id);
 
         abort_unless(\App\Support\TaskAccess::canView($request->user(), $order), 403);

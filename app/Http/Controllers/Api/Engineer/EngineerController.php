@@ -12,7 +12,8 @@ use App\Models\PrefixCode;
 use App\Models\RemoteNumber;
 use App\Models\SelectedFile;
 use App\Models\User;
-use App\Support\TaskWorkflow;
+use App\Support\{TaskNotifier, TaskWorkflow};
+use App\Models\TaskChangeRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -36,6 +37,7 @@ class EngineerController extends Controller
                 'factoryOrders.factory',
                 'factoryOrders.files',
                 'factoryOrders.operator:id,name',
+                'factoryOrders.pendingRequest',
                 'selectedFiles.pmpFile',
                 'client.user',
                 'creator:id,name',
@@ -51,7 +53,9 @@ class EngineerController extends Controller
                 });
             }
 
-            $page = $query->when($request->query('confirmation') === 'waiting', fn ($q) => $q->whereHas('factoryOrders', fn ($s) => $s->awaitingEngineer()))->orderByDesc('created_at')->paginate($perPage);
+            // "Waiting" means waiting for this engineer: finished proof to confirm, or an operator's request to answer.
+            $page = $query->when($request->query('confirmation') === 'waiting', fn ($q) => $q->whereHas('factoryOrders', fn ($s) => $s->where(fn ($w) => $w->awaitingEngineer())
+                ->orWhereHas('changeRequests', fn ($r) => $r->pending())))->orderByDesc('created_at')->paginate($perPage);
 
             return response()->json([
                 'orders' => $page->items(),
@@ -168,6 +172,8 @@ class EngineerController extends Controller
                 return $order;
             });
 
+            TaskNotifier::stepsAssigned($request->user(), $order);
+
             try {
                 $userEmail = User::find($validatedData['user_id'])?->email;
                 if ($userEmail) {
@@ -219,9 +225,13 @@ class EngineerController extends Controller
             'dates',
             'factoryOrders.factory',
             'factoryOrders.files',
+            'factoryOrders.operator:id,name',
+            'factoryOrders.pendingRequest',
             'selectedFiles.pmpFile',
             'user',
             'client.user',
+            'creator:id,name',
+            'logs.user:id,name',
         ]);
 
         return response()->json(['order' => $order], 200);
@@ -293,6 +303,9 @@ class EngineerController extends Controller
             if ($order->factoryOrders()->whereNotIn('status', ['pending', 'waiting'])->exists()) {
                 throw ValidationException::withMessages(['order' => ['Առաջադրանքն արդեն ընդունված է։ Ֆայլերն ու հաստատման պայմանները փոփոխել հնարավոր չէ։']]);
             }
+            if ($order->factoryOrders()->whereHas('changeRequests', fn ($r) => $r->pending())->exists()) {
+                throw ValidationException::withMessages(['order' => ['Կատարողի հարցումը սպասում է ձեր պատասխանին։ Նախ պատասխանեք դրան։']]);
+            }
             $pmp = Pmp::with('files.factory')->findOrFail($validatedData['pmp_id']);
             $this->validateRemoteBelongsToPmp($validatedData['remote_number_id'] ?? null, $pmp->id);
 
@@ -305,7 +318,8 @@ class EngineerController extends Controller
             DB::transaction(function () use ($request, $validatedData, $order, $pmp, $selectedFiles) {
                 $order = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
                 if ($order->logs()->whereIn('action', ['factory_order.work_added', 'factory_order.operator_changed'])->exists()
-                    || $order->factoryOrders()->whereNotIn('status', ['pending', 'waiting'])->exists()) {
+                    || $order->factoryOrders()->whereNotIn('status', ['pending', 'waiting'])->exists()
+                    || $order->factoryOrders()->whereHas('changeRequests', fn ($r) => $r->pending())->exists()) {
                     throw ValidationException::withMessages(['order' => ['Արտադրամասային աշխատանքներն արդեն փոխվել են։ Թարմացրեք առաջադրանքը։']]);
                 }
                 $order->update([

@@ -16,6 +16,10 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use App\Models\OrderLog;
 use App\Support\TaskAccess;
+use App\Support\TaskChangeRequests;
+use App\Support\TaskNotifier;
+use App\Models\TaskChangeRequest;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -91,6 +95,7 @@ class FactoryController extends Controller
                         $q->with([
                             'files',
                             'operator:id,name',
+                            'pendingRequest',
                         ]);
                     },
                     'dates',
@@ -140,6 +145,7 @@ class FactoryController extends Controller
             'factory_order.status' => 'present|nullable|string',
             'factory_order.canceling' => 'nullable|string|max:1000',
             'factory_order.cancel_date' => 'nullable|date',
+            'factory_order.request_note' => 'nullable|string|max:1000',
             'factory_order.evidence_text' => 'nullable|string|max:10000',
             'evidence_photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:10240',
             'factory_order.admin_confirmation_date' => 'prohibited',
@@ -157,7 +163,7 @@ class FactoryController extends Controller
         if ($status !== null && !in_array($status, $allowed, true)) throw ValidationException::withMessages(['factory_order.status' => ['Արտադրամասի կարգավիճակը թույլատրելի չէ։']]);
         $storedPath = null;
         try {
-            $order = DB::transaction(function () use ($request, $data, $id, $factoryId, $status, $user, $management, &$storedPath) {
+            [$order, $step, $previous, $changeRequest] = DB::transaction(function () use ($request, $data, $id, $factoryId, $status, $user, $management, &$storedPath) {
                 $order = Order::whereKey($id)->lockForUpdate()->firstOrFail();
                 $step = $order->factoryOrders()->where('factory_id', $factoryId)->lockForUpdate()->firstOrFail();
                 abort_unless($management || !$step->operator_id || (int) $step->operator_id === (int) $user->id, 403);
@@ -166,6 +172,11 @@ class FactoryController extends Controller
                 }
                 if ($step->completed_at || in_array($step->status, ['finished', 'completed', 'done'], true)) {
                     throw ValidationException::withMessages(['factory_order.status' => ['Աշխատանքն արդեն ավարտված է կամ սպասում է ինժեների հաստատմանը։']]);
+                }
+                // A rejection the engineer approved is final for the workshop. Only
+                // management can reopen it; the operator cannot quietly undo it.
+                if (!$management && in_array($step->status, ['canceled', 'cancelled'], true)) {
+                    throw ValidationException::withMessages(['factory_order.status' => ['Ինժեների համաձայնությամբ մերժված աշխատանքի կարգավիճակը կատարողը չի կարող փոխել։']]);
                 }
                 if ($status === 'finished') {
                     abort_unless((int) $user->factory_id === $factoryId && (!$step->operator_id || (int) $step->operator_id === (int) $user->id), 403, 'Ավարտը կարող է ուղարկել միայն այս արտադրամասի կատարողը։');
@@ -186,27 +197,52 @@ class FactoryController extends Controller
                     $step->operator_finish_date = now();
                     $step->finish_date = now();
                     $step->completed_at = $step->confirmation_required ? null : now();
+                    $step->return_note = null; // the engineer's rework note is answered by this submission
                 }
-                if ($status === 'canceled' && !trim((string) ($data['factory_order']['canceling'] ?? ''))) throw ValidationException::withMessages(['factory_order.canceling' => ['Ընտրեք մերժման պատճառը։']]);
-                if ($status === 'date_changed' && empty($data['factory_order']['cancel_date'])) throw ValidationException::withMessages(['factory_order.cancel_date' => ['Ընտրեք նոր ժամկետը։']]);
+                $reason = trim((string) ($data['factory_order']['canceling'] ?? ''));
+                if ($status === 'canceled' && $reason === '') throw ValidationException::withMessages(['factory_order.canceling' => ['Ընտրեք մերժման պատճառը։']]);
+                if ($status === 'date_changed') {
+                    if (empty($data['factory_order']['cancel_date'])) throw ValidationException::withMessages(['factory_order.cancel_date' => ['Ընտրեք նոր ժամկետը։']]);
+                    if (Carbon::parse($data['factory_order']['cancel_date'])->startOfDay()->lte(today())) {
+                        throw ValidationException::withMessages(['factory_order.cancel_date' => ['Նոր ժամկետը պետք է լինի վաղվանից։']]);
+                    }
+                }
+
+                // Rejecting or moving the deadline is a request. The job stays as it
+                // is until the engineer who created the task agrees.
+                if (!$management && in_array($status, ['canceled', 'date_changed'], true)) {
+                    $changeRequest = TaskChangeRequests::submit($user, $order, $step, $status === 'canceled' ? TaskChangeRequest::REJECT : TaskChangeRequest::DEADLINE, [
+                        'reason' => $reason, 'date' => $data['factory_order']['cancel_date'] ?? null, 'note' => $data['factory_order']['request_note'] ?? null,
+                    ]);
+                    return [$order, $step->fresh(), $step->status, $changeRequest];
+                }
+
                 $previous = $step->status;
+                if ($previous !== $status) TaskChangeRequests::supersede($step, $user);
                 $step->status = $status;
-                $step->canceling = $status === 'canceled' ? $data['factory_order']['canceling'] : '';
+                $step->canceling = $status === 'canceled' ? $reason : '';
                 $step->cancel_date = $status === 'date_changed' ? $data['factory_order']['cancel_date'] : null;
                 if (!$step->operator_id && $user->factory_id && $status && $status !== 'pending') $step->operator_id = $user->id;
                 $step->save();
+                if ($management && in_array($previous, ['canceled', 'cancelled'], true)
+                    && !in_array($status, ['canceled', 'cancelled'], true)) {
+                    $order->update(['status' => 'pending', 'completed_at' => null]);
+                }
                 OrderLog::create(['order_id' => $order->id, 'user_id' => $user->id, 'action' => 'factory_order.status_changed',
                     'message' => sprintf('Արտադրամաս «%s»․ %s → %s', $step->factory->name, $previous ?? 'Սպասում', $status ?? 'Սպասում'),
                     'meta' => ['factory_id' => $factoryId, 'factory_order_id' => $step->id, 'from_status' => $previous, 'to_status' => $status]]);
                 $order->updateStatusIfAllFactoriesCompleted();
-                return $order;
+                return [$order, $step, $previous, null];
             });
         } catch (\Throwable $e) {
             if ($storedPath) Storage::disk('private')->delete($storedPath);
             throw $e;
         }
-        $order->load('orderNumber', 'prefixCode', 'dates', 'factoryOrders.files', 'factoryOrders.factory', 'factoryOrders.operator:id,name', 'creator:id,name');
-        return response()->json(TaskAccess::restrictOperatorRelations($order, $user));
+        if ($changeRequest) TaskNotifier::requestSubmitted($user, $order, $step, $changeRequest);
+        else TaskNotifier::statusChanged($user, $order, $step, $previous, $status);
+        $order->load('orderNumber', 'prefixCode', 'dates', 'factoryOrders.files', 'factoryOrders.factory', 'factoryOrders.operator:id,name', 'factoryOrders.pendingRequest', 'creator:id,name');
+        $payload = TaskAccess::restrictOperatorRelations($order, $user);
+        return response()->json($changeRequest ? array_merge($payload->toArray(), ['change_request' => $changeRequest->fresh()]) : $payload);
     }
 
     public function destroy(Request $request, string $id): JsonResponse
@@ -254,7 +290,7 @@ class FactoryController extends Controller
         $orders = Order::whereHas('factoryOrders', function ($query) use ($factoryIdsArray, $user) {
             $query->whereIn('factory_id', $factoryIdsArray);
             if ($user->factory_id && !in_array($user->role?->name, ['admin', 'manager'], true)) TaskAccess::operatorSteps($query, $user);
-        })->when($user->role?->name === 'engineer', fn ($q) => $q->where('creator_id', $user->id))->with('orderNumber', 'prefixCode', 'dates', 'factoryOrders.factory', 'factoryOrders.files', 'creator:id,name')->get()
+        })->when($user->role?->name === 'engineer', fn ($q) => $q->where('creator_id', $user->id))->with('orderNumber', 'prefixCode', 'dates', 'factoryOrders.factory', 'factoryOrders.files', 'factoryOrders.pendingRequest', 'creator:id,name')->get()
             ->map(fn ($order) => TaskAccess::restrictOperatorRelations($order, $user));
 
         return response()->json($orders);

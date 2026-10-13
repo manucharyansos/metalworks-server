@@ -7,6 +7,8 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Validation\ValidationException;
 
 class FactoryOrder extends Model
@@ -25,7 +27,7 @@ class FactoryOrder extends Model
         'operator_id',
         'confirmation_required', 'confirmation_method', 'evidence_text', 'evidence_photo_path',
         'engineer_confirmation_at', 'engineer_confirmation_user_id', 'completed_at',
-        'depends_on_id',
+        'depends_on_id', 'return_note', 'returned_at',
     ];
 
     protected $casts = ['confirmation_required' => 'boolean'];
@@ -35,6 +37,17 @@ class FactoryOrder extends Model
     public function dependsOn(): BelongsTo
     {
         return $this->belongsTo(self::class, 'depends_on_id');
+    }
+
+    public function changeRequests(): HasMany
+    {
+        return $this->hasMany(TaskChangeRequest::class, 'factory_order_id');
+    }
+
+    // At most one request waits for the engineer at a time.
+    public function pendingRequest(): HasOne
+    {
+        return $this->hasOne(TaskChangeRequest::class, 'factory_order_id')->where('status', TaskChangeRequest::PENDING)->orderByDesc('id');
     }
 
     public function isWorkCompleted(): bool
@@ -62,6 +75,11 @@ class FactoryOrder extends Model
 
     protected static function booted(): void
     {
+        static::deleting(function (FactoryOrder $step): void {
+            $step->changeRequests()->delete();
+            TaskNotification::where('factory_order_id', $step->id)->delete();
+        });
+
         static::saving(function (FactoryOrder $factoryOrder): void {
             if (!$factoryOrder->exists || $factoryOrder->isDirty('status')) {
                 $status = $factoryOrder->status;

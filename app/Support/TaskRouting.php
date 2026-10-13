@@ -17,7 +17,7 @@ final class TaskRouting
     public static function order(Order $order): Order
     {
         return $order->fresh()->load('orderNumber', 'prefixCode', 'dates', 'factoryOrders.factory',
-            'factoryOrders.operator:id,name', 'factoryOrders.files', 'factoryOrders.dependsOn',
+            'factoryOrders.operator:id,name', 'factoryOrders.files', 'factoryOrders.dependsOn', 'factoryOrders.pendingRequest',
             'selectedFiles.pmpFile.factory', 'client.user', 'user:id,name,email,phone', 'creator:id,name', 'logs.user:id,name');
     }
 
@@ -29,9 +29,9 @@ final class TaskRouting
         return $operator;
     }
 
-    public static function assign(User $actor, FactoryOrder $step, ?int $operatorId): FactoryOrder
+    public static function assign(User $actor, FactoryOrder $step, ?int $operatorId, bool $supersedeRequests = true): FactoryOrder
     {
-        return DB::transaction(function () use ($actor, $step, $operatorId) {
+        return DB::transaction(function () use ($actor, $step, $operatorId, $supersedeRequests) {
             $order = Order::whereKey($step->order_id)->lockForUpdate()->firstOrFail();
             self::authorize($actor, $order);
             $locked = $order->factoryOrders()->whereKey($step->id)->lockForUpdate()->firstOrFail();
@@ -44,6 +44,8 @@ final class TaskRouting
             if ((int) $locked->operator_id === (int) $operator?->id) return $locked;
             $previous = $locked->operator;
             $locked->update(['operator_id' => $operator?->id]);
+            // A request made by the previous operator no longer applies.
+            if ($supersedeRequests) TaskChangeRequests::supersede($locked, $actor);
             OrderLog::create(['order_id' => $order->id, 'user_id' => $actor->id, 'action' => 'factory_order.operator_changed',
                 'message' => sprintf('Արտադրամաս «%s»․ կատարող «%s» → «%s»', $locked->factory->name, $previous?->name ?? 'Չնշանակված', $operator?->name ?? 'Չնշանակված'),
                 'meta' => ['factory_order_id' => $locked->id, 'factory_id' => $locked->factory_id,

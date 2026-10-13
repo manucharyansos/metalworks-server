@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\Order;
 
 use App\Http\Controllers\Controller;
 use App\Models\{FactoryOrder, Order};
-use App\Support\TaskRouting;
+use App\Support\{TaskNotifier, TaskRouting};
 use Illuminate\Http\Request;
 
 class TaskRoutingController extends Controller
@@ -21,7 +21,9 @@ class TaskRoutingController extends Controller
         TaskRouting::authorize($request->user(), $order);
         abort_unless((int) $factoryOrder->order_id === (int) $order->id, 404);
         $data = $request->validate(['operator_id' => 'present|nullable|integer|exists:users,id']);
-        TaskRouting::assign($request->user(), $factoryOrder, $data['operator_id']);
+        $previousOperatorId = $factoryOrder->operator_id;
+        $step = TaskRouting::assign($request->user(), $factoryOrder, $data['operator_id']);
+        TaskNotifier::operatorChanged($request->user(), $order, $step, $previousOperatorId);
         return response()->json(['order' => TaskRouting::order($order), 'workload' => TaskRouting::workload()]);
     }
 
@@ -33,7 +35,8 @@ class TaskRoutingController extends Controller
             'depends_on_id' => 'nullable|integer|exists:factory_orders,id',
             'files' => 'required|array|min:1|max:200', 'files.*.id' => 'required|integer|distinct|exists:pmp_files,id',
             'files.*.quantity' => 'required|integer|min:1|max:1000000']);
-        TaskRouting::addWork($request->user(), $order, $data);
+        $step = TaskRouting::addWork($request->user(), $order, $data);
+        TaskNotifier::operatorChanged($request->user(), $order, $step, null);
         return response()->json(['order' => TaskRouting::order($order), 'workload' => TaskRouting::workload()], 201);
     }
 }
