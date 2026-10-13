@@ -153,6 +153,9 @@ class FactoryController extends Controller
             'factory_order.completed_at' => 'prohibited',
             'factory_order.confirmation_required' => 'prohibited',
             'factory_order.confirmation_method' => 'prohibited',
+            'factory_order.expected_confirmation_required' => 'sometimes|boolean',
+            'factory_order.expected_confirmation_method' => 'nullable|in:photo,text,photo_text',
+            'factory_order.expected_file_versions' => 'sometimes|json',
         ]);
         $user = $request->user();
         $factoryId = (int) $data['factory_id'];
@@ -180,18 +183,35 @@ class FactoryController extends Controller
                 }
                 if ($status === 'finished') {
                     abort_unless((int) $user->factory_id === $factoryId && (!$step->operator_id || (int) $step->operator_id === (int) $user->id), 403, 'Ավարտը կարող է ուղարկել միայն այս արտադրամասի կատարողը։');
+                    $versionsChanged = false;
+                    if (isset($data['factory_order']['expected_file_versions'])) {
+                        $expected = json_decode($data['factory_order']['expected_file_versions'], true);
+                        if (!is_array($expected)) throw ValidationException::withMessages(['factory_order.expected_file_versions' => ['Ֆայլերի տարբերակների ցանկը վավեր չէ։']]);
+                        $actual = $step->files->mapWithKeys(fn ($file) => [$file->id => (int) ($file->pivot->task_file_revision_id ?? 0)])->all();
+                        ksort($expected); ksort($actual); $versionsChanged = $expected !== $actual;
+                    }
+                    if ($versionsChanged || (array_key_exists('expected_confirmation_required', $data['factory_order'])
+                        && ((bool) $data['factory_order']['expected_confirmation_required'] !== $step->confirmation_required
+                            || ($step->confirmation_required && ($data['factory_order']['expected_confirmation_method'] ?? null) !== $step->confirmation_method)))) {
+                        throw new \Illuminate\Http\Exceptions\HttpResponseException(response()->json([
+                            'message' => $versionsChanged ? 'Աշխատանքի ֆայլերը փոխվել են։ Ստուգեք գործող տարբերակն ու կրկին ուղարկեք ավարտը։' : 'Հավաստման պահանջները փոխվել են։ Ստուգեք նոր պահանջներն ու կրկին ուղարկեք ավարտը։',
+                            'order' => TaskAccess::restrictOperatorRelations(\App\Support\TaskRouting::order($order), $user),
+                        ], 409));
+                    }
                     if ($step->confirmation_required) {
                         $methods = \App\Support\TaskWorkflow::evidenceMethods($step->confirmation_method);
                         if (!$methods) throw ValidationException::withMessages(['confirmation_method' => ['Հավաստման մեթոդը բացակայում է։']]);
                         if (in_array('text', $methods, true)) {
-                            $text = trim((string) ($data['factory_order']['evidence_text'] ?? ''));
+                            $text = trim((string) ($data['factory_order']['evidence_text'] ?? $step->evidence_text ?? ''));
                             if ($text === '') throw ValidationException::withMessages(['factory_order.evidence_text' => ['Գրեք կատարված աշխատանքի հավաստումը։']]);
                             $step->evidence_text = $text;
                         }
                         if (in_array('photo', $methods, true)) {
-                            if (!$request->hasFile('evidence_photo')) throw ValidationException::withMessages(['evidence_photo' => ['Ավելացրեք կատարված աշխատանքի նկարը։']]);
-                            $storedPath = $request->file('evidence_photo')->store('companies/'.$order->company_id.'/task-evidence/'.$step->id, 'private');
-                            $step->evidence_photo_path = $storedPath;
+                            if (!$request->hasFile('evidence_photo') && !$step->evidence_photo_path) throw ValidationException::withMessages(['evidence_photo' => ['Ավելացրեք կատարված աշխատանքի նկարը։']]);
+                            if ($request->hasFile('evidence_photo')) {
+                                $storedPath = $request->file('evidence_photo')->store('companies/'.$order->company_id.'/task-evidence/'.$step->id, 'private');
+                                $step->evidence_photo_path = $storedPath;
+                            }
                         }
                     }
                     $step->operator_finish_date = now();

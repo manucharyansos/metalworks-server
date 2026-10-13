@@ -18,6 +18,7 @@ Route::middleware([
         ->middleware('permission:pmp_files.view');
 
     Route::prefix('secure-files')->group(function () {
+        Route::get('task-revisions/{taskFileRevision}', [\App\Http\Controllers\Api\File\SecureTaskFileRevisionController::class, 'show'])->whereNumber('taskFileRevision');
         Route::get('evidence/{factoryOrder}', [\App\Http\Controllers\Api\File\SecureTaskEvidenceController::class, 'show'])->whereNumber('factoryOrder');
         Route::get('pmp/{file}', [SecurePmpFileController::class, 'show'])
             ->whereNumber('file');

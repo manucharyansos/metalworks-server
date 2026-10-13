@@ -19,6 +19,7 @@ class SelectedFile extends Model
         'order_id',
         'pmp_file_id',
         'quantity',
+        'task_file_revision_id',
     ];
 
     public function order(): BelongsTo

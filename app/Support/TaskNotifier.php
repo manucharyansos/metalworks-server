@@ -2,7 +2,7 @@
 
 namespace App\Support;
 
-use App\Models\{FactoryOrder, FactoryOrderStatus, Order, TaskChangeRequest, TaskNotification, User};
+use App\Models\{FactoryOrder, FactoryOrderStatus, Order, TaskChangeRequest, TaskFileRevision, TaskNotification, User};
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -65,6 +65,27 @@ final class TaskNotifier
     {
         self::send($step->operator_id, $actor, 'step.finish_returned', $order, $step,
             sprintf('Ինժեները վերադարձրել է աշխատանքը վերանայման (%s)՝ %s', self::ref($order), $note), ['note' => $note]);
+    }
+
+    public static function evidenceRequirementsChanged(User $actor, Order $order, FactoryOrder $step, array $from, bool $needsSupplement): void
+    {
+        $label = !$step->confirmation_required ? 'Ավարտվում է օպերատորի հաստատմամբ' : match ($step->confirmation_method) {
+            'photo' => 'Նկար', 'text' => 'Տեքստ', 'photo_text' => 'Նկար և տեքստ', default => '',
+        };
+        self::send($step->operator_id, $actor, isset($from['priority']) ? 'step.settings_changed' : 'step.evidence_requirements_changed', $order, $step,
+            sprintf('Փոխվել են աշխատանքի հավաստման պահանջները (%s)՝ %s։%s', self::ref($order), $label,
+                $needsSupplement ? ' Լրացրեք հավաստումը և կրկին ուղարկեք ավարտը։' : ''),
+            ['from_required' => $from['confirmation_required'], 'from_method' => $from['confirmation_method'],
+                'confirmation_required' => $step->confirmation_required, 'confirmation_method' => $step->confirmation_method,
+                'deadline' => $step->deadline ?: $order->dates?->finish_date, 'priority' => $step->priority,
+                'needs_supplement' => $needsSupplement]);
+    }
+
+    public static function fileVersionChanged(User $actor, Order $order, FactoryOrder $step, TaskFileRevision $revision): void
+    {
+        self::send($step->operator_id, $actor, 'step.file_version_changed', $order, $step,
+            sprintf('Ֆայլ «%s»․ աշխատանքի գործող տարբերակը փոխվել է՝ v%d (%s)։', $revision->original_name, $revision->version, self::ref($order)),
+            ['file_name' => $revision->original_name, 'version' => $revision->version, 'revision_id' => $revision->id, 'note' => $revision->note]);
     }
 
     /** A job was given to a new operator (and taken from the previous one). */

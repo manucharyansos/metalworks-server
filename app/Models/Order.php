@@ -32,6 +32,11 @@ class Order extends Model
         static::deleting(function (Order $order): void {
             TaskChangeRequest::where('order_id', $order->id)->delete();
             TaskNotification::where('order_id', $order->id)->delete();
+            TaskFileRevision::where('order_id', $order->id)->get()->each(function ($revision) {
+                $path = $revision->file_path;
+                \Illuminate\Support\Facades\DB::afterCommit(fn () => \Illuminate\Support\Facades\Storage::disk('private')->delete($path));
+                $revision->delete();
+            });
         });
     }
 
