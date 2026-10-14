@@ -83,8 +83,8 @@ class EngineerController extends Controller
     public function create(): JsonResponse
     {
         try {
-            $users = User::select('id', 'name', 'email')->get();
-            $pmps = Pmp::with(['remote_number', 'files.factory'])->get();
+            $users = $this->customers();
+            $pmps = Pmp::with(['remoteNumber', 'files.factory'])->get();
             $factories = Factory::select('id', 'name', 'value')->get();
 
             return response()->json([
@@ -137,13 +137,13 @@ class EngineerController extends Controller
             $pmp = Pmp::with('files.factory')->findOrFail($validatedData['pmp_id']);
             $this->validateRemoteBelongsToPmp($validatedData['remote_number_id'] ?? null, $pmp->id);
 
-            $factoryOperatorsInput = collect($validatedData['factory_operators'] ?? []);
-            $this->validateFactoryOperators($factoryOperatorsInput);
-            $factoryOperators = $factoryOperatorsInput->keyBy('factory_id');
-
             $selectedFiles = $this->resolveSelectedFiles($validatedData, $pmp);
             $this->validateSelectedFilesBelongToPmp($selectedFiles, $pmp, $validatedData['remote_number_id'] ?? null);
             TaskWorkflow::validateFiles($selectedFiles, $pmp, $validatedData['reference_file_visibility'] ?? [], $validatedData['workshop_settings'] ?? []);
+
+            $factoryOperatorsInput = collect($validatedData['factory_operators'] ?? []);
+            $this->validateFactoryOperators($factoryOperatorsInput, TaskWorkflow::workshopIds($pmp, $selectedFiles));
+            $factoryOperators = $factoryOperatorsInput->keyBy('factory_id');
 
             $order = DB::transaction(function () use (
                 $request,
@@ -252,8 +252,8 @@ class EngineerController extends Controller
 
             $this->authorizeOwnedOrder($request, $order);
 
-            $users = User::select('id', 'name', 'email')->get();
-            $pmps = Pmp::with(['remote_number', 'files.factory'])->get();
+            $users = $this->customers();
+            $pmps = Pmp::with(['remoteNumber', 'files.factory'])->get();
             $factories = Factory::select('id', 'name', 'value')->get();
 
             return response()->json([
@@ -339,9 +339,19 @@ class EngineerController extends Controller
                 );
 
                 if (($validatedData['link_existing_files'] ?? false) && !empty($selectedFiles)) {
+                    // The jobs are rebuilt from the new files, but the people and the
+                    // per-workshop deadline, priority and proof chosen at creation stay.
+                    $kept = $order->factoryOrders()->get()->keyBy('factory_id');
+                    $operators = $kept->filter(fn ($step) => $step->operator_id)
+                        ->map(fn ($step) => ['factory_id' => $step->factory_id, 'user_id' => $step->operator_id]);
+                    $workshopSettings = $kept->map(fn ($step) => [
+                        'factory_id' => $step->factory_id, 'confirmation_required' => (bool) $step->confirmation_required,
+                        'confirmation_method' => $step->confirmation_method, 'priority' => $step->priority ?: 'normal',
+                        'deadline' => $step->deadline ? substr((string) $step->getRawOriginal('deadline'), 0, 10) : null,
+                    ])->values()->all();
                     $order->selectedFiles()->delete();
                     $order->factoryOrders()->each(function ($step) { $step->files()->detach(); $step->delete(); });
-                    TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $order->reference_file_visibility ?? [], collect());
+                    TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $order->reference_file_visibility ?? [], $operators, $workshopSettings);
                 }
             });
 
@@ -435,16 +445,40 @@ class EngineerController extends Controller
         }
     }
 
-    private function validateFactoryOperators($factoryOperators): void
+    /**
+     * A chosen operator must work in that workshop, and the workshop must really
+     * get a job in this task. Silently dropping a choice would leave the job
+     * unassigned while the engineer believes somebody is on it.
+     */
+    private function validateFactoryOperators($factoryOperators, array $workshopIds): void
     {
-        $factoryOperators->each(function ($entry) {
+        $seen = [];
+        $factoryOperators->each(function ($entry) use (&$seen, $workshopIds) {
+            $factoryId = (int) $entry['factory_id'];
+            if (isset($seen[$factoryId])) {
+                throw ValidationException::withMessages([
+                    'factory_operators' => ['Յուրաքանչյուր արտադրամասի համար կարելի է ընտրել միայն մեկ կատարող։'],
+                ]);
+            }
+            $seen[$factoryId] = true;
+            if (!in_array($factoryId, $workshopIds, true)) {
+                throw ValidationException::withMessages([
+                    'factory_operators' => ['Կատարողն ընտրված է արտադրամասի համար, որի աշխատանք այս առաջադրանքում չկա։'],
+                ]);
+            }
             $operator = User::find($entry['user_id']);
-            if (!$operator || !User::whereKey($operator->id)->assignedToFactory((int) $entry['factory_id'])->exists()) {
+            if (!$operator || !User::whereKey($operator->id)->assignedToFactory($factoryId)->exists()) {
                 throw ValidationException::withMessages([
                     'factory_operators' => ['Ընտրված աշխատակիցը չի պատկանում ընտրված արտադրամասին։'],
                 ]);
             }
         });
+    }
+
+    /** Only registered customer accounts can be a task's client, so only they are offered. */
+    private function customers()
+    {
+        return User::select('id', 'name', 'email')->forRoles(['authenticatedUser'])->orderBy('name')->get();
     }
 
     private function resolveSelectedFiles(array $validatedData, Pmp $pmp): array

@@ -41,10 +41,17 @@ final class TaskWorkflow
         return ['confirmation_required' => $required, 'confirmation_method' => $required ? $data['confirmation_method'] : null];
     }
 
+    /** Workshops that will really get a job: reference (INFO/PDF) files never create one. */
+    public static function workshopIds(Pmp $pmp, array $selected): array
+    {
+        return $pmp->files->whereIn('id', array_column($selected, 'id'))
+            ->filter(fn ($file) => !$file->factory->is_reference)->pluck('factory_id')->map(fn ($id) => (int) $id)->unique()->values()->all();
+    }
+
     public static function validateFiles(array $selected, Pmp $pmp, array $visibility, array $workshopSettings = []): void
     {
         $files = $pmp->files->whereIn('id', array_column($selected, 'id'));
-        $workshopIds = $files->filter(fn ($file) => !$file->factory->is_reference)->pluck('factory_id')->unique()->all();
+        $workshopIds = self::workshopIds($pmp, $selected);
         if (!$workshopIds) throw ValidationException::withMessages(['selected_files' => ['Ընտրեք առնվազն մեկ արտադրամասի աշխատանքային ֆայլ։ INFO/PDF-ը տեղեկատու բաժիններ են։']]);
         if (array_diff(array_column($workshopSettings, 'factory_id'), $workshopIds)) {
             throw ValidationException::withMessages(['workshop_settings' => ['Կարգավորումները պետք է պատկանեն ընտրված արտադրամասերի աշխատանքներին։']]);
