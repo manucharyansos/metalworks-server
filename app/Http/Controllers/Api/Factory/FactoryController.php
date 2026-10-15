@@ -99,6 +99,8 @@ class FactoryController extends Controller
                         ]);
                     },
                     'dates',
+                    'orderNumber',
+                    'prefixCode',
                     'creator',
                     'factoryOrders.operator:id,name',
                     'logs',

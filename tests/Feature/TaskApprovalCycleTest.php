@@ -458,7 +458,8 @@ class TaskApprovalCycleTest extends TestCase
         });
         $this->as($this->operator);
         $url = '/api/factories/factory/'.$this->factories['DXF']->id;
-        $rows = $this->getJson($url, $this->headers())->assertOk()->assertJsonCount(2, 'orders')->json('orders');
+        $rows = $this->getJson($url, $this->headers())->assertOk()->assertJsonCount(2, 'orders')
+            ->assertJsonStructure(['orders' => [['order_number' => ['number'], 'prefix_code' => ['code']]]])->json('orders');
         $this->assertEqualsCanonicalizing([$recent->id, $waiting->id], array_column($rows, 'id'));
         $this->travel(1)->seconds();
         $this->getJson($url, $this->headers())->assertOk()->assertJsonCount(1, 'orders')->assertJsonPath('orders.0.id', $waiting->id);
