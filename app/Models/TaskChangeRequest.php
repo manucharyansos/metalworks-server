@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * An operator's request to reject a workshop job or move its deadline.
+ * An operator's request to reject or reopen a workshop job, or move its deadline.
  * It changes nothing until the engineer who created the task approves it.
  */
 class TaskChangeRequest extends Model
@@ -15,6 +15,7 @@ class TaskChangeRequest extends Model
 
     public const REJECT = 'reject';
     public const DEADLINE = 'deadline';
+    public const REOPEN = 'reopen';
     public const PENDING = 'pending';
     public const APPROVED = 'approved';
     public const DECLINED = 'declined';
@@ -22,7 +23,7 @@ class TaskChangeRequest extends Model
 
     protected $fillable = [
         'order_id', 'factory_order_id', 'requested_by', 'type', 'reason', 'operator_note', 'proposed_date',
-        'previous_deadline', 'status', 'decided_by', 'decided_at', 'resolution', 'decision_note',
+        'previous_deadline', 'status', 'decided_by', 'decided_at', 'resolution', 'decision_note', 'requested_status',
     ];
 
     protected $casts = [

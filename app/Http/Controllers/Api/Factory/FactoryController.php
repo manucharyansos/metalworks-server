@@ -71,7 +71,7 @@ class FactoryController extends Controller
             if ($user->role?->name === 'engineer') $query->where('creator_id', $user->id);
             $query->whereHas('factoryOrders', function ($q) use ($id, $user) {
                 $q->where('factory_id', $id)
-                    ->whereNull('completed_at');
+                    ->visibleOnBoard();
 
                 if ($user?->factory_id && $user->role?->name !== 'admin') {
                     $q->where(function ($sub) use ($user) {
@@ -83,7 +83,7 @@ class FactoryController extends Controller
                 ->with([
                     'factoryOrders' => function ($q) use ($id, $user) {
                         $q->where('factory_id', $id)
-                            ->whereNull('completed_at');
+                            ->visibleOnBoard();
 
                         if ($user?->factory_id && $user->role?->name !== 'admin') {
                             $q->where(function ($sub) use ($user) {
@@ -161,7 +161,9 @@ class FactoryController extends Controller
         $factoryId = (int) $data['factory_id'];
         $management = in_array($user->role?->name, ['admin', 'manager'], true);
         abort_unless($management || ($user->factory_id && (int) $user->factory_id === $factoryId), 403);
-        $status = $data['factory_order']['status'];
+        // The board's Created column has no action status; persist the database's pending value.
+        $status = $data['factory_order']['status'] ?? 'pending';
+        if ($status === 'waiting') $status = 'pending';
         $allowed = FactoryOrderStatus::whereNotNull('value')->pluck('value')->merge(['pending', 'waiting'])->all();
         if ($status !== null && !in_array($status, $allowed, true)) throw ValidationException::withMessages(['factory_order.status' => ['Արտադրամասի կարգավիճակը թույլատրելի չէ։']]);
         $storedPath = null;
@@ -170,16 +172,19 @@ class FactoryController extends Controller
                 $order = Order::whereKey($id)->lockForUpdate()->firstOrFail();
                 $step = $order->factoryOrders()->where('factory_id', $factoryId)->lockForUpdate()->firstOrFail();
                 abort_unless($management || !$step->operator_id || (int) $step->operator_id === (int) $user->id, 403);
+                if (!$management && in_array($step->status, ['canceled', 'cancelled'], true)) {
+                    if (!in_array($status, [null, 'pending', 'waiting', 'accepted', 'confirmed'], true)) {
+                        throw ValidationException::withMessages(['factory_order.status' => ['Ընտրեք՝ ստեղծված, ընդունված կամ կատարվող աշխատանք։ Վերաբացման հարցումը պետք է հաստատի ստեղծող ինժեները։']]);
+                    }
+                    $changeRequest = TaskChangeRequests::submit($user, $order, $step, TaskChangeRequest::REOPEN,
+                        ['requested_status' => in_array($status, [null, 'waiting'], true) ? 'pending' : $status, 'note' => $data['factory_order']['request_note'] ?? null]);
+                    return [$order, $step->fresh(), $step->status, $changeRequest];
+                }
                 if ($step->is_blocked && in_array($status, ['confirmed', 'finished'], true)) {
                     throw ValidationException::withMessages(['factory_order.status' => ['Նախորդ արտադրամասի աշխատանքը դեռ չի ավարտվել։ Անհրաժեշտության դեպքում պետք է նաև ինժեների հաստատումը։']]);
                 }
                 if ($step->completed_at || in_array($step->status, ['finished', 'completed', 'done'], true)) {
                     throw ValidationException::withMessages(['factory_order.status' => ['Աշխատանքն արդեն ավարտված է կամ սպասում է ինժեների հաստատմանը։']]);
-                }
-                // A rejection the engineer approved is final for the workshop. Only
-                // management can reopen it; the operator cannot quietly undo it.
-                if (!$management && in_array($step->status, ['canceled', 'cancelled'], true)) {
-                    throw ValidationException::withMessages(['factory_order.status' => ['Ինժեների համաձայնությամբ մերժված աշխատանքի կարգավիճակը կատարողը չի կարող փոխել։']]);
                 }
                 if ($status === 'finished') {
                     abort_unless((int) $user->factory_id === $factoryId && (!$step->operator_id || (int) $step->operator_id === (int) $user->id), 403, 'Ավարտը կարող է ուղարկել միայն այս արտադրամասի կատարողը։');

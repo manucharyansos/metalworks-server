@@ -73,6 +73,11 @@ class FactoryOrder extends Model
         return $query->where('confirmation_required', true)->whereIn('status', ['finished', 'completed', 'done'])->whereNull('engineer_confirmation_at');
     }
 
+    public function scopeVisibleOnBoard($query)
+    {
+        return $query->where(fn ($q) => $q->whereNull('completed_at')->orWhere('completed_at', '>', now()->subHours(48)));
+    }
+
     protected static function booted(): void
     {
         static::deleting(function (FactoryOrder $step): void {

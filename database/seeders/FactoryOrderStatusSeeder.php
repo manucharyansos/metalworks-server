@@ -9,8 +9,12 @@ class FactoryOrderStatusSeeder extends Seeder
 {
     private const STATUSES = [
         [
+            'key' => 'acceptance', 'name' => 'Ընդունել', 'status_label' => 'Ընդունված',
+            'value' => 'accepted', 'icon' => 'Check', 'color' => '#6366F1', 'requires_reason' => false,
+        ],
+        [
             'key'             => 'confirmation',
-            'name'            => 'Կատարել',
+            'name'            => 'Սկսել',
             'status_label'    => 'Կատարվում է',
             'value'           => 'confirmed',
             'icon'            => 'Check',

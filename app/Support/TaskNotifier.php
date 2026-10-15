@@ -33,7 +33,8 @@ final class TaskNotifier
     {
         $what = $request->type === TaskChangeRequest::REJECT
             ? 'խնդրում է մերժել աշխատանքը'
-            : 'խնդրում է փոխել ժամկետը՝ '.optional($request->proposed_date)->format('d.m.Y');
+            : ($request->type === TaskChangeRequest::REOPEN ? 'խնդրում է վերաբացել աշխատանքը՝ '.self::statusLabel($request->requested_status)
+                : 'խնդրում է փոխել ժամկետը՝ '.optional($request->proposed_date)->format('d.m.Y'));
         self::send($order->creator_id, $actor, 'request.submitted', $order, $step,
             sprintf('«%s» արտադրամաս․ %s %s (%s)։ Սպասում է ձեր համաձայնությանը։', self::factory($step), $actor->name, $what, self::ref($order)),
             self::requestData($request));
@@ -129,6 +130,7 @@ final class TaskNotifier
     {
         return array_filter([
             'request_id' => $request->id, 'request_type' => $request->type, 'reason' => $request->reason,
+            'requested_status' => $request->requested_status,
             'operator_note' => $request->operator_note, 'proposed_date' => $request->proposed_date?->format('Y-m-d'),
             'decision_note' => $request->decision_note, 'resolution' => $request->resolution,
         ], fn ($value) => $value !== null && $value !== '');
