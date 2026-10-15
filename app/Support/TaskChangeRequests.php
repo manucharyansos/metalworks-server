@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Rejecting a workshop job or moving its deadline needs the consent of the
+ * Rejecting or reopening a workshop job, or moving its deadline, needs the consent of the
  * engineer who created the task. Operators only ask; the engineer decides.
  */
 final class TaskChangeRequests
@@ -29,6 +29,7 @@ final class TaskChangeRequests
             'operator_note' => ($data['note'] ?? null) ? trim($data['note']) : null,
             'proposed_date' => $type === TaskChangeRequest::DEADLINE ? $data['date'] : null,
             'previous_deadline' => $step->deadline ?: $order->dates?->finish_date,
+            'requested_status' => $type === TaskChangeRequest::REOPEN ? $data['requested_status'] : null,
             'status' => TaskChangeRequest::PENDING,
         ]);
         // Asking about a job takes it, like any other operator action.
@@ -36,7 +37,7 @@ final class TaskChangeRequests
         OrderLog::create(['order_id' => $order->id, 'user_id' => $actor->id, 'action' => 'factory_order.request_submitted',
             'message' => sprintf('Արտադրամաս «%s»․ %s՝ սպասում է ինժեների համաձայնությանը։', $step->factory->name, self::label($request)),
             'meta' => ['factory_order_id' => $step->id, 'request_id' => $request->id, 'type' => $type,
-                'reason' => $request->reason, 'proposed_date' => $request->proposed_date?->format('Y-m-d')]]);
+                'reason' => $request->reason, 'proposed_date' => $request->proposed_date?->format('Y-m-d'), 'requested_status' => $request->requested_status]]);
         return $request;
     }
 
@@ -79,22 +80,31 @@ final class TaskChangeRequests
                 if ($locked->status === ($approve ? TaskChangeRequest::APPROVED : TaskChangeRequest::DECLINED)) return [$locked, null, null, null];
                 throw ValidationException::withMessages(['decision' => ['Հարցումն արդեն մշակված է։']]);
             }
+            $reopen = $locked->type === TaskChangeRequest::REOPEN;
             if ($step->isWorkCompleted() || $step->awaiting_engineer_confirmation
-                || in_array($step->status, ['canceled', 'cancelled'], true) || in_array($order->status, ['canceled', 'cancelled'], true)) {
+                || ($reopen ? !in_array($step->status, ['canceled', 'cancelled'], true)
+                    : (in_array($step->status, ['canceled', 'cancelled'], true) || in_array($order->status, ['canceled', 'cancelled'], true)))) {
                 throw ValidationException::withMessages(['decision' => ['Աշխատանքն արդեն ավարտված կամ չեղարկված է։ Հարցումն այլևս կիրառելի չէ։']]);
             }
             $note = ($data['note'] ?? null) ? trim($data['note']) : null;
             $previousOperatorId = $step->operator_id;
             $resolution = null;
 
-            if ($approve && $locked->type === TaskChangeRequest::DEADLINE) {
+            if ($approve && $reopen) {
+                if (!in_array($locked->requested_status, ['pending', 'accepted', 'confirmed'], true)) throw ValidationException::withMessages(['decision' => ['Վերաբացման կարգավիճակը վավեր չէ։']]);
+                if ($step->is_blocked && $locked->requested_status === 'confirmed') throw ValidationException::withMessages(['decision' => ['Նախորդ արտադրամասի աշխատանքը դեռ չի ավարտվել։']]);
+                $step->update(['status' => $locked->requested_status, 'canceling' => '', 'cancel_date' => null,
+                    'completed_at' => null, 'finish_date' => null, 'operator_finish_date' => null]);
+                $order->status = 'pending'; $order->completed_at = null; $order->save();
+                $resolution = 'reopened';
+            } elseif ($approve && $locked->type === TaskChangeRequest::DEADLINE) {
                 if ($locked->proposed_date->startOfDay()->lte(today())) {
                     throw ValidationException::withMessages(['proposed_date' => ['Առաջարկվող ժամկետն արդեն անցել է։ Կատարողը պետք է ուղարկի նոր հարցում։']]);
                 }
                 $date = $locked->proposed_date->format('Y-m-d');
                 if ($step->deadline) $step->deadline = $date;
                 else $order->dates()->updateOrCreate(['order_id' => $order->id], ['finish_date' => $date]);
-                $step->fill(['status' => 'date_changed', 'cancel_date' => $date, 'canceling' => ''])->save();
+                $step->fill(['cancel_date' => $date, 'canceling' => ''])->save();
                 $resolution = 'deadline_changed';
             } elseif ($approve) {
                 $resolution = $data['resolution'] ?? 'canceled';
@@ -140,6 +150,6 @@ final class TaskChangeRequests
 
     private static function label(TaskChangeRequest $request): string
     {
-        return $request->type === TaskChangeRequest::REJECT ? 'մերժման հարցում' : 'ժամկետի փոփոխության հարցում';
+        return match ($request->type) { TaskChangeRequest::REJECT => 'մերժման հարցում', TaskChangeRequest::REOPEN => 'աշխատանքը վերաբացելու հարցում', default => 'ժամկետի փոփոխության հարցում' };
     }
 }

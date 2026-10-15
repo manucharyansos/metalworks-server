@@ -256,7 +256,7 @@ class CompanyTaskWorkflowTest extends TestCase
         $otherMembership->permissions()->sync(Permission::where('slug', 'orders.view')->pluck('id')->mapWithKeys(fn ($id) => [$id => ['allowed' => true]])->all());
         $this->as($this->engineer);
         $this->postJson('/api/engineers/factory-orders/'.$steps[1]->id.'/confirm', [], ['X-Company-ID' => $this->otherCompany->id])->assertNotFound();
-        $this->getJson('/api/engineers/engineer', ['X-Company-ID' => $this->otherCompany->id])->assertOk()->assertJsonCount(0, 'orders');
+        $this->getJson('/api/engineers/engineer', ['X-Company-ID' => $this->otherCompany->id])->assertOk()->assertJsonCount(0, 'orders')->assertJsonPath('stage_counts', ['created' => 0, 'accepted' => 0, 'in_progress' => 0, 'completed' => 0]);
         $this->approve($steps[1])->assertOk()->assertJsonPath('order.status', 'completed');
     }
 

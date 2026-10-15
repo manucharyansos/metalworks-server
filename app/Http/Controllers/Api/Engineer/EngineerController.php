@@ -12,7 +12,7 @@ use App\Models\PrefixCode;
 use App\Models\RemoteNumber;
 use App\Models\SelectedFile;
 use App\Models\User;
-use App\Support\{TaskNotifier, TaskWorkflow};
+use App\Support\{TaskNotifier, TaskStages, TaskWorkflow};
 use App\Models\TaskChangeRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,6 +25,7 @@ class EngineerController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        $request->validate(['stage' => 'nullable|in:'.implode(',', TaskStages::STAGES)]);
         try {
             $perPage = max(1, min((int) $request->query('per_page', 10), 100));
             $search = trim((string) $request->query('search', ''));
@@ -54,11 +55,18 @@ class EngineerController extends Controller
             }
 
             // "Waiting" means waiting for this engineer: finished proof to confirm, or an operator's request to answer.
-            $page = $query->when($request->query('confirmation') === 'waiting', fn ($q) => $q->whereHas('factoryOrders', fn ($s) => $s->where(fn ($w) => $w->awaitingEngineer())
-                ->orWhereHas('changeRequests', fn ($r) => $r->pending())))->orderByDesc('created_at')->paginate($perPage);
+            $query->when($request->query('confirmation') === 'waiting', fn ($q) => $q->whereHas('factoryOrders', fn ($s) => $s->where(fn ($w) => $w->awaitingEngineer())
+                ->orWhereHas('changeRequests', fn ($r) => $r->pending())));
+            $stageSql = TaskStages::sql();
+            $classified = (clone $query)->withoutEagerLoads()->select('orders.id')->selectRaw("$stageSql AS workflow_stage");
+            $counts = DB::query()->fromSub($classified, 'task_stages')->select('workflow_stage')->selectRaw('COUNT(*) AS stage_count')
+                ->groupBy('workflow_stage')->pluck('stage_count', 'workflow_stage')->map(fn ($count) => (int) $count);
+            $page = $query->when($request->query('stage'), fn ($q, $stage) => $q->whereRaw("($stageSql) = ?", [$stage]))
+                ->select('orders.*')->selectRaw("$stageSql AS workflow_stage")->orderByDesc('created_at')->orderByDesc('id')->paginate($perPage);
 
             return response()->json([
                 'orders' => $page->items(),
+                'stage_counts' => array_replace(array_fill_keys(TaskStages::STAGES, 0), $counts->all()),
                 'pagination' => [
                     'current_page' => $page->currentPage(),
                     'total' => $page->total(),
@@ -215,8 +223,9 @@ class EngineerController extends Controller
         }
     }
 
-    public function show(Request $request, Order $order): JsonResponse
+    public function show(Request $request, string $engineer): JsonResponse
     {
+        $order = Order::findOrFail($engineer);
         $this->authorizeOwnedOrder($request, $order);
 
         $order->load([

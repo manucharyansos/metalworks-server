@@ -149,7 +149,7 @@ class TaskApprovalCycleTest extends TestCase
 
         $this->notes($this->operator)->assertJsonPath('data.0.type', 'request.approved');
         $this->as($this->operator);
-        $this->act($order, 'confirmed')->assertUnprocessable(); // an approved rejection cannot be quietly undone
+        $this->act($order, 'confirmed')->assertOk()->assertJsonPath('change_request.type', 'reopen'); // stays rejected until the engineer agrees
         $this->assertSame('canceled', $step->fresh()->status);
     }
 
@@ -252,7 +252,7 @@ class TaskApprovalCycleTest extends TestCase
 
         $this->as($this->engineer);
         $this->decide($request, 'approve')->assertOk()->assertJsonPath('request.resolution', 'deadline_changed')
-            ->assertJsonPath('order.factory_orders.0.status', 'date_changed')->assertJsonPath('order.factory_orders.0.cancel_date', fn ($date) => str_starts_with((string) $date, '2099-02-03'));
+            ->assertJsonPath('order.factory_orders.0.status', 'pending')->assertJsonPath('order.factory_orders.0.cancel_date', fn ($date) => str_starts_with((string) $date, '2099-02-03'));
         $this->assertSame('2099-02-03', substr((string) $order->fresh()->dates->finish_date, 0, 10));
         $this->assertSame('pending', $order->fresh()->status);
         $this->notes($this->operator)->assertJsonPath('data.0.type', 'request.approved')->assertJsonPath('data.0.data.proposed_date', '2099-02-03');
@@ -391,6 +391,184 @@ class TaskApprovalCycleTest extends TestCase
         $this->as($this->engineer);
         $this->approve($step)->assertOk()->assertJsonPath('order.status', 'completed');
         $this->notes($this->operator)->assertJsonPath('data.0.type', 'step.finish_confirmed');
+    }
+
+    public function test_accepting_and_starting_are_distinct_and_stage_counts_cover_all_pages(): void
+    {
+        $created = $this->createTask($this->laser(['description' => 'stage needle created']));
+        $accepted = $this->createTask($this->laser(['description' => 'stage needle accepted']));
+        $working = $this->createTask($this->laser(['description' => 'stage needle working']));
+        $completed = $this->createTask($this->laser(['description' => 'stage needle completed']));
+        $this->as($this->operator);
+        $this->act($accepted, 'accepted')->assertOk()->assertJsonPath('factory_orders.0.status', 'accepted');
+        $this->act($working, 'confirmed')->assertOk();
+        $this->putJson('/api/factories/updateOrder/'.$created->id, ['factory_id' => $this->factories['DXF']->id, 'factory_order' => ['status' => null]], $this->headers())->assertOk()->assertJsonPath('factory_orders.0.status', 'pending');
+        $this->act($completed, 'finished')->assertOk();
+        $this->notes($this->engineer)->assertJsonPath('unread_count', 3);
+        $this->as($this->engineer);
+        $counts = ['created' => 1, 'accepted' => 1, 'in_progress' => 1, 'completed' => 1];
+        $this->getJson('/api/engineers/engineer?per_page=1', $this->headers())->assertOk()->assertJsonCount(1, 'orders')->assertJsonPath('pagination.total', 4)->assertJsonPath('stage_counts', $counts);
+        foreach (['created' => $created, 'accepted' => $accepted, 'in_progress' => $working, 'completed' => $completed] as $stage => $order) {
+            $this->getJson('/api/engineers/engineer?stage='.$stage.'&per_page=1', $this->headers())->assertOk()->assertJsonCount(1, 'orders')->assertJsonPath('orders.0.id', $order->id)->assertJsonPath('orders.0.workflow_stage', $stage)->assertJsonPath('stage_counts', $counts);
+        }
+        $this->getJson('/api/engineers/engineer?search=needle%20accepted', $this->headers())->assertOk()->assertJsonPath('stage_counts.accepted', 1)->assertJsonPath('stage_counts.created', 0)->assertJsonCount(1, 'orders');
+        $this->getJson('/api/engineers/engineer?stage=unknown', $this->headers())->assertUnprocessable();
+        $this->as($this->otherEngineer);
+        $this->getJson('/api/engineers/engineer', $this->headers())->assertOk()->assertJsonCount(0, 'orders')->assertJsonPath('stage_counts', array_fill_keys(array_keys($counts), 0));
+    }
+
+    public function test_stage_classification_keeps_null_rejected_partial_and_waiting_work_visible(): void
+    {
+        $empty = $this->createTask($this->laser());
+        $this->in($this->company, fn () => $empty->factoryOrders()->firstOrFail()->update(['status' => 'pending']));
+        $rejected = $this->createTask($this->laser());
+        $this->in($this->company, fn () => $rejected->factoryOrders()->firstOrFail()->update(['status' => 'canceled']));
+        $partial = $this->createTask($this->laser());
+        $this->in($this->company, function () use ($partial) {
+            $partial->factoryOrders()->firstOrFail()->update(['status' => 'finished', 'completed_at' => now()]);
+            FactoryOrder::create(['order_id' => $partial->id, 'factory_id' => $this->factories['DLD']->id, 'status' => 'pending']);
+        });
+        $waiting = $this->createTask($this->laser(['confirmation_required' => true, 'confirmation_method' => 'text']));
+        $this->as($this->operator); $this->act($waiting, 'finished', ['evidence_text' => 'Done'])->assertOk();
+        $done = $this->createTask($this->laser());
+        $this->in($this->company, function () use ($done) {
+            $done->factoryOrders()->firstOrFail()->update(['status' => 'finished', 'completed_at' => now()]);
+            FactoryOrder::create(['order_id' => $done->id, 'factory_id' => $this->factories['INFO']->id, 'status' => 'pending']);
+            FactoryOrder::create(['order_id' => $done->id, 'factory_id' => $this->factories['DLD']->id, 'status' => 'canceled']);
+        });
+        $this->as($this->engineer);
+        $this->getJson('/api/engineers/engineer', $this->headers())->assertOk()->assertJsonPath('stage_counts', ['created' => 2, 'accepted' => 0, 'in_progress' => 2, 'completed' => 1]);
+        $this->getJson('/api/engineers/engineer?confirmation=waiting', $this->headers())->assertOk()->assertJsonCount(1, 'orders')->assertJsonPath('orders.0.id', $waiting->id)->assertJsonPath('stage_counts.in_progress', 1);
+    }
+
+    public function test_completed_work_stays_on_its_operators_board_for_exactly_48_hours(): void
+    {
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2026-10-15 12:00:00'));
+        $recent = $this->createTask($this->laser());
+        $expired = $this->createTask($this->laser());
+        $waiting = $this->createTask($this->laser(['confirmation_required' => true, 'confirmation_method' => 'text']));
+        $this->as($this->operator);
+        $this->act($recent, 'finished')->assertOk();
+        $this->act($expired, 'finished')->assertOk();
+        $this->act($waiting, 'finished', ['evidence_text' => 'Still awaiting approval'])->assertOk();
+        $this->in($this->company, function () use ($recent, $expired, $waiting) {
+            $recent->factoryOrders()->firstOrFail()->update(['completed_at' => now()->subHours(48)->addSecond()]);
+            $expired->factoryOrders()->firstOrFail()->update(['completed_at' => now()->subHours(48)]);
+            $waiting->factoryOrders()->firstOrFail()->update(['operator_finish_date' => now()->subDays(5), 'finish_date' => now()->subDays(5)]);
+        });
+        $this->as($this->operator);
+        $url = '/api/factories/factory/'.$this->factories['DXF']->id;
+        $rows = $this->getJson($url, $this->headers())->assertOk()->assertJsonCount(2, 'orders')
+            ->assertJsonStructure(['orders' => [['order_number' => ['number'], 'prefix_code' => ['code']]]])->json('orders');
+        $this->assertEqualsCanonicalizing([$recent->id, $waiting->id], array_column($rows, 'id'));
+        $this->travel(1)->seconds();
+        $this->getJson($url, $this->headers())->assertOk()->assertJsonCount(1, 'orders')->assertJsonPath('orders.0.id', $waiting->id);
+        $this->as($this->secondOperator); $this->getJson($url, $this->headers())->assertOk()->assertJsonCount(0, 'orders');
+        $this->as($this->bendOperator); $this->getJson($url, $this->headers())->assertForbidden();
+        $this->as($this->engineer);
+        $this->getJson('/api/engineers/engineer?stage=completed', $this->headers())->assertOk()->assertJsonCount(2, 'orders'); // history is retained
+        $this->travelBack();
+    }
+
+    public function test_completion_retention_begins_when_engineer_approves_even_days_after_submission(): void
+    {
+        $this->travelTo(\Illuminate\Support\Carbon::parse('2026-10-10 12:00:00'));
+        $order = $this->createTask($this->laser(['confirmation_required' => true, 'confirmation_method' => 'text']));
+        $step = $order->factoryOrders()->firstOrFail();
+        $this->as($this->operator); $this->act($order, 'finished', ['evidence_text' => 'Submitted'])->assertOk();
+        $this->travel(5)->days();
+        $this->as($this->engineer); $this->approve($step)->assertOk();
+        $this->assertSame(now()->format('Y-m-d H:i:s'), $step->fresh()->completed_at);
+        $this->as($this->operator);
+        $url = '/api/factories/factory/'.$this->factories['DXF']->id;
+        $this->getJson($url, $this->headers())->assertOk()->assertJsonCount(1, 'orders');
+        $this->travel(47)->hours(); $this->getJson($url, $this->headers())->assertOk()->assertJsonCount(1, 'orders');
+        $this->travel(1)->hours(); $this->getJson($url, $this->headers())->assertOk()->assertJsonCount(0, 'orders');
+        $this->travelBack();
+    }
+
+    public function test_reopen_request_waits_for_its_creator_and_cannot_be_duplicated_or_finished_directly(): void
+    {
+        $order = $this->createTask($this->laser());
+        $step = $order->factoryOrders()->firstOrFail();
+        $this->in($this->company, fn () => $step->update(['status' => 'canceled', 'canceling' => 'other']));
+        $this->as($this->operator);
+        $this->act($order, 'finished')->assertUnprocessable();
+        $this->act($order, 'accepted', ['request_note' => 'Material arrived'])->assertOk()->assertJsonPath('change_request.type', 'reopen')->assertJsonPath('change_request.requested_status', 'accepted')->assertJsonPath('factory_orders.0.status', 'canceled');
+        $request = $this->lastRequest($order);
+        $this->act($order, 'confirmed')->assertUnprocessable();
+        $this->assertSame('canceled', $step->fresh()->status);
+        $this->notes($this->engineer)->assertJsonPath('data.0.data.request_type', 'reopen')->assertJsonPath('data.0.data.requested_status', 'accepted');
+        foreach ([$this->otherEngineer, $this->admin, $this->operator] as $user) { $this->as($user); $this->decide($request, 'approve')->assertForbidden(); }
+        $this->as($this->engineer);
+        $this->getJson('/api/engineers/engineer?confirmation=waiting', $this->headers())->assertOk()->assertJsonPath('orders.0.factory_orders.0.pending_request.type', 'reopen');
+        $this->decide($request, 'approve')->assertOk()->assertJsonPath('request.resolution', 'reopened')->assertJsonPath('order.factory_orders.0.status', 'accepted')->assertJsonPath('order.factory_orders.0.canceling', '')->assertJsonPath('order.status', 'pending');
+        $this->decide($request, 'approve')->assertOk();
+        $this->notes($this->operator)->assertJsonPath('data.0.type', 'request.approved');
+        $this->as($this->operator); $this->act($order, 'confirmed')->assertOk(); $this->act($order, 'finished')->assertOk();
+    }
+
+    public function test_reopen_can_be_declined_withdrawn_or_superseded_by_management(): void
+    {
+        $order = $this->createTask($this->laser());
+        $step = $order->factoryOrders()->firstOrFail();
+        $this->in($this->company, fn () => $step->update(['status' => 'canceled']));
+        $this->as($this->operator); $this->act($order, 'pending')->assertOk();
+        $request = $this->lastRequest($order);
+        $this->as($this->engineer); $this->decide($request, 'decline', ['note' => 'Not ready'])->assertOk()->assertJsonPath('order.factory_orders.0.status', 'canceled');
+        $this->as($this->operator); $this->act($order, 'pending')->assertOk();
+        $request = $this->lastRequest($order); $this->withdraw($request)->assertOk();
+        $this->assertSame('canceled', $step->fresh()->status);
+        $this->act($order, 'confirmed')->assertOk(); $request = $this->lastRequest($order);
+        $this->as($this->admin);
+        $this->putJson('/api/factories/updateOrder/'.$order->id, ['factory_id' => $step->factory_id, 'factory_order' => ['status' => 'accepted']], $this->headers())->assertOk()->assertJsonPath('factory_orders.0.status', 'accepted');
+        $this->assertSame('withdrawn', $request->fresh()->status);
+        $this->as($this->engineer); $this->decide($request, 'approve')->assertUnprocessable();
+    }
+
+    public function test_reopening_cannot_skip_an_unfinished_previous_workshop(): void
+    {
+        $order = $this->createTask($this->laser());
+        $step = $order->factoryOrders()->firstOrFail();
+        $this->in($this->company, function () use ($order, $step) {
+            $before = FactoryOrder::create(['order_id' => $order->id, 'factory_id' => $this->factories['DLD']->id, 'status' => 'pending']);
+            $step->update(['status' => 'canceled', 'depends_on_id' => $before->id]);
+        });
+        $this->as($this->operator); $this->act($order, 'confirmed')->assertOk();
+        $request = $this->lastRequest($order);
+        $this->as($this->engineer); $this->decide($request, 'approve')->assertUnprocessable()->assertJsonValidationErrors('decision');
+        $this->assertSame('canceled', $step->fresh()->status);
+        $this->assertSame('pending', $request->fresh()->status);
+    }
+
+    public function test_deadline_approval_keeps_an_accepted_job_accepted(): void
+    {
+        $order = $this->createTask($this->laser());
+        $this->as($this->operator); $this->act($order, 'accepted')->assertOk();
+        $this->act($order, 'date_changed', ['cancel_date' => '2099-01-01'])->assertOk();
+        $this->as($this->engineer); $this->decide($this->lastRequest($order), 'approve')->assertOk()->assertJsonPath('order.factory_orders.0.status', 'accepted');
+        $this->getJson('/api/engineers/engineer?stage=accepted', $this->headers())->assertOk()->assertJsonCount(1, 'orders');
+    }
+
+    public function test_engineer_notification_links_load_the_owned_task_and_reject_other_creators(): void
+    {
+        $order = $this->createTask($this->laser());
+        $url = '/api/engineers/engineer/'.$order->id;
+        $this->getJson($url, $this->headers())->assertOk()->assertJsonPath('order.id', $order->id)->assertJsonPath('order.factory_orders.0.factory_id', $this->factories['DXF']->id);
+        $this->as($this->otherEngineer); $this->getJson($url, $this->headers())->assertForbidden();
+        $this->as($this->engineer); $this->getJson('/api/engineers/engineer/9999999', $this->headers())->assertNotFound();
+    }
+
+    public function test_acceptance_migration_can_resume_without_overwriting_custom_status_labels(): void
+    {
+        $this->in($this->company, fn () => \App\Models\FactoryOrderStatus::where('value', 'accepted')->update(['name' => 'Custom acceptance']));
+        $migration = require database_path('migrations/2026_10_15_140000_add_task_acceptance_and_reopen_requests.php');
+        $migration->up(); $migration->up();
+        $this->in($this->company, function () {
+            $this->assertSame(1, \App\Models\FactoryOrderStatus::where('value', 'accepted')->count());
+            $this->assertSame('Custom acceptance', \App\Models\FactoryOrderStatus::where('value', 'accepted')->value('name'));
+        });
+        $this->assertTrue(Schema::hasColumn('task_change_requests', 'requested_status'));
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
