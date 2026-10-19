@@ -9,8 +9,8 @@ use Illuminate\Validation\ValidationException;
 
 final class MembershipAssignments
 {
-    public const STAFF_ROLES = ['admin', 'manager', 'engineer', 'laser', 'bend', 'powder_catting'];
-    public const OPERATORS = ['laser', 'bend', 'powder_catting'];
+    public const STAFF_ROLES = ['admin', 'manager', 'engineer', 'laser', 'bend', 'powder_catting', 'operator'];
+    public const OPERATORS = ['laser', 'bend', 'powder_catting', 'operator'];
 
     public static function validate(array $data, array $allowedRoles): array
     {
@@ -21,7 +21,7 @@ final class MembershipAssignments
                 'factory_id' => 'nullable|integer|exists:factories,id',
             ])->validate();
             $role = Role::findOrFail($legacy['role_id']);
-            if (in_array($role->name, self::OPERATORS, true) && empty($legacy['factory_id'])) {
+            if (in_array($role->name, self::OPERATORS, true) && (empty($legacy['factory_id']) || !Factory::activeWorkshops()->whereKey($legacy['factory_id'])->exists())) {
                 throw ValidationException::withMessages(['factory_id' => ['Select a workshop for this position.']]);
             }
             return [['role_id' => (int) $role->id, 'factory_id' => in_array($role->name, self::OPERATORS, true) ? (int) $legacy['factory_id'] : null]];
@@ -36,7 +36,7 @@ final class MembershipAssignments
         foreach ($validated['assignments'] as $index => $row) {
             $role = $roles->get($row['role_id']);
             $operator = in_array($role->name, self::OPERATORS, true);
-            if ($operator && empty($row['factory_id'])) throw ValidationException::withMessages(["assignments.$index.factory_id" => ['Select a workshop for this position.']]);
+            if ($operator && (empty($row['factory_id']) || !Factory::activeWorkshops()->whereKey($row['factory_id'])->exists())) throw ValidationException::withMessages(["assignments.$index.factory_id" => ['Select a workshop for this position.']]);
             if (!$operator && !empty($row['factory_id'])) throw ValidationException::withMessages(["assignments.$index.factory_id" => ['Workshops are assigned to production positions.']]);
             $factory = $operator ? (int) $row['factory_id'] : null;
             $key = $role->id . ':' . ($factory ?? 0);
@@ -51,6 +51,8 @@ final class MembershipAssignments
     {
         DB::transaction(function () use ($membership, $assignments, $resetPermissions): void {
             $membership = CompanyMembership::whereKey($membership->id)->lockForUpdate()->firstOrFail();
+            $ids = array_values(array_unique(array_filter(array_column($assignments, 'factory_id'))));
+            if (Factory::activeWorkshops()->whereIn('id', $ids)->sharedLock()->get(['id'])->count() !== count($ids)) throw ValidationException::withMessages(['assignments' => ['Արտադրամասերի հասանելիությունը փոխվել է։ Թարմացրեք ընտրությունը։']]);
             $oldRoles = self::roleNames($membership);
             $primary = $assignments[0];
             $membership->fill($primary)->saveQuietly();

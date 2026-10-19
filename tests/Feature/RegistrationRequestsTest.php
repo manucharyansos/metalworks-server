@@ -162,7 +162,7 @@ class RegistrationRequestsTest extends TestCase
         $list = $this->getJson('/api/registration-requests')->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('counts.pending', 1)->assertDontSee('second@example.invalid');
         $this->assertArrayNotHasKey('password_hash', $list->json('data.0'));
         $this->assertArrayNotHasKey('existing_user_id', $list->json('data.0'));
-        $options = $this->getJson('/api/registration-requests/options')->assertOk()->assertJsonCount(6, 'factories');
+        $options = $this->getJson('/api/registration-requests/options')->assertOk()->assertJsonCount(4, 'factories');
         $this->assertNotContains('admin', array_column($options->json('roles'), 'name'));
         $this->postJson($this->reviewUrl($otherRequest))->assertNotFound();
         $this->postJson($this->reviewUrl($otherRequest, 'reject'))->assertNotFound();

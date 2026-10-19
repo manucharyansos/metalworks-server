@@ -16,8 +16,8 @@ use Illuminate\Validation\{Rule, ValidationException};
 
 class RegistrationRequestController extends Controller
 {
-    private const STAFF_ROLES = ['admin', 'manager', 'engineer', 'laser', 'bend', 'powder_catting'];
-    private const OPERATOR_ROLES = ['laser', 'bend', 'powder_catting'];
+    private const STAFF_ROLES = ['admin', 'manager', 'engineer', 'laser', 'bend', 'powder_catting', 'operator'];
+    private const OPERATOR_ROLES = ['laser', 'bend', 'powder_catting', 'operator'];
 
     public function companies(): JsonResponse
     {
@@ -130,7 +130,7 @@ class RegistrationRequestController extends Controller
         abort_unless($company, 403, 'Company access denied.');
         return app(CompanyContext::class)->run($company, fn () => response()->json([
             'roles' => Role::whereIn('name', $this->allowedRoles($request))->orderBy('name')->get(['id', 'name', 'value']),
-            'factories' => Factory::orderBy('name')->get(['id', 'name', 'value']),
+            'factories' => Factory::activeWorkshops()->orderBy('name')->get(['id', 'name', 'value']),
         ]));
     }
 

@@ -28,6 +28,7 @@ class WorkersController extends Controller
         'bend',
         'laser',
         'powder_catting',
+        'operator',
         'engineer',
     ];
 
@@ -35,6 +36,7 @@ class WorkersController extends Controller
         'bend',
         'laser',
         'powder_catting',
+        'operator',
     ];
 
     public function index(): AnonymousResourceCollection
@@ -71,9 +73,9 @@ class WorkersController extends Controller
             'can_manage_companies' => $companies->isNotEmpty(),
             'companies' => $companies->map(fn ($c) => [
                 ...$c->summary(),
-                'factories' => Factory::withoutGlobalScope('company')->where('company_id', $c->id)->get(['id', 'name', 'value']),
+                'factories' => Factory::withoutGlobalScope('company')->activeWorkshops()->where('company_id', $c->id)->get(['id', 'name', 'value']),
             ]),
-            'factories' => Factory::query()
+            'factories' => Factory::activeWorkshops()
                 ->orderBy('name')
                 ->get(['id', 'name', 'value']),
         ]);

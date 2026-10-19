@@ -93,7 +93,7 @@ class CompanyWorkspaceTest extends TestCase
         $id = $response->json('company.id');
         $this->assertDatabaseCount('orders', 1);
         $this->assertDatabaseHas('companies', ['id' => $id, 'slug' => 'third']);
-        $this->assertSame(6, Factory::withoutGlobalScope('company')->where('company_id', $id)->count());
+        $this->assertSame(7, Factory::withoutGlobalScope('company')->where('company_id', $id)->count());
         $this->getJson('/api/user', ['X-Company-ID' => $id])->assertOk()->assertJsonPath('company.id', $id);
         $this->postJson('/api/companies', ['name' => 'Duplicate', 'slug' => 'THIRD'])->assertUnprocessable();
     }

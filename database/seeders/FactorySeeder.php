@@ -19,13 +19,15 @@ class FactorySeeder extends Seeder
             'IQS' => 'Laser',
             'INFO' => 'Informal',
             'PDF' => 'PDF',
+            'POWDER' => 'Փոշեներկում',
         ];
 
         foreach ($factories as $value => $name) {
-            Factory::updateOrCreate(
+            Factory::firstOrCreate(
                 ['value' => $value],
-                ['name' => $name]
+                ['name' => $name] + (\Illuminate\Support\Facades\Schema::hasColumn('factories', 'is_workshop') ? ['is_workshop' => !in_array($value, ['SW', 'INFO', 'PDF'], true), 'is_active' => true] : [])
             );
         }
+        (new FileCategorySeeder)->run();
     }
 }

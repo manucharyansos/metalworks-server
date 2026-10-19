@@ -30,7 +30,7 @@ class FactoryController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $query = Factory::with('operators:users.id,users.name,users.factory_id');
+        $query = Factory::activeWorkshops()->with('operators:users.id,users.name,users.factory_id');
 
         if ($user?->factory_id && $user->role?->name !== 'admin') {
             $query->whereKey($user->factory_id);
@@ -281,7 +281,7 @@ class FactoryController extends Controller
             return response()->json(['message' => 'Factory not found'], 404);
         }
 
-        $factory->delete();
+        throw ValidationException::withMessages(['factory' => ['Արտադրամասը ջնջելու փոխարեն արխիվացրեք այն «Արտադրամասեր» բաժնում։']]);
 
         return response()->json(null, 204);
     }

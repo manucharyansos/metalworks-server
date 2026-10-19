@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\PMP;
 use App\Http\Controllers\Controller;
 use App\Models\BendFileExtension;
 use App\Models\Factory;
+use App\Models\FileCategory;
 use App\Models\FactoryFileExtension;
 use App\Models\LaserFileExtension;
 use App\Models\Pmp;
@@ -44,9 +45,15 @@ class PmpFilesController extends Controller
                 'pmp_id' => 'required|exists:pmps,id',
                 'remote_number_id' => 'required|exists:remote_numbers,id',
                 'factory_id' => 'required|exists:factories,id',
+                'file_category_id' => 'nullable|integer|exists:file_categories,id',
                 'file' => 'required|file|max:10240',
             ];
 
+            $request->validate(['factory_id' => 'required_without:file_category_id|nullable|integer|exists:factories,id', 'file_category_id' => 'nullable|integer|exists:file_categories,id']);
+            $category = $request->filled('file_category_id') ? FileCategory::findOrFail($request->integer('file_category_id')) : (Schema::hasTable('file_categories') ? FileCategory::forLegacyFactory((int) $request->input('factory_id')) : null);
+            abort_unless(!$category || $category->is_active, 422, 'Ֆայլերի բաժինը արխիվացված է։');
+            if ($category && $request->filled('factory_id') && (int) $request->input('factory_id') !== (int) $category->legacy_factory_id) throw ValidationException::withMessages(['file_category_id' => ['Ֆայլերի բաժինը չի համապատասխանում ընտրված բաժնին։']]);
+            if ($category) $request->merge(['factory_id' => $category->legacy_factory_id, 'file_category_id' => $category->id]);
             $factory = Factory::findOrFail($request->input('factory_id'));
 
             if ($factory->value === 'DXF') {
@@ -70,7 +77,7 @@ class PmpFilesController extends Controller
                 return response()->json([
                     'error' => $allowed
                         ? 'Ֆայլի տեսակը թույլատրված չէ։ Թույլատրելի են՝ ' . implode(', ', $allowed)
-                        : 'Այս արտադրամասի համար թույլատրելի ֆայլի տեսակ դեռ սահմանված չէ։',
+                        : 'Այս ֆայլերի բաժնի համար թույլատրելի ձևաչափ դեռ սահմանված չէ։',
                 ], 422);
             }
 
@@ -102,6 +109,7 @@ class PmpFilesController extends Controller
                 'pmp_id' => $pmp->id,
                 'remote_number_id' => $remote->id,
                 'factory_id' => $factory->id,
+                ...($category ? ['file_category_id' => $category->id] : []),
                 'path' => $storedPath,
                 'original_name' => $originalName,
                 'file_type' => $extension,
@@ -114,6 +122,10 @@ class PmpFilesController extends Controller
                 'message' => 'Ֆայլը հաջողությամբ վերբեռնվեց',
                 'file' => $record,
             ], 201);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            throw $e;
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpExceptionInterface $e) {
+            throw $e;
         } catch (ValidationException $e) {
             throw $e;
         } catch (\Throwable $e) {

@@ -79,14 +79,14 @@ class AdminOperationsController extends Controller
                 'unassigned_factory_steps' => (int) ($factoryStepSummary->unassigned_factory_steps ?? 0),
                 'awaiting_admin_confirmation' => (int) ($factoryStepSummary->awaiting_admin_confirmation ?? 0),
                 'awaiting_engineer_confirmation' => (int) ($factoryStepSummary->awaiting_admin_confirmation ?? 0),
-                'factories' => Factory::count(),
+                'factories' => Factory::activeWorkshops()->count(),
                 'factory_operators' => User::query()->assignedToFactory()->count(),
             ];
 
             $factoryStats = $this->factoryStats($now, $today, $tomorrow, $thirtyDaysAgo);
             $operatorStats = $this->operatorStats($now, $today, $tomorrow, $thirtyDaysAgo);
 
-            $factories = Factory::query()
+            $factories = Factory::activeWorkshops()
                 ->withCount(['operators' => fn ($query) => $query->select(DB::raw('count(distinct users.id)'))])
                 ->orderBy('name')
                 ->get(['id', 'name', 'value'])
@@ -179,7 +179,7 @@ class AdminOperationsController extends Controller
                 'operators' => $operators,
                 'attention_orders' => $attentionOrders,
                 'filters' => [
-                    'factories' => Factory::query()->orderBy('name')->get(['id', 'name', 'value']),
+                    'factories' => Factory::where('is_workshop', true)->orderBy('name')->get(['id', 'name', 'value']),
                     'operators' => User::query()->assignedToFactory()->orderBy('name')->get(['id', 'name', 'factory_id']),
                     'factory_statuses' => FactoryOrderStatus::query()
                         ->where('is_active', true)

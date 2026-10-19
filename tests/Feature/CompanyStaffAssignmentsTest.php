@@ -35,7 +35,7 @@ class CompanyStaffAssignmentsTest extends TestCase
         $this->a = Company::where('slug', 'metalworks')->firstOrFail();
         $this->b = Company::create(['name' => 'Second Works', 'slug' => 'second']);
         foreach ([$this->a, $this->b] as $company) $this->in($company, fn () => (new FactorySeeder)->run());
-        $this->factories = $this->in($this->a, fn () => Factory::orderBy('id')->limit(2)->get()->all());
+        $this->factories = $this->in($this->a, fn () => Factory::activeWorkshops()->orderBy('id')->limit(2)->get()->all());
         $this->manager = $this->account($this->a, 'manager@example.invalid', 'manager');
         $this->admin = $this->account($this->a, 'admin@example.invalid', 'admin');
         $this->admin->forceFill(['is_platform_admin' => true])->save();
@@ -83,7 +83,7 @@ class CompanyStaffAssignmentsTest extends TestCase
     {
         $this->submitEmployee();
         $this->as($this->manager);
-        $foreign = $this->in($this->b, fn () => Factory::firstOrFail());
+        $foreign = $this->in($this->b, fn () => Factory::activeWorkshops()->firstOrFail());
         foreach ([
             [$this->position('engineer'), $this->position('engineer')],
             [$this->position('laser')], [$this->position('laser', $foreign->id)],
@@ -204,7 +204,7 @@ class CompanyStaffAssignmentsTest extends TestCase
     {
         $person = $this->employee(); $this->grant($person, ['pmp.view']);
         CompanyMembership::create(['company_id' => $this->b->id, 'user_id' => $this->manager->id, 'role_id' => $this->role('manager')]);
-        $foreign = $this->in($this->b, fn () => Factory::firstOrFail());
+        $foreign = $this->in($this->b, fn () => Factory::activeWorkshops()->firstOrFail());
         $this->as($this->manager);
         $this->putJson('/api/company-access/'.$person->id, ['access' => [['company_id' => $this->b->id, 'enabled' => true, 'assignments' => [$this->position('engineer'), $this->position('bend', $foreign->id)]]]], $this->headers())->assertOk();
         $membership = $this->membership($person, $this->b);

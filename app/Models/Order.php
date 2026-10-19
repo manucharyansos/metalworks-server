@@ -122,7 +122,7 @@ class Order extends Model
 
     public function updateStatusIfAllFactoriesCompleted(): void
     {
-        $factoryOrders = $this->factoryOrders()->get();
+        $factoryOrders = $this->factoryOrders()->whereHas('factory', fn ($query) => $query->where('is_workshop', true)->where('is_reference', false))->get();
 
         if ($factoryOrders->isEmpty()) {
             return;
