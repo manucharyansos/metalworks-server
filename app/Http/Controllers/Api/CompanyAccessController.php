@@ -38,7 +38,7 @@ class CompanyAccessController extends Controller
                 return [
                     'id' => $company->id, 'name' => $company->name, 'read_only' => $readOnly,
                     'selection_locked' => $readOnly || $company->id === app(CompanyContext::class)->id(),
-                    'factories' => $client ? [] : Factory::withoutGlobalScope('company')->where('company_id', $company->id)->orderBy('name')->get(['id', 'name']),
+                    'factories' => $client ? [] : Factory::withoutGlobalScope('company')->activeWorkshops()->where('company_id', $company->id)->orderBy('name')->get(['id', 'name']),
                     'access' => ['company_id' => $company->id, 'enabled' => (bool) $membership?->is_active, ...($client ? [] : [
                         'role_id' => $membership?->role_id, 'factory_id' => $membership?->factory_id,
                         'assignments' => app(CompanyContext::class)->run($company, fn () => MembershipAssignments::rows($membership))])],

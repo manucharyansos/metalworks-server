@@ -93,7 +93,7 @@ class EngineerController extends Controller
         try {
             $users = $this->customers();
             $pmps = Pmp::with(['remoteNumber', 'files.factory'])->get();
-            $factories = Factory::select('id', 'name', 'value')->get();
+            $factories = Factory::activeWorkshops()->select('id', 'name', 'value')->get();
 
             return response()->json([
                 'users' => $users,
@@ -147,10 +147,10 @@ class EngineerController extends Controller
 
             $selectedFiles = $this->resolveSelectedFiles($validatedData, $pmp);
             $this->validateSelectedFilesBelongToPmp($selectedFiles, $pmp, $validatedData['remote_number_id'] ?? null);
-            TaskWorkflow::validateFiles($selectedFiles, $pmp, $validatedData['reference_file_visibility'] ?? [], $validatedData['workshop_settings'] ?? []);
+            TaskWorkflow::validateFiles($selectedFiles, $pmp, $validatedData['reference_file_visibility'] ?? [], $validatedData['workshop_settings'] ?? [], $validatedData['file_routing'] ?? []);
 
             $factoryOperatorsInput = collect($validatedData['factory_operators'] ?? []);
-            $this->validateFactoryOperators($factoryOperatorsInput, TaskWorkflow::workshopIds($pmp, $selectedFiles));
+            $this->validateFactoryOperators($factoryOperatorsInput, TaskWorkflow::workshopIds($pmp, $selectedFiles, $validatedData['file_routing'] ?? []));
             $factoryOperators = $factoryOperatorsInput->keyBy('factory_id');
 
             $order = DB::transaction(function () use (
@@ -175,7 +175,7 @@ class EngineerController extends Controller
                 $order->prefixCode()->create(['code' => $this->generateUniquePrefixCode()]);
                 $order->dates()->create(['finish_date' => $validatedData['finish_date']]);
 
-                TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $validatedData['reference_file_visibility'] ?? [], $factoryOperators, $validatedData['workshop_settings'] ?? []);
+                TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $validatedData['reference_file_visibility'] ?? [], $factoryOperators, $validatedData['workshop_settings'] ?? [], $validatedData['file_routing'] ?? []);
 
                 return $order;
             });
@@ -263,7 +263,7 @@ class EngineerController extends Controller
 
             $users = $this->customers();
             $pmps = Pmp::with(['remoteNumber', 'files.factory'])->get();
-            $factories = Factory::select('id', 'name', 'value')->get();
+            $factories = Factory::activeWorkshops()->select('id', 'name', 'value')->get();
 
             return response()->json([
                 'order' => $order,
@@ -322,9 +322,11 @@ class EngineerController extends Controller
             if (!empty($selectedFiles)) {
                 $this->validateSelectedFilesBelongToPmp($selectedFiles, $pmp, $validatedData['remote_number_id'] ?? null);
             }
-            if (!empty($selectedFiles)) TaskWorkflow::validateFiles($selectedFiles, $pmp, $validatedData['reference_file_visibility'] ?? $order->reference_file_visibility ?? []);
+            $routing = $validatedData['file_routing'] ?? $order->factoryOrders()->with('files')->get()->flatMap(fn ($step) => $step->files->reject(fn ($file) => $file->is_reference_file)->map(fn ($file) => ['file_id' => $file->id, 'factory_id' => $step->factory_id]))->groupBy('file_id')->map(fn ($rows, $id) => ['file_id' => (int) $id, 'factory_ids' => $rows->pluck('factory_id')->unique()->values()->all()])->values()->all();
+            $routing = array_values(array_filter($routing, fn ($row) => in_array($row['file_id'], array_column($selectedFiles, 'id'))));
+            if (!empty($selectedFiles)) TaskWorkflow::validateFiles($selectedFiles, $pmp, $validatedData['reference_file_visibility'] ?? $order->reference_file_visibility ?? [], [], $routing);
 
-            DB::transaction(function () use ($request, $validatedData, $order, $pmp, $selectedFiles) {
+            DB::transaction(function () use ($request, $validatedData, $order, $pmp, $selectedFiles, $routing) {
                 $order = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
                 if ($order->logs()->whereIn('action', ['factory_order.work_added', 'factory_order.operator_changed', 'factory_order.evidence_requirements_changed', 'order.file_version_changed'])->exists()
                     || $order->factoryOrders()->whereNotIn('status', ['pending', 'waiting'])->exists()
@@ -360,7 +362,7 @@ class EngineerController extends Controller
                     ])->values()->all();
                     $order->selectedFiles()->delete();
                     $order->factoryOrders()->each(function ($step) { $step->files()->detach(); $step->delete(); });
-                    TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $order->reference_file_visibility ?? [], $operators, $workshopSettings);
+                    TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $order->reference_file_visibility ?? [], $operators, $workshopSettings, $routing);
                 }
             });
 

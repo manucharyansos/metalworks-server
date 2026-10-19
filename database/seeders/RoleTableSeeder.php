@@ -18,6 +18,7 @@ class RoleTableSeeder extends Seeder
             'laser' => 'Լազերաին կտրում',
             'powder_catting' => 'Փոշեներկում',
             'engineer' => 'Ինժիներ',
+            'operator' => 'Օպերատոր',
         ];
 
         foreach ($roles as $name => $value) {

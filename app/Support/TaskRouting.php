@@ -60,8 +60,8 @@ final class TaskRouting
             $order = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
             self::authorize($actor, $order);
             if (in_array($order->status, ['canceled', 'cancelled'], true)) throw ValidationException::withMessages(['order' => ['Չեղարկված առաջադրանքին աշխատանք ավելացնել հնարավոր չէ։']]);
-            $factory = Factory::findOrFail($data['factory_id']);
-            if ($factory->is_reference) throw ValidationException::withMessages(['factory_id' => ['INFO/PDF-ը տեղեկատու բաժիններ են։ Ընտրեք արտադրամաս։']]);
+            $factory = Factory::whereKey($data['factory_id'])->sharedLock()->firstOrFail();
+            if (!$factory->is_workshop || !$factory->is_active || $factory->is_reference) throw ValidationException::withMessages(['factory_id' => ['INFO/PDF-ը տեղեկատու բաժիններ են։ Ընտրեք արտադրամաս։']]);
             $steps = $order->factoryOrders()->with('files.factory')->get();
             $step = $steps->firstWhere('factory_id', $factory->id);
             if ($step && ($step->isWorkCompleted() || !in_array($step->status, [null, '', 'pending', 'waiting'], true))) {
@@ -71,7 +71,7 @@ final class TaskRouting
             $ids = array_column($data['files'], 'id');
             if (array_diff($ids, $availableIds->all())) throw ValidationException::withMessages(['files' => ['Կցեք միայն այս առաջադրանքի ֆայլերը։']]);
             $files = PmpFiles::with('factory')->whereIn('id', $ids)->get()->keyBy('id');
-            if ($files->count() !== count($ids) || !$files->contains(fn ($file) => !$file->factory->is_reference)) {
+            if ($files->count() !== count($ids) || !$files->contains(fn ($file) => !$file->is_reference_file)) {
                 throw ValidationException::withMessages(['files' => ['Ընտրեք առնվազն մեկ աշխատանքային ֆայլ։']]);
             }
             if ($step && $step->files->pluck('id')->intersect($ids)->isNotEmpty()) throw ValidationException::withMessages(['files' => ['Ֆայլն արդեն կցված է այս արտադրամասի աշխատանքին։']]);
@@ -98,7 +98,7 @@ final class TaskRouting
                 $file = $files->get($item['id']);
                 $revisionId = $order->selectedFiles()->where('pmp_file_id', $file->id)->value('task_file_revision_id');
                 $step->files()->attach($file->id, ['quantity' => $item['quantity'], 'material_type' => $file->material_type, 'thickness' => $file->thickness, 'task_file_revision_id' => $revisionId]);
-                if ($file->factory->is_reference) {
+                if ($file->is_reference_file) {
                     $row = $shares->get($file->id, ['file_id' => $file->id, 'factory_ids' => []]);
                     $row['factory_ids'] = array_values(array_unique([...$row['factory_ids'], $factory->id]));
                     $shares->put($file->id, $row);
@@ -131,7 +131,7 @@ final class TaskRouting
             ->selectRaw("SUM(CASE WHEN {$open} AND factory_orders.priority = 'urgent' THEN 1 ELSE 0 END) as urgent_tasks")
             ->selectRaw("SUM(CASE WHEN factory_orders.confirmation_required = 1 AND factory_orders.engineer_confirmation_at IS NULL AND factory_orders.status IN ('finished', 'completed', 'done') THEN 1 ELSE 0 END) as awaiting_review")
             ->groupBy('factory_orders.factory_id', 'factory_orders.operator_id')->get();
-        $factories = Factory::with(['operators' => fn ($q) => $q->forRoles(MembershipAssignments::OPERATORS)->select('users.id', 'users.name')])
+        $factories = Factory::activeWorkshops()->with(['operators' => fn ($q) => $q->forRoles(MembershipAssignments::OPERATORS)->select('users.id', 'users.name')])
             ->orderBy('name')->get()->reject(fn ($factory) => $factory->is_reference)->map(function ($factory) use ($stats) {
                 $rows = $stats->where('factory_id', $factory->id);
                 return ['id' => $factory->id, 'name' => $factory->name, 'value' => $factory->value,

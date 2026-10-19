@@ -15,7 +15,7 @@ class StaffAssignmentController extends Controller
         return response()->json([
             'assignments' => MembershipAssignments::rows($membership),
             'roles' => Role::whereIn('name', $this->allowedRoles($request))->orderBy('name')->get(['id', 'name', 'value']),
-            'factories' => Factory::orderBy('name')->get(['id', 'name']),
+            'factories' => Factory::activeWorkshops()->orderBy('name')->get(['id', 'name']),
             'read_only' => $this->protected($request, $user),
         ]);
     }

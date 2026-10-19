@@ -47,6 +47,15 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::post('{registrationRequest}/notify', [$controller, 'notify'])->middleware('throttle:6,1');
         });
 
+        Route::get('file-categories', [\App\Http\Controllers\Api\FileCategoryController::class, 'index'])->middleware('permission:pmp_files.view');
+        Route::middleware('admin')->group(function () {
+            Route::get('workshops', [\App\Http\Controllers\Api\WorkshopController::class, 'index']);
+            Route::post('workshops', [\App\Http\Controllers\Api\WorkshopController::class, 'store']);
+            Route::put('workshops/{workshop}', [\App\Http\Controllers\Api\WorkshopController::class, 'update'])->whereNumber('workshop');
+            Route::post('file-categories', [\App\Http\Controllers\Api\FileCategoryController::class, 'store']);
+            Route::put('file-categories/{fileCategory}', [\App\Http\Controllers\Api\FileCategoryController::class, 'update'])->whereNumber('fileCategory');
+        });
+
         Route::get('user',   [AuthController::class, 'me']);
         Route::post('logout',[AuthController::class, 'logout']);
         Route::get('notifications', [\App\Http\Controllers\Api\NotificationController::class, 'index']);

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\File;
 
 use App\Http\Controllers\Controller;
 use App\Models\Factory;
+use App\Models\FileCategory;
 use App\Models\FactoryFileExtension;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -13,17 +14,15 @@ class FactoryFileExtensionController extends Controller
 {
     public function index(): JsonResponse
     {
-        $factories = Factory::query()
-            ->with(['fileExtensions' => fn ($query) => $query->orderBy('extension')])
-            ->orderByRaw("CASE WHEN value = 'INFO' THEN 0 ELSE 1 END")
-            ->orderBy('name')
-            ->get(['id', 'name', 'value'])
-            ->map(fn (Factory $factory) => [
-                'id' => $factory->id,
-                'name' => $factory->name,
-                'value' => $factory->value,
-                'extensions' => $factory->fileExtensions->values(),
-            ]);
+        if (!\Illuminate\Support\Facades\Schema::hasTable('file_categories')) {
+            return response()->json(['data' => Factory::with('fileExtensions')->orderBy('name')->get()->map(fn ($factory) => ['id' => $factory->id, 'name' => $factory->name, 'value' => $factory->value, 'extensions' => $factory->fileExtensions->values()])]);
+        }
+        $factories = FileCategory::with('extensions')->orderBy('name')->get()->map(fn ($category) => [
+            'id' => $category->legacy_factory_id, 'file_category_id' => $category->id,
+            'name' => $category->name, 'value' => $category->code, 'is_reference' => $category->is_reference,
+            'is_active' => $category->is_active, 'default_factory_id' => $category->default_factory_id,
+            'extensions' => $category->extensions->values(),
+        ]);
 
         return response()->json(['data' => $factories]);
     }

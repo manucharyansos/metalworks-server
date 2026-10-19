@@ -11,9 +11,29 @@ class Factory extends Model
 {
     use HasFactory, \App\Models\Concerns\BelongsToCompany;
 
-    protected $fillable = ['name', 'value', 'is_reference'];
+    protected $fillable = ['name', 'value', 'is_reference', 'is_workshop', 'is_active'];
 
-    protected $appends = ['is_reference'];
+    protected $appends = ['is_reference', 'is_workshop'];
+    protected $casts = ['is_active' => 'boolean'];
+
+    protected static function booted(): void
+    {
+        static::created(function (self $factory) {
+            if (in_array($factory->value, ['SW', 'DLD', 'DXF', 'IQS', 'INFO', 'PDF'], true)
+                && \Illuminate\Support\Facades\Schema::hasTable('file_categories')) FileCategory::forLegacyFactory((int) $factory->id);
+        });
+    }
+
+    public function getIsWorkshopAttribute($value): bool
+    {
+        return ($value === null || (bool) $value) && !$this->is_reference && !in_array(strtoupper((string) $this->value), ['SW', 'INFO', 'PDF'], true);
+    }
+
+    public function scopeActiveWorkshops($query)
+    {
+        if (\Illuminate\Support\Facades\Schema::hasColumn('factories', 'is_workshop')) $query->where('is_workshop', true)->where('is_active', true)->where('is_reference', false);
+        return $query->where(fn ($q) => $q->whereNull('value')->orWhereNotIn('value', ['SW', 'INFO', 'PDF']));
+    }
 
     public function getIsReferenceAttribute($value): bool
     {

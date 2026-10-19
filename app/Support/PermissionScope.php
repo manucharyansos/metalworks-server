@@ -34,6 +34,7 @@ final class PermissionScope
         'laser',
         'bend',
         'powder_catting',
+        'operator',
     ];
 
     /**

@@ -37,6 +37,7 @@ trait BelongsToCompany
                 'remote_number_id' => 'remote_numbers', 'pmp_file_id' => 'pmp_files',
                 'pmp_files_id' => 'pmp_files', 'factory_order_id' => 'factory_orders',
                 'task_file_revision_id' => 'task_file_revisions',
+                'file_category_id' => 'file_categories', 'legacy_factory_id' => 'factories', 'default_factory_id' => 'factories',
                 'material_category_id' => 'material_categories', 'material_group_id' => 'material_groups',
                 'material_type_id' => 'material_types', 'material_id' => 'materials',
             ];
