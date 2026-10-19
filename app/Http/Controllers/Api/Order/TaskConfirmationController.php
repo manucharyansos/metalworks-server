@@ -17,7 +17,7 @@ class TaskConfirmationController extends Controller
         $order = DB::transaction(function () use ($request, $factoryOrder, &$confirmed) {
             $order = Order::whereKey($factoryOrder->order_id)->lockForUpdate()->firstOrFail();
             abort_unless($request->user()->role?->name === 'engineer' && (int) $order->creator_id === (int) $request->user()->id, 403);
-            $step = FactoryOrder::whereKey($factoryOrder->id)->lockForUpdate()->firstOrFail();
+            $step = FactoryOrder::forWorkshops()->whereKey($factoryOrder->id)->lockForUpdate()->firstOrFail();
             if ($step->engineer_confirmation_at) return $order; // Retrying cannot change the reviewer/date.
             $methods = TaskWorkflow::evidenceMethods($step->confirmation_method);
             if (!$step->awaiting_engineer_confirmation || !$step->operator_finish_date
@@ -49,7 +49,7 @@ class TaskConfirmationController extends Controller
         $order = DB::transaction(function () use ($request, $factoryOrder, $note) {
             $order = Order::whereKey($factoryOrder->order_id)->lockForUpdate()->firstOrFail();
             abort_unless($request->user()->role?->name === 'engineer' && (int) $order->creator_id === (int) $request->user()->id, 403);
-            $step = FactoryOrder::whereKey($factoryOrder->id)->lockForUpdate()->firstOrFail();
+            $step = FactoryOrder::forWorkshops()->whereKey($factoryOrder->id)->lockForUpdate()->firstOrFail();
             if (!$step->awaiting_engineer_confirmation) {
                 throw ValidationException::withMessages(['confirmation' => ['Վերադարձնել կարելի է միայն հաստատմանը սպասող աշխատանքը։']]);
             }

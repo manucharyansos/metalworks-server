@@ -325,7 +325,7 @@ class ProfileController extends Controller
 
         $historyStatuses = ['finished', 'completed', 'done', 'confirmed', 'canceled', 'cancelled'];
 
-        $query = FactoryOrder::query()
+        $query = FactoryOrder::forWorkshops()
             ->where('factory_id', $user->factory_id)
             ->where(function ($operatorQuery) use ($user) {
                 $operatorQuery->whereNull('operator_id')

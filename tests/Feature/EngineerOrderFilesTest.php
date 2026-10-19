@@ -125,7 +125,7 @@ class EngineerOrderFilesTest extends TestCase
     {
         $file = $this->file($this->subgroup);
         $excluded = $this->file($this->subgroup);
-        $operator = User::create(['name' => 'QA Operator', 'email' => 'operator@example.invalid', 'password' => 'test-password', 'factory_id' => $this->factory->id]);
+        $operator = User::create(['name' => 'QA Operator', 'email' => 'operator@example.invalid', 'password' => 'test-password', 'role_id' => Role::firstOrCreate(['name' => 'operator'], ['value' => 'Operator'])->id, 'factory_id' => $this->factory->id]);
         $response = $this->postJson('/api/engineers/engineer', $this->payload([
             'link_existing_files' => true,
             'selected_files' => [['id' => $file->id, 'quantity' => 4]],

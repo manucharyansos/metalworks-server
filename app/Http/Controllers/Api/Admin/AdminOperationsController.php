@@ -56,7 +56,7 @@ class AdminOperationsController extends Controller
                 ->first();
 
             [$openSql, $openBindings] = $this->openFactoryConditionSql('fo');
-            $factoryStepSummary = DB::table('factory_orders as fo')->where('fo.company_id', app(\App\Support\CompanyContext::class)->id())
+            $factoryStepSummary = DB::table('factory_orders as fo')->where('fo.company_id', app(\App\Support\CompanyContext::class)->id())->whereIn('fo.factory_id', Factory::workshops()->select('factories.id'))
                 ->selectRaw(
                     "SUM(CASE WHEN {$openSql} AND fo.operator_id IS NULL THEN 1 ELSE 0 END) as unassigned_factory_steps",
                     $openBindings
@@ -179,7 +179,7 @@ class AdminOperationsController extends Controller
                 'operators' => $operators,
                 'attention_orders' => $attentionOrders,
                 'filters' => [
-                    'factories' => Factory::where('is_workshop', true)->orderBy('name')->get(['id', 'name', 'value']),
+                    'factories' => Factory::workshops()->orderBy('name')->get(['id', 'name', 'value']),
                     'operators' => User::query()->assignedToFactory()->orderBy('name')->get(['id', 'name', 'factory_id']),
                     'factory_statuses' => FactoryOrderStatus::query()
                         ->where('is_active', true)
@@ -341,7 +341,7 @@ class AdminOperationsController extends Controller
     {
         [$openSql, $openBindings] = $this->openFactoryConditionSql('fo');
 
-        return DB::table('factory_orders as fo')->where('fo.company_id', app(\App\Support\CompanyContext::class)->id())
+        return DB::table('factory_orders as fo')->where('fo.company_id', app(\App\Support\CompanyContext::class)->id())->whereIn('fo.factory_id', Factory::workshops()->select('factories.id'))
             ->leftJoin('orders as o', 'o.id', '=', 'fo.order_id')
             ->leftJoin('dates as d', 'd.order_id', '=', 'o.id')
             ->whereNotNull('fo.factory_id')
@@ -361,7 +361,7 @@ class AdminOperationsController extends Controller
     {
         [$openSql, $openBindings] = $this->openFactoryConditionSql('fo');
 
-        return DB::table('factory_orders as fo')->where('fo.company_id', app(\App\Support\CompanyContext::class)->id())
+        return DB::table('factory_orders as fo')->where('fo.company_id', app(\App\Support\CompanyContext::class)->id())->whereIn('fo.factory_id', Factory::workshops()->select('factories.id'))
             ->leftJoin('orders as o', 'o.id', '=', 'fo.order_id')
             ->leftJoin('dates as d', 'd.order_id', '=', 'o.id')
             ->whereNotNull('fo.operator_id')

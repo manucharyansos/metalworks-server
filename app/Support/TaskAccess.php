@@ -8,7 +8,7 @@ final class TaskAccess
 {
     public static function operatorSteps($query, User $user)
     {
-        return $query->where('factory_id', $user->factory_id)->where(fn ($q) => $q->whereNull('operator_id')->orWhere('operator_id', $user->id));
+        return $query->forWorkshops()->where('factory_id', $user->factory_id)->where(fn ($q) => $q->whereNull('operator_id')->orWhere('operator_id', $user->id));
     }
 
     public static function canView(User $user, Order $order): bool

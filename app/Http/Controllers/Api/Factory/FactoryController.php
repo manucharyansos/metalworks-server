@@ -67,7 +67,7 @@ class FactoryController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $factory = Factory::with(['orders' => function ($query) use ($id, $user) {
+        $factory = Factory::workshops()->with(['orders' => function ($query) use ($id, $user) {
             if ($user->role?->name === 'engineer') $query->where('creator_id', $user->id);
             $query->whereHas('factoryOrders', function ($q) use ($id, $user) {
                 $q->where('factory_id', $id)
