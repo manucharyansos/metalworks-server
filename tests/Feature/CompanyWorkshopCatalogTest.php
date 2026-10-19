@@ -229,6 +229,88 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->assertSame([$this->factories['POWDER']->id], $shares[0]['factory_ids']);
     }
 
+
+    public function test_legacy_engineering_and_info_steps_never_enter_admin_counts_task_details_or_engineer_decisions(): void
+    {
+        $note = $this->file($this->factories['INFO']->id, 'preserved-note.txt');
+        [$order, $real, $legacy] = $this->in(function () use ($note) {
+            DB::table('factories')->whereIn('id', [$this->factories['SW']->id, $this->factories['INFO']->id])->update(['is_workshop' => true, 'is_reference' => false]);
+            $order = Order::create(['name' => 'Legacy', 'description' => 'Preserve files', 'user_id' => $this->client->id, 'creator_id' => $this->engineer->id, 'status' => 'pending']);
+            $real = FactoryOrder::create(['order_id' => $order->id, 'factory_id' => $this->factories['DXF']->id, 'status' => 'confirmed']);
+            $real->files()->attach($note->id, ['quantity' => 1]);
+            $legacy = FactoryOrder::create(['order_id' => $order->id, 'factory_id' => $this->factories['SW']->id, 'status' => 'finished', 'confirmation_required' => true, 'confirmation_method' => 'text']);
+            $real->update(['depends_on_id' => $legacy->id]);
+            $this->assertFalse($real->fresh()->is_blocked);
+            FactoryOrder::create(['order_id' => $order->id, 'factory_id' => $this->factories['INFO']->id, 'status' => 'pending']);
+            DB::table('company_memberships')->where('user_id', $this->engineer->id)->update(['factory_id' => $this->factories['SW']->id]);
+            DB::table('membership_assignments')->where('user_id', $this->engineer->id)->update(['factory_id' => $this->factories['SW']->id]);
+            return [$order, $real, $legacy];
+        });
+        $this->as($this->account('admin'));
+        $dashboard = $this->getJson('/api/admin/dashboard', $this->headers())->assertOk();
+        $dashboard->assertJsonPath('summary.factories', 4)->assertJsonPath('summary.factory_operators', 0)->assertJsonPath('summary.unassigned_factory_steps', 1)->assertJsonPath('summary.awaiting_engineer_confirmation', 0);
+        $this->assertNotContains('SW', array_column($dashboard->json('filters.factories'), 'value'));
+        $this->getJson('/api/admin/order/'.$order->id, $this->headers())->assertOk()->assertJsonCount(1, 'factory_orders')->assertJsonPath('factory_orders.0.id', $real->id)->assertJsonPath('factory_orders.0.files.0.id', $note->id);
+        $this->getJson('/api/admin/dashboard/orders', $this->headers())->assertOk()->assertJsonCount(1, 'orders.0.factory_orders');
+        $this->as($this->engineer);
+        $this->getJson('/api/engineers/engineer?stage=in_progress', $this->headers())->assertOk()->assertJsonPath('stage_counts.in_progress', 1)->assertJsonPath('stage_counts.completed', 0)->assertJsonCount(1, 'orders.0.factory_orders');
+        $this->postJson('/api/engineers/factory-orders/'.$legacy->id.'/confirm', [], $this->headers())->assertNotFound();
+        $this->assertDatabaseHas('factory_orders', ['id' => $legacy->id, 'status' => 'finished']);
+        $this->assertSame('private bytes', Storage::disk('private')->get($note->path));
+    }
+
+    public function test_role_metadata_repair_is_idempotent_and_preserves_assignments_files_and_company_boundaries(): void
+    {
+        $file = $this->file($this->factories['SW']->id, 'engineering.sldprt');
+        $before = DB::table('membership_assignments')->where('user_id', $this->engineer->id)->pluck('id')->all();
+        DB::table('membership_assignments')->whereIn('id', $before)->update(['factory_id' => $this->factories['SW']->id]);
+        DB::table('company_memberships')->where('user_id', $this->engineer->id)->update(['factory_id' => $this->factories['SW']->id]);
+        DB::table('users')->where('id', $this->engineer->id)->update(['factory_id' => $this->factories['SW']->id]);
+        $operator = $this->account('operator', $this->factories['POWDER']->id);
+        $order = $this->in(function () use ($file, $operator) {
+            $order = Order::create(['name' => 'Legacy attachments', 'user_id' => $this->client->id, 'creator_id' => $this->engineer->id, 'status' => 'pending']);
+            $legacy = FactoryOrder::create(['order_id' => $order->id, 'factory_id' => $this->factories['SW']->id, 'status' => 'pending']);
+            $legacy->files()->attach($file->id, ['quantity' => 2]);
+            FactoryOrder::create(['order_id' => $order->id, 'factory_id' => $this->factories['POWDER']->id, 'operator_id' => $operator->id, 'status' => 'pending', 'depends_on_id' => $legacy->id]);
+            return $order;
+        });
+        $migration = require database_path('migrations/2026_10_19_190000_normalize_non_production_workshop_links.php');
+        $migration->up(); $migration->up();
+        $this->assertSame($before, DB::table('membership_assignments')->where('user_id', $this->engineer->id)->pluck('id')->all());
+        $this->assertSame(0, DB::table('membership_assignments')->where('user_id', $this->engineer->id)->whereNotNull('factory_id')->count());
+        $this->assertDatabaseHas('users', ['id' => $this->engineer->id, 'factory_id' => null]);
+        $this->assertDatabaseHas('company_memberships', ['user_id' => $this->engineer->id, 'company_id' => $this->company->id, 'factory_id' => null]);
+        $this->assertDatabaseHas('membership_assignments', ['user_id' => $operator->id, 'factory_id' => $this->factories['POWDER']->id]);
+        $this->assertDatabaseHas('pmp_files', ['id' => $file->id]);
+        $this->assertSame(1, DB::table('selected_files')->where('order_id', $order->id)->where('pmp_file_id', $file->id)->count());
+        $this->assertDatabaseHas('selected_files', ['order_id' => $order->id, 'pmp_file_id' => $file->id, 'company_id' => $this->company->id, 'quantity' => 2]);
+        $this->assertDatabaseHas('factory_orders', ['order_id' => $order->id, 'factory_id' => $this->factories['POWDER']->id, 'depends_on_id' => null]);
+        $this->as($this->engineer);
+        $this->getJson('/api/engineers/engineer/'.$order->id, $this->headers())->assertOk()->assertJsonCount(1, 'order.factory_orders')->assertJsonPath('order.selected_files.0.pmp_file.id', $file->id);
+        $this->getJson('/api/user', $this->headers())->assertOk()->assertJsonPath('factory_id', null);
+        $this->get('/api/secure-files/pmp/'.$file->id, $this->headers())->assertOk();
+        $this->getJson('/api/engineers/engineer', ['X-Company-ID' => $this->other->id])->assertForbidden();
+        $this->as($operator);
+        $this->getJson('/api/factories/factory/'.$this->factories['POWDER']->id, $this->headers())->assertOk()->assertJsonMissingPath('orders.0.selected_files')->assertJsonPath('orders.0.id', $order->id)->assertJsonCount(0, 'orders.0.factory_orders.0.files');
+        $this->get('/api/secure-files/pmp/'.$file->id, $this->headers())->assertForbidden();
+    }
+
+    public function test_legacy_order_endpoints_reject_file_sections_and_retain_archived_workshop_history(): void
+    {
+        $this->as($this->account('admin'));
+        foreach (['SW', 'INFO', 'PDF'] as $code) {
+            $this->postJson('/api/admin/order', ['user_id' => $this->client->id, 'name' => 'Invalid', 'description' => 'Invalid production', 'factories' => [['id' => $this->factories[$code]->id]]], $this->headers())->assertUnprocessable();
+        }
+        $order = $this->in(function () {
+            $order = Order::create(['user_id' => $this->client->id, 'creator_id' => $this->engineer->id, 'name' => 'History', 'description' => 'Keep', 'status' => 'completed']);
+            $order->factoryOrders()->create(['factory_id' => $this->factories['POWDER']->id, 'status' => 'finished', 'completed_at' => now()]);
+            $this->factories['POWDER']->update(['is_active' => false]);
+            return $order;
+        });
+        $this->putJson('/api/admin/order/'.$order->id, ['name' => 'Retained history', 'description' => 'Keep files', 'factories' => [['id' => $this->factories['POWDER']->id]], 'status' => 'completed'], $this->headers())->assertOk();
+        $this->getJson('/api/admin/order/'.$order->id, $this->headers())->assertOk()->assertJsonCount(1, 'factory_orders')->assertJsonPath('factory_orders.0.factory.value', 'POWDER');
+    }
+
     private function payload(array $ids): array { return ['user_id' => $this->client->id, 'pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'name' => '987.01', 'description' => 'Catalog task', 'finish_date' => '2099-01-01', 'link_existing_files' => true, 'selected_files' => array_map(fn ($id) => ['id' => $id, 'quantity' => 1], $ids)]; }
     private function in(callable $callback): mixed { return app(CompanyContext::class)->run($this->company, $callback); }
     private function account(string $role, ?int $factory = null): User { return $this->in(function () use ($role, $factory) { $user = User::create(['name' => $role, 'email' => $role.'-'.uniqid().'@example.invalid', 'password' => 'test-password', 'role_id' => Role::where('name', $role)->value('id'), 'factory_id' => $factory]); $m = CompanyMembership::where('user_id', $user->id)->first(); $m->permissions()->sync(Permission::whereIn('slug', ['orders.view', 'orders.create', 'orders.update', 'factory.view', 'factory.download', 'factory.order_update', 'pmp.view', 'pmp_files.view', 'pmp_files.upload'])->pluck('id')->mapWithKeys(fn ($id) => [$id => ['allowed' => true]])->all()); return $user; }); }

@@ -114,15 +114,23 @@ class User extends Authenticatable
     public function scopeAssignedToFactory(Builder $query, ?int $factoryId = null): Builder
     {
         $id = app(CompanyContext::class)->id();
-        if (!$id) return $factoryId ? $query->where('factory_id', $factoryId) : $query->whereNotNull('factory_id');
+        if (!$id) {
+            $query->forRoles(\App\Support\MembershipAssignments::OPERATORS)->whereIn('users.factory_id', Factory::workshops()->select('factories.id'));
+            return $factoryId ? $query->where('users.factory_id', $factoryId) : $query;
+        }
         return $query->whereIn('users.id', function ($q) use ($id, $factoryId) {
             $q->select('user_id')->from('company_memberships')->where('company_id', $id)->where('is_active', true);
             if (Schema::hasTable('membership_assignments')) {
                 $q->whereExists(function ($assignments) use ($factoryId) {
-                    $assignments->selectRaw('1')->from('membership_assignments as ma')->whereColumn('ma.membership_id', 'company_memberships.id');
+                    $assignments->selectRaw('1')->from('membership_assignments as ma')->join('roles as ma_role', 'ma_role.id', '=', 'ma.role_id')->whereColumn('ma.membership_id', 'company_memberships.id')
+                        ->whereIn('ma_role.name', \App\Support\MembershipAssignments::OPERATORS)
+                        ->whereIn('ma.factory_id', Factory::workshops()->select('factories.id'));
                     $factoryId ? $assignments->where('ma.factory_id', $factoryId) : $assignments->whereNotNull('ma.factory_id');
                 });
-            } else $factoryId ? $q->where('factory_id', $factoryId) : $q->whereNotNull('factory_id');
+            } else {
+                $q->whereIn('role_id', Role::whereIn('name', \App\Support\MembershipAssignments::OPERATORS)->select('id'))->whereIn('factory_id', Factory::workshops()->select('factories.id'));
+                if ($factoryId) $q->where('factory_id', $factoryId);
+            }
         });
     }
 

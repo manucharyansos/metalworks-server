@@ -121,7 +121,7 @@ final class TaskRouting
     public static function workload(): array
     {
         $open = "(factory_orders.completed_at IS NULL AND (factory_orders.status IS NULL OR factory_orders.status NOT IN ('finished', 'completed', 'done', 'canceled', 'cancelled')))";
-        $stats = FactoryOrder::query()->join('orders as task', 'task.id', '=', 'factory_orders.order_id')
+        $stats = FactoryOrder::forWorkshops()->join('orders as task', 'task.id', '=', 'factory_orders.order_id')
             ->leftJoin('dates as deadline', 'deadline.order_id', '=', 'task.id')
             ->whereNotIn('task.status', ['canceled', 'cancelled'])
             ->select('factory_orders.factory_id', 'factory_orders.operator_id')

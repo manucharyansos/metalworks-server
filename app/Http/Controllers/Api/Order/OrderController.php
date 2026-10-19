@@ -43,6 +43,14 @@ class OrderController extends Controller
         }
     }
 
+    private function validateWorkshops(array $rows, ?Order $order = null): void
+    {
+        $ids = array_values(array_unique(array_column($rows, 'id')));
+        if (\App\Models\Factory::workshops()->whereIn('id', $ids)->where(fn ($q) => $q->where('is_active', true)->when($order, fn ($existing) => $existing->orWhereIn('id', $order->factoryOrders()->pluck('factory_id'))))->count() !== count($ids)) {
+            throw ValidationException::withMessages(['factories' => ['Ընտրեք հասանելի արտադրամասերը։ Ինժեները հաստիք է, INFO/PDF-ը՝ ֆայլերի բաժիններ։']]);
+        }
+    }
+
     public function store(Request $request): JsonResponse
     {
         $storedPaths = [];
@@ -61,6 +69,8 @@ class OrderController extends Controller
                 'files' => 'nullable|array',
                 'files.*' => 'file|max:51200',
             ]);
+
+            $this->validateWorkshops($validatedData['factories'] ?? []);
 
             $order = DB::transaction(function () use ($request, $validatedData, &$storedPaths) {
                 $order = Order::create([
@@ -196,6 +206,8 @@ class OrderController extends Controller
                 'store_link.url' => 'nullable|url',
                 'finish_date' => 'nullable|date',
             ]);
+
+            $this->validateWorkshops($validatedData['factories'], Order::findOrFail($id));
 
             $order = DB::transaction(function () use ($request, $validatedData, $id) {
                 /** @var \App\Models\Order $order */

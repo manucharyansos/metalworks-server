@@ -26,13 +26,27 @@ class Factory extends Model
 
     public function getIsWorkshopAttribute($value): bool
     {
-        return ($value === null || (bool) $value) && !$this->is_reference && !in_array(strtoupper((string) $this->value), ['SW', 'INFO', 'PDF'], true);
+        return ($value === null || (bool) $value) && !$this->is_reference && !in_array(strtoupper(trim((string) $this->value)), self::nonWorkshopValues(), true);
+    }
+
+    public static function nonWorkshopValues(): array
+    {
+        return array_values(array_unique(array_map(fn ($value) => strtoupper(trim($value)), ['SW', 'INFO', 'PDF', ...config('companies.reference_factory_values', [])])));
+    }
+
+    // Archived production workshops remain valid in task history. File sections
+    // and the engineer position never become production steps, even in old data.
+    public function scopeWorkshops($query)
+    {
+        if (\Illuminate\Support\Facades\Schema::hasColumn('factories', 'is_workshop')) $query->where('factories.is_workshop', true)->where('factories.is_reference', false);
+        return $query->where(fn ($q) => $q->whereNull('factories.value')->orWhereNotIn(\Illuminate\Support\Facades\DB::raw('UPPER(TRIM(factories.value))'), self::nonWorkshopValues()));
     }
 
     public function scopeActiveWorkshops($query)
     {
-        if (\Illuminate\Support\Facades\Schema::hasColumn('factories', 'is_workshop')) $query->where('is_workshop', true)->where('is_active', true)->where('is_reference', false);
-        return $query->where(fn ($q) => $q->whereNull('value')->orWhereNotIn('value', ['SW', 'INFO', 'PDF']));
+        $query->workshops();
+        if (\Illuminate\Support\Facades\Schema::hasColumn('factories', 'is_active')) $query->where('factories.is_active', true);
+        return $query;
     }
 
     public function getIsReferenceAttribute($value): bool
@@ -52,6 +66,7 @@ class Factory extends Model
     {
         if (\Illuminate\Support\Facades\Schema::hasTable('membership_assignments')) {
             return $this->belongsToMany(User::class, 'membership_assignments', 'factory_id', 'user_id')
+                ->whereIn('membership_assignments.role_id', Role::whereIn('name', \App\Support\MembershipAssignments::OPERATORS)->select('id'))
                 ->whereExists(function ($query) {
                     $query->selectRaw('1')->from('company_memberships as operator_membership')
                         ->whereColumn('operator_membership.id', 'membership_assignments.membership_id')
@@ -60,6 +75,7 @@ class Factory extends Model
                 })->distinct();
         }
         return $this->belongsToMany(User::class, 'company_memberships', 'factory_id', 'user_id')
+            ->whereIn('company_memberships.role_id', Role::whereIn('name', \App\Support\MembershipAssignments::OPERATORS)->select('id'))
             ->wherePivot('company_id', app(\App\Support\CompanyContext::class)->id() ?: $this->company_id)
             ->wherePivot('is_active', true);
     }

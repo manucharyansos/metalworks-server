@@ -58,7 +58,10 @@ class FactoryOrder extends Model
 
     public function getIsBlockedAttribute(): bool
     {
-        return $this->depends_on_id && !$this->dependsOn?->isWorkCompleted();
+        if (!$this->depends_on_id) return false;
+        $previous = $this->dependsOn;
+        if ($previous?->factory && !$previous->factory->is_workshop) return false;
+        return !$previous?->isWorkCompleted();
     }
 
     public function getAwaitingEngineerConfirmationAttribute(): bool
@@ -71,6 +74,11 @@ class FactoryOrder extends Model
     public function scopeAwaitingEngineer($query)
     {
         return $query->where('confirmation_required', true)->whereIn('status', ['finished', 'completed', 'done'])->whereNull('engineer_confirmation_at');
+    }
+
+    public function scopeForWorkshops($query)
+    {
+        return $query->whereHas('factory', fn ($factory) => $factory->workshops());
     }
 
     public function scopeVisibleOnBoard($query)

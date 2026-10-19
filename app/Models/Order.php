@@ -94,7 +94,7 @@ class Order extends Model
 
     public function factories(): BelongsToMany
     {
-        return $this->belongsToMany(Factory::class, 'factory_orders', 'order_id', 'factory_id')
+        return $this->belongsToMany(Factory::class, 'factory_orders', 'order_id', 'factory_id')->workshops()
             ->using(CompanyPivot::class)
             ->withPivot(['status', 'canceling', 'cancel_date', 'finish_date', 'operator_finish_date', 'admin_confirmation_date'])
             ->withTimestamps();
@@ -112,7 +112,7 @@ class Order extends Model
 
     public function factoryOrders(): HasMany
     {
-        return $this->hasMany(FactoryOrder::class, 'order_id');
+        return $this->hasMany(FactoryOrder::class, 'order_id')->forWorkshops();
     }
 
     public function getCreatedAtAttribute($value): string
@@ -122,7 +122,7 @@ class Order extends Model
 
     public function updateStatusIfAllFactoriesCompleted(): void
     {
-        $factoryOrders = $this->factoryOrders()->whereHas('factory', fn ($query) => $query->where('is_workshop', true)->where('is_reference', false))->get();
+        $factoryOrders = $this->factoryOrders()->get();
 
         if ($factoryOrders->isEmpty()) {
             return;
