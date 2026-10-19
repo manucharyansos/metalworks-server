@@ -23,7 +23,7 @@ return new class extends Migration
         if (!Schema::hasColumn('pmp_files', 'file_category_id')) Schema::table('pmp_files', fn (Blueprint $t) => $t->unsignedBigInteger('file_category_id')->nullable()->index());
         if (!DB::table('roles')->where('name', 'operator')->exists()) DB::table('roles')->insert(['name' => 'operator', 'value' => 'Օպերատոր']);
         foreach (DB::table('companies')->pluck('id') as $companyId) DB::transaction(function () use ($companyId) {
-            DB::table('factories')->where('company_id', $companyId)->whereIn('value', ['SW', 'INFO', 'PDF'])->update(['is_workshop' => false]);
+            DB::table('factories')->where('company_id', $companyId)->where(fn ($query) => $query->whereIn('value', ['SW', 'INFO', 'PDF'])->orWhere('is_reference', true))->update(['is_workshop' => false]);
             $powder = DB::table('factories')->where('company_id', $companyId)->where(function ($q) {
                 $q->whereIn('value', ['POWDER', 'powder_catting'])->orWhereIn('name', ['Փոշեներկում', 'Powder coating', 'Powder', 'Порошковая покраска']);
             })->first();

@@ -143,7 +143,9 @@ class CompanyWorkshopCatalogTest extends TestCase
         $category = $this->in(fn () => FileCategory::where('legacy_factory_id', $this->factories['SW']->id)->first());
         $this->in(fn () => $category->update(['name' => 'Our custom CAD section']));
         DB::table('pmp_files')->where('id', $file->id)->update(['file_category_id' => null]);
+        $reference = $this->in(fn () => Factory::create(['name' => 'Legacy reference section', 'value' => 'OLD_INFO', 'is_reference' => true]));
         $migration = require database_path('migrations/2026_10_19_120000_separate_workshops_and_file_categories.php'); $migration->up(); $migration->up();
+        $this->assertDatabaseHas('factories', ['id' => $reference->id, 'is_workshop' => false]);
         $this->assertDatabaseHas('pmp_files', ['id' => $file->id, 'file_category_id' => $category->id, 'path' => $file->path]);
         $this->assertDatabaseHas('file_categories', ['id' => $category->id, 'name' => 'Our custom CAD section']);
         $this->assertSame('private bytes', Storage::disk('private')->get($file->path));

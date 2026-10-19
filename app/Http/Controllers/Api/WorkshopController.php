@@ -11,7 +11,7 @@ use Illuminate\Validation\{Rule, ValidationException};
 
 class WorkshopController extends Controller
 {
-    public function index() { return response()->json(['workshops' => Factory::where('is_workshop', true)->withCount('orders')->orderBy('name')->get()]); }
+    public function index() { return response()->json(['workshops' => Factory::where('is_workshop', true)->where('is_reference', false)->withCount('orders')->orderBy('name')->get()]); }
 
     public function store(Request $request)
     {
