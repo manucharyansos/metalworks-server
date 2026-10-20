@@ -87,7 +87,7 @@ class CompanyAccessController extends Controller
                 }
                 app(CompanyContext::class)->run($company, function () use ($row, $membership, $request, $user, $client): void {
                     if ($client && !empty($row['factory_id'])) {
-                        throw \Illuminate\Validation\ValidationException::withMessages(['access' => ['Client access does not include employee positions or workshops.']]);
+                        throw \Illuminate\Validation\ValidationException::withMessages(['access' => ['Customer access does not include employee positions or workshops.']]);
                     }
                     if ($client && !isset($row['role_id']) && !array_key_exists('assignments', $row)) {
                         $row['role_id'] = Role::where('name', 'authenticatedUser')->value('id');

@@ -121,7 +121,7 @@ class PmpController extends Controller
         ]);
 
         $pmp->update($validated);
-        return response()->json(['message' => 'PMP updated successfully', 'pmp' => $pmp]);
+        return response()->json(['message' => 'Project updated successfully', 'pmp' => $pmp]);
     }
 
     public function remoteNumber(Request $request, $id): JsonResponse
@@ -155,7 +155,7 @@ class PmpController extends Controller
     {
         $pmp = Pmp::findOrFail($id);
         $pmp->delete();
-        return response()->json(['message' => 'PMP deleted successfully']);
+        return response()->json(['message' => 'Project deleted successfully']);
     }
 
     public function checkGroup(Request $request): JsonResponse
@@ -203,7 +203,7 @@ class PmpController extends Controller
         if (!$pmp) {
             return response()->json([
                 'exists' => false,
-                'message' => 'PMP not found.',
+                'message' => 'Project not found.',
             ], 404);
         }
 

@@ -86,7 +86,7 @@ class PmpFilesController extends Controller
 
             if ((int) $remote->pmp_id !== (int) $pmp->id) {
                 return response()->json([
-                    'error' => 'Ընտրված հեռակա համարը չի պատկանում այս PMP-ին։',
+                    'error' => 'Ընտրված հեռակա համարը չի պատկանում այս նախագծին։',
                 ], 422);
             }
 
@@ -133,7 +133,7 @@ class PmpFilesController extends Controller
                 Storage::disk('private')->delete($storedPath);
             }
 
-            Log::error('PMP file upload failed', [
+            Log::error('Project file upload failed', [
                 'user_id' => $request->user()?->id,
                 'pmp_id' => $request->input('pmp_id'),
                 'remote_number_id' => $request->input('remote_number_id'),

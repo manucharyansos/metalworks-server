@@ -130,7 +130,7 @@ class ActivityObserver
                 'category' => 'projects',
                 'prefix' => 'project',
                 'type' => 'pmp',
-                'label' => trim(implode(' · ', array_filter([$model->group, $model->group_name]))) ?: 'PMP #' . $model->getKey(),
+                'label' => trim(implode(' · ', array_filter([$model->group, $model->group_name]))) ?: 'Project #' . $model->getKey(),
                 'meta' => ['group' => $model->group],
             ],
             $model instanceof RemoteNumber => [

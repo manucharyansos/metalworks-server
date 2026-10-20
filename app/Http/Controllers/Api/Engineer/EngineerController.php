@@ -451,7 +451,7 @@ class EngineerController extends Controller
 
         if (!$belongs) {
             throw ValidationException::withMessages([
-                'remote_number_id' => ['Ընտրված հեռակա համարը չի պատկանում այս PMP-ին։'],
+                'remote_number_id' => ['Ընտրված հեռակա համարը չի պատկանում այս նախագծին։'],
             ]);
         }
     }
@@ -512,7 +512,7 @@ class EngineerController extends Controller
             throw ValidationException::withMessages([
                 'selected_files' => [$validatedData['link_existing_files']
                     ? 'Առաջադրանք ստեղծելու համար ընտրեք առնվազն մեկ ֆայլ։'
-                    : 'Ընտրված PMP-ում կամ ենթախմբում ֆայլեր չկան։ Նախ ավելացրեք ֆայլեր։'],
+                    : 'Ընտրված նախագծում կամ ենթախմբում ֆայլեր չկան։ Նախ ավելացրեք ֆայլեր։'],
             ]);
         }
 
@@ -525,7 +525,7 @@ class EngineerController extends Controller
             $file = $pmp->files->firstWhere('id', (int) $selectedFile['id']);
             if (!$file) {
                 throw ValidationException::withMessages([
-                    'selected_files' => ['Ընտրված ֆայլերից մեկը չի պատկանում այս PMP-ին։'],
+                    'selected_files' => ['Ընտրված ֆայլերից մեկը չի պատկանում այս նախագծին։'],
                 ]);
             }
             if ($remoteNumberId && (int) $file->remote_number_id !== $remoteNumberId) {
