@@ -205,6 +205,117 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->postJson('/api/engineers/engineer', $this->payload([$pdf->id]), $this->headers())->assertCreated()->assertJsonCount(1, 'order.factory_orders')->assertJsonPath('order.factory_orders.0.factory_id', $this->factories['POWDER']->id);
     }
 
+    public function test_every_existing_section_uses_its_saved_formats_for_uploads_and_policy_reads(): void
+    {
+        foreach (['SW', 'DXF', 'DLD', 'IQS', 'INFO', 'PDF'] as $code) {
+            $category = $this->in(fn () => FileCategory::where('code', $code)->firstOrFail());
+            $this->as($this->manager);
+            $body = ['name' => $category->name, 'is_reference' => $category->is_reference, 'default_factory_id' => $category->default_factory_id, 'extensions' => [' .PDF ', 'nc']];
+            $this->putJson('/api/file-categories/'.$category->id, $body, $this->headers())->assertOk();
+            $this->as($this->engineer);
+            $policy = collect($this->getJson('/api/factory-file-policies', $this->headers())->assertOk()->json('data'))->firstWhere('file_category_id', $category->id);
+            $this->assertEqualsCanonicalizing(['pdf', 'nc'], array_column($policy['extensions'], 'extension'));
+            foreach (['PDF', 'nc'] as $extension) {
+                $file = $this->post('/api/engineers/uploadPmpFile', ['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id,
+                    'file_category_id' => $category->id, 'file' => UploadedFile::fake()->createWithContent($code.'.'.$extension, 'private drawing bytes')], $this->headers())
+                    ->assertCreated()->assertJsonPath('file.file_category_id', $category->id)->json('file');
+                $this->assertNull($file['quantity']);
+                $this->get('/api/secure-files/pmp/'.$file['id'], $this->headers())->assertOk();
+                $this->assertSame('private drawing bytes', Storage::disk('private')->get($file['path']));
+            }
+            $this->post('/api/engineers/uploadPmpFile', ['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id,
+                'factory_id' => $category->legacy_factory_id, 'file' => UploadedFile::fake()->create('not-allowed.txt', 1)], $this->headers())
+                ->assertUnprocessable()->assertJsonValidationErrors('file');
+            $this->as($this->manager); $body['extensions'] = [];
+            $this->putJson('/api/file-categories/'.$category->id, $body, $this->headers())->assertOk();
+            $this->as($this->engineer);
+            $this->post('/api/engineers/uploadPmpFile', ['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id,
+                'file_category_id' => $category->id, 'file' => UploadedFile::fake()->create('now-blocked.pdf', 1)], $this->headers())->assertUnprocessable();
+        }
+    }
+
+    public function test_dxf_metadata_is_required_for_actual_dxf_files_and_not_other_formats_in_the_section(): void
+    {
+        $category = $this->in(fn () => FileCategory::where('code', 'DXF')->firstOrFail());
+        $this->as($this->manager);
+        $this->putJson('/api/file-categories/'.$category->id, ['name' => $category->name, 'is_reference' => false, 'extensions' => ['dxf', 'pdf']], $this->headers())->assertOk();
+        $this->as($this->engineer);
+        $body = ['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'file_category_id' => $category->id];
+        $this->post('/api/engineers/uploadPmpFile', $body + ['file' => UploadedFile::fake()->create('no-metadata.dxf', 1)], $this->headers())
+            ->assertUnprocessable()->assertJsonValidationErrors(['quantity', 'material_type', 'thickness']);
+        $this->post('/api/engineers/uploadPmpFile', $body + ['file' => UploadedFile::fake()->create('drawing.dxf', 1), 'quantity' => 2, 'material_type' => 'Steel', 'thickness' => 0], $this->headers())
+            ->assertCreated()->assertJsonPath('file.quantity', 2)->assertJsonPath('file.material_type', 'Steel');
+        $this->post('/api/engineers/uploadPmpFile', $body + ['file' => UploadedFile::fake()->create('reference.pdf', 1)], $this->headers())->assertCreated();
+    }
+
+    public function test_admins_and_managers_permanently_delete_empty_sections_without_deleting_workshops(): void
+    {
+        foreach ([$this->manager, $this->account('admin')] as $actor) {
+            $this->as($actor);
+            $category = $this->postJson('/api/file-categories', ['name' => 'Temporary folder', 'is_reference' => false, 'extensions' => ['pdf']], $this->headers())->assertCreated()->json('category');
+            $this->deleteJson('/api/file-categories/'.$category['id'], [], $this->headers())->assertOk();
+            $this->assertDatabaseMissing('file_categories', ['id' => $category['id']]);
+            $this->assertDatabaseMissing('factory_file_extensions', ['factory_id' => $category['legacy_factory_id']]);
+            $this->assertNotContains($category['id'], array_column($this->getJson('/api/file-categories?include_archived=1', $this->headers())->assertOk()->json('categories'), 'id'));
+            $this->as($this->engineer);
+            $this->post('/api/engineers/uploadPmpFile', ['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id,
+                'factory_id' => $category['legacy_factory_id'], 'file' => UploadedFile::fake()->create('stale.pdf', 1)], $this->headers())->assertUnprocessable();
+            $this->assertDatabaseMissing('file_categories', ['legacy_factory_id' => $category['legacy_factory_id']]);
+        }
+        $category = $this->in(fn () => FileCategory::where('code', 'DXF')->firstOrFail());
+        $this->as($this->manager);
+        $this->deleteJson('/api/file-categories/'.$category->id, [], $this->headers())->assertOk();
+        $this->getJson('/api/workshops', $this->headers())->assertOk()->assertJsonFragment(['id' => $this->factories['DXF']->id, 'is_workshop' => true]);
+        $this->assertDatabaseHas('factories', ['id' => $this->factories['DXF']->id]);
+    }
+
+    public function test_section_deletion_preserves_existing_files_and_enforces_company_and_role_access(): void
+    {
+        $file = $this->file($this->factories['SW']->id, 'keep.sldprt');
+        $category = $this->in(fn () => $file->fresh()->category);
+        $this->as($this->engineer);
+        $this->deleteJson('/api/file-categories/'.$category->id, [], $this->headers())->assertForbidden();
+        $this->as($this->manager);
+        $this->deleteJson('/api/file-categories/'.$category->id, [], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('category');
+        // Legacy records with no category FK must block destructive removal too.
+        DB::table('pmp_files')->where('id', $file->id)->update(['file_category_id' => null]);
+        $this->deleteJson('/api/file-categories/'.$category->id, [], $this->headers())->assertUnprocessable();
+        $foreign = app(CompanyContext::class)->run($this->other, fn () => FileCategory::firstOrFail());
+        $this->deleteJson('/api/file-categories/'.$foreign->id, [], $this->headers())->assertNotFound();
+        $this->get('/api/secure-files/pmp/'.$file->id, $this->headers())->assertOk();
+        $this->assertSame('private bytes', Storage::disk('private')->get($file->path));
+        $this->assertDatabaseHas('file_categories', ['id' => $category->id]);
+    }
+
+    public function test_task_revisions_accept_a_new_configured_format_and_reject_it_after_removal(): void
+    {
+        $this->as($this->manager);
+        $category = $this->postJson('/api/file-categories', ['name' => 'Machine programs', 'is_reference' => false, 'default_factory_id' => $this->factories['POWDER']->id, 'extensions' => ['nc']], $this->headers())->assertCreated()->json('category');
+        $this->as($this->engineer);
+        $file = $this->post('/api/engineers/uploadPmpFile', ['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'file_category_id' => $category['id'], 'file' => UploadedFile::fake()->createWithContent('program.nc', 'Original')], $this->headers())->assertCreated()->json('file');
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file['id']]), $this->headers())->assertCreated()->json('order');
+        $url = '/api/tasks/'.$order['id'].'/files/'.$file['id'].'/versions';
+        $version = $this->post($url, ['file' => UploadedFile::fake()->createWithContent('new.nc', 'Updated'), 'previous_revision_id' => null], $this->headers())->assertCreated()->json('files.0.task_file_revision_id');
+        $this->post($url, ['file' => UploadedFile::fake()->createWithContent('wrong.pdf', 'Wrong format'), 'previous_revision_id' => $version], $this->headers())->assertUnprocessable();
+        $this->as($this->manager);
+        $this->putJson('/api/file-categories/'.$category['id'], ['name' => $category['name'], 'is_reference' => false, 'extensions' => []], $this->headers())->assertOk();
+        $this->as($this->engineer);
+        $this->post($url, ['file' => UploadedFile::fake()->createWithContent('blocked.nc', 'Blocked'), 'previous_revision_id' => $version], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('file');
+        $this->assertDatabaseCount('task_file_revisions', 2);
+        $this->assertSame('Original', Storage::disk('private')->get($file['path']));
+    }
+
+    public function test_project_upload_size_limit_is_one_hundred_mebibytes(): void
+    {
+        $category = $this->in(fn () => FileCategory::where('code', 'PDF')->firstOrFail());
+        $this->as($this->engineer);
+        $body = ['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'file_category_id' => $category->id];
+        foreach ([11264, 102400] as $size) {
+            $this->post('/api/engineers/uploadPmpFile', $body + ['file' => UploadedFile::fake()->create('large-'.$size.'.pdf', $size, 'application/pdf')], $this->headers())->assertCreated();
+        }
+        $this->post('/api/engineers/uploadPmpFile', $body + ['file' => UploadedFile::fake()->create('too-large.pdf', 102401, 'application/pdf')], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('file');
+    }
+
     private function file(int $factory, string $name): PmpFiles { return $this->in(function () use ($factory, $name) { $path = 'companies/'.$this->company->id.'/qa/'.$name; Storage::disk('private')->put($path, 'private bytes'); return PmpFiles::create(['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'factory_id' => $factory, 'original_name' => $name, 'path' => $path]); }); }
     public function test_legacy_non_workshop_steps_do_not_block_real_production_completion(): void
     {

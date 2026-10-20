@@ -67,7 +67,7 @@ class OrderController extends Controller
                 'store_link.url' => 'nullable|url',
                 'finish_date' => 'nullable|string',
                 'files' => 'nullable|array',
-                'files.*' => 'file|max:51200',
+                'files.*' => 'file|max:102400',
             ]);
 
             $this->validateWorkshops($validatedData['factories'] ?? []);

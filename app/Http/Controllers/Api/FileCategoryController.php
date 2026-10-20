@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Factory, FileCategory, FactoryFileExtension};
+use App\Models\{Factory, FileCategory, FactoryFileExtension, PmpFiles};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -32,10 +32,31 @@ class FileCategoryController extends Controller
     {
         $data = $this->validated($request, $fileCategory);
         DB::transaction(function () use ($fileCategory, $data) {
+            $fileCategory = FileCategory::whereKey($fileCategory->id)->lockForUpdate()->firstOrFail();
             $fileCategory->update(collect($data)->except('extensions')->all());
             $this->extensions($fileCategory, $data['extensions']);
         });
         return response()->json(['category' => $fileCategory->fresh()->load('extensions')]);
+    }
+
+    public function destroy(FileCategory $fileCategory)
+    {
+        DB::transaction(function () use ($fileCategory) {
+            $category = FileCategory::whereKey($fileCategory->id)->lockForUpdate()->firstOrFail();
+            // A section can share its legacy factory ID with a real workshop.
+            // Remove only the section and its formats, never production history.
+            $hasFiles = PmpFiles::where(function ($query) use ($category) {
+                $query->where('file_category_id', $category->id)
+                    ->orWhere('factory_id', $category->legacy_factory_id);
+            })->exists();
+            if ($hasFiles) {
+                throw ValidationException::withMessages(['category' => ['Բաժինը պարունակում է ֆայլեր։ Նախ հեռացրեք կամ տեղափոխեք դրանք, ապա ջնջեք բաժինը։']]);
+            }
+            $category->extensions()->delete();
+            $category->delete();
+        });
+
+        return response()->json(['message' => 'Ֆայլերի բաժինը ջնջված է։']);
     }
 
     private function validated(Request $request, ?FileCategory $category = null): array

@@ -60,10 +60,14 @@ final class TaskFileVersions
                 abort_unless((int) $previousId === (int) ($data['previous_revision_id'] ?? null), 409, 'Ֆայլի գործող տարբերակն արդեն փոխվել է։ Թարմացրեք ցանկը և կրկին փորձեք։');
                 $extension = strtolower(pathinfo($file->original_name, PATHINFO_EXTENSION));
                 if ($upload) {
-                    if (!in_array($extension, ['dxf', 'pdf', 'jpg', 'jpeg', 'png', 'webp', 'gif', 'step', 'stp', 'sldprt', 'sldasm', 'igs', 'iges', 'dwg', 'dwt', 'txt', 'csv', 'doc', 'docx', 'xls', 'xlsx', 'zip'], true)
-                        || strtolower($upload->getClientOriginalExtension()) !== $extension) {
+                    if (strtolower($upload->getClientOriginalExtension()) !== $extension) {
                         throw ValidationException::withMessages(['file' => ['Նոր տարբերակը պետք է ունենա նույն թույլատրելի ֆայլի տեսակը։']]);
                     }
+                    if (\Illuminate\Support\Facades\Schema::hasTable('file_categories')) {
+                        $category = $file->category()->lockForUpdate()->first();
+                        abort_unless($category && $category->is_active, 422, 'Այս ֆայլերի բաժինը հասանելի չէ նոր վերբեռնումների համար։');
+                    }
+                    ProjectFilePolicy::assertAllowed($file->factory, $upload->getClientOriginalName());
                     // Snapshot the original too: later PMP-library changes must
                     // not silently change this task's old versions or approvals.
                     if (!TaskFileRevision::where('order_id', $order->id)->where('pmp_file_id', $file->id)->exists()) {
