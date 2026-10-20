@@ -54,6 +54,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::put('workshops/{workshop}', [\App\Http\Controllers\Api\WorkshopController::class, 'update'])->whereNumber('workshop');
             Route::post('file-categories', [\App\Http\Controllers\Api\FileCategoryController::class, 'store']);
             Route::put('file-categories/{fileCategory}', [\App\Http\Controllers\Api\FileCategoryController::class, 'update'])->whereNumber('fileCategory');
+            Route::delete('file-categories/{fileCategory}', [\App\Http\Controllers\Api\FileCategoryController::class, 'destroy'])->whereNumber('fileCategory');
         });
 
         Route::get('user',   [AuthController::class, 'me']);

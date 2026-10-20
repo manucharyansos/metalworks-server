@@ -52,6 +52,9 @@ class CompanyTaskWorkflowTest extends TestCase
         $this->pmp = $this->in($this->company, fn () => Pmp::create(['group' => '990', 'group_name' => 'Task testing', 'admin_confirmation' => false]));
         Storage::fake('private'); Mail::fake();
         $this->files = $this->in($this->company, function () {
+            // These workflow fixtures are text files; their section policy must
+            // permit the same format when a test uploads a new task revision.
+            \App\Models\FactoryFileExtension::firstOrCreate(['factory_id' => $this->factories['DXF']->id, 'extension' => 'txt']);
             $remote = RemoteNumber::create(['pmp_id' => $this->pmp->id, 'remote_number' => '01', 'remote_number_name' => 'QA']);
             $files = [];
             foreach (['DXF', 'DLD', 'INFO', 'PDF'] as $value) {

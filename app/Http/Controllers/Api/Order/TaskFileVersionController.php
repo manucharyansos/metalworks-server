@@ -17,7 +17,7 @@ class TaskFileVersionController extends Controller
     public function store(Request $request, Order $order, PmpFiles $file)
     {
         TaskRouting::authorize($request->user(), $order);
-        $data = $request->validate(['file' => 'required|file|max:10240', 'note' => 'nullable|string|max:1000', 'previous_revision_id' => 'present|nullable|integer']);
+        $data = $request->validate(['file' => 'required|file|max:102400', 'note' => 'nullable|string|max:1000', 'previous_revision_id' => 'present|nullable|integer']);
         return $this->change($request, $order, $file, $data, true);
     }
 
