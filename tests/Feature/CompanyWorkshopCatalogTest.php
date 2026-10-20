@@ -366,6 +366,25 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->assertNotContains($second->json('orders.0.id'), array_column($first->json('orders'), 'id'));
     }
 
+    public function test_general_attachment_formats_bind_the_correct_record_and_remain_private_per_company(): void
+    {
+        $foreign = app(CompanyContext::class)->run($this->other, fn () => \App\Models\FileExtension::create(['extension' => 'dxf']));
+        $this->as($this->account('admin'));
+        $created = $this->postJson('/api/admin/file-extensions', ['extension' => '.PDF'], $this->headers())->assertCreated()->assertJsonPath('data.extension', 'pdf')->json('data');
+        $id = $created['id'];
+        $this->putJson('/api/admin/file-extensions/'.$id, ['extension' => '.DXF'], $this->headers())->assertOk()->assertJsonPath('data.id', $id)->assertJsonPath('data.extension', 'dxf');
+        $this->assertDatabaseHas('file_extensions', ['id' => $id, 'company_id' => $this->company->id, 'extension' => 'dxf']);
+        $this->putJson('/api/admin/file-extensions/'.$id, ['extension' => 'dxf'], $this->headers())->assertOk();
+        $this->postJson('/api/admin/file-extensions', ['extension' => 'DXF'], $this->headers())->assertUnprocessable();
+        $this->postJson('/api/admin/file-extensions', ['extension' => '../bad'], $this->headers())->assertUnprocessable();
+        $this->getJson('/api/admin/file-extensions/'.$id, $this->headers())->assertOk()->assertJsonPath('id', $id);
+        $this->putJson('/api/admin/file-extensions/'.$foreign->id, ['extension' => 'txt'], $this->headers())->assertNotFound();
+        $this->deleteJson('/api/admin/file-extensions/'.$foreign->id, [], $this->headers())->assertNotFound();
+        $this->deleteJson('/api/admin/file-extensions/'.$id, [], $this->headers())->assertOk();
+        $this->assertDatabaseMissing('file_extensions', ['id' => $id]);
+        $this->assertDatabaseHas('file_extensions', ['id' => $foreign->id, 'company_id' => $this->other->id, 'extension' => 'dxf']);
+    }
+
     private function payload(array $ids): array { return ['user_id' => $this->client->id, 'pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'name' => '987.01', 'description' => 'Catalog task', 'finish_date' => '2099-01-01', 'link_existing_files' => true, 'selected_files' => array_map(fn ($id) => ['id' => $id, 'quantity' => 1], $ids)]; }
     private function in(callable $callback): mixed { return app(CompanyContext::class)->run($this->company, $callback); }
     private function account(string $role, ?int $factory = null): User { return $this->in(function () use ($role, $factory) { $user = User::create(['name' => $role, 'email' => $role.'-'.uniqid().'@example.invalid', 'password' => 'test-password', 'role_id' => Role::where('name', $role)->value('id'), 'factory_id' => $factory]); $m = CompanyMembership::where('user_id', $user->id)->first(); $m->permissions()->sync(Permission::whereIn('slug', ['orders.view', 'orders.create', 'orders.update', 'factory.view', 'factory.download', 'factory.order_update', 'pmp.view', 'pmp_files.view', 'pmp_files.upload'])->pluck('id')->mapWithKeys(fn ($id) => [$id => ['allowed' => true]])->all()); return $user; }); }
