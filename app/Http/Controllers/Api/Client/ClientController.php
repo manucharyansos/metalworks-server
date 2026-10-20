@@ -52,7 +52,7 @@ class ClientController extends Controller
             Log::error('Client creation failed because authenticatedUser role is missing');
 
             return response()->json([
-                'message' => 'Հաճախորդի ստեղծումը ժամանակավորապես անհասանելի է։',
+                'message' => 'Պատվիրատուի ստեղծումը ժամանակավորապես անհասանելի է։',
             ], 500);
         }
 
@@ -78,7 +78,7 @@ class ClientController extends Controller
         $client = $user->client;
 
         if (!$client) {
-            return response()->json(['message' => 'Հաճախորդը չի գտնվել'], 404);
+            return response()->json(['message' => 'Պատվիրատուն չի գտնվել'], 404);
         }
 
         return (new ClientResource($client->load('user')))->response();
@@ -90,7 +90,7 @@ class ClientController extends Controller
         $client = $user->client;
 
         if (!$client) {
-            return response()->json(['message' => 'Հաճախորդը չի գտնվել'], 404);
+            return response()->json(['message' => 'Պատվիրատուն չի գտնվել'], 404);
         }
 
         $request->validate([
@@ -105,7 +105,7 @@ class ClientController extends Controller
         });
 
         return response()->json([
-            'message' => 'Հաճախորդը հաջողությամբ թարմացվեց',
+            'message' => 'Պատվիրատուն հաջողությամբ թարմացվեց',
             'client'  => new ClientResource($client->fresh()->load('user')),
         ], 200, [], JSON_UNESCAPED_UNICODE);
     }
@@ -116,7 +116,7 @@ class ClientController extends Controller
         $client = $user->client;
 
         if (!$client) {
-            return response()->json(['message' => 'Հաճախորդը չի գտնվել'], 404);
+            return response()->json(['message' => 'Պատվիրատուն չի գտնվել'], 404);
         }
 
         DB::transaction(function () use ($client, $user): void {
@@ -124,7 +124,7 @@ class ClientController extends Controller
             app(\App\Support\CompanyContext::class)->forgetMembership($user->id);
         });
 
-        return response()->json(['message' => 'Հաճախորդը հաջողությամբ ջնջվեց']);
+        return response()->json(['message' => 'Պատվիրատուն հաջողությամբ ջնջվեց']);
     }
 
     private function assertClientTarget(User $user): void
@@ -134,7 +134,7 @@ class ClientController extends Controller
         abort_unless(
             $user->role?->name === 'authenticatedUser',
             404,
-            'Client not found'
+            'Customer not found'
         );
     }
 

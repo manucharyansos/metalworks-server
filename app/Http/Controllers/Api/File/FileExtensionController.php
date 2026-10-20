@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\File;
 use App\Http\Controllers\Controller;
 use App\Models\FileExtension;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\JsonResponse;
 
 class FileExtensionController extends Controller
@@ -23,9 +24,7 @@ class FileExtensionController extends Controller
      */
     public function store(Request $request): JsonResponse
     {
-        $data = $request->validate([
-            'extension' => 'required|string|unique:file_extensions|max:10',
-        ]);
+        $data = $this->validated($request);
 
         $extension = FileExtension::create($data);
 
@@ -35,39 +34,37 @@ class FileExtensionController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(FileExtension $FileExtension): JsonResponse
+    public function show(FileExtension $fileExtension): JsonResponse
     {
-        return response()->json($FileExtension);
+        return response()->json($fileExtension);
     }
 
     /**
      * Show the form for editing the specified resource.
      */
-    public function edit(FileExtension $FileExtension): JsonResponse
+    public function edit(FileExtension $fileExtension): JsonResponse
     {
-        return response()->json($FileExtension);
+        return response()->json($fileExtension);
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, FileExtension $FileExtension): JsonResponse
+    public function update(Request $request, FileExtension $fileExtension): JsonResponse
     {
-        $data = $request->validate([
-            'extension' => 'required|string|unique:file_extensions,extension,' . $FileExtension->id . '|max:10',
-        ]);
+        $data = $this->validated($request, $fileExtension);
 
-        $FileExtension->update($data);
+        $fileExtension->update($data);
 
-        return response()->json(['data' => $FileExtension]);
+        return response()->json(['data' => $fileExtension->fresh()]);
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(FileExtension $FileExtension): JsonResponse
+    public function destroy(FileExtension $fileExtension): JsonResponse
     {
-        $FileExtension->delete();
+        $fileExtension->delete();
 
         return response()->json(['message' => 'Resource deleted successfully.']);
     }
@@ -75,5 +72,16 @@ class FileExtensionController extends Controller
     public function create()
     {
 
+    }
+
+    private function validated(Request $request, ?FileExtension $extension = null): array
+    {
+        $request->merge(['extension' => strtolower(ltrim(trim((string) $request->input('extension')), '.'))]);
+        return $request->validate(['extension' => [
+            'required', 'string', 'max:20', 'regex:/^(?:\*|[a-z0-9][a-z0-9._+\-]*)$/i',
+            Rule::unique('file_extensions', 'extension')
+                ->where('company_id', app(\App\Support\CompanyContext::class)->id())
+                ->ignore($extension?->id),
+        ]]);
     }
 }

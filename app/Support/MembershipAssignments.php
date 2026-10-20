@@ -43,7 +43,7 @@ final class MembershipAssignments
             if (isset($seen[$key])) throw ValidationException::withMessages(["assignments.$index.role_id" => ['This position and workshop are already selected.']]);
             $seen[$key] = true; $result[] = ['role_id' => (int) $role->id, 'factory_id' => $factory];
         }
-        if ($roles->contains('name', 'authenticatedUser') && count($result) !== 1) throw ValidationException::withMessages(['assignments' => ['Client access cannot be combined with employee positions in one company.']]);
+        if ($roles->contains('name', 'authenticatedUser') && count($result) !== 1) throw ValidationException::withMessages(['assignments' => ['Customer access cannot be combined with employee positions in one company.']]);
         return $result;
     }
 

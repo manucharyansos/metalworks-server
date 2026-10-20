@@ -65,6 +65,10 @@ class AdminOperationsController extends Controller
                     "SUM(CASE WHEN fo.status IN (?, ?, ?) AND fo.confirmation_required = 1 AND fo.engineer_confirmation_at IS NULL THEN 1 ELSE 0 END) as awaiting_admin_confirmation",
                     self::DONE_FACTORY_STATUSES
                 )
+                ->selectRaw(
+                    "COUNT(DISTINCT CASE WHEN fo.status IN (?, ?, ?) AND fo.confirmation_required = 1 AND fo.engineer_confirmation_at IS NULL THEN fo.order_id END) as awaiting_engineer_confirmation",
+                    self::DONE_FACTORY_STATUSES
+                )
                 ->first();
 
             $summary = [
@@ -78,7 +82,7 @@ class AdminOperationsController extends Controller
                 'without_deadline' => (int) ($orderSummary->without_deadline ?? 0),
                 'unassigned_factory_steps' => (int) ($factoryStepSummary->unassigned_factory_steps ?? 0),
                 'awaiting_admin_confirmation' => (int) ($factoryStepSummary->awaiting_admin_confirmation ?? 0),
-                'awaiting_engineer_confirmation' => (int) ($factoryStepSummary->awaiting_admin_confirmation ?? 0),
+                'awaiting_engineer_confirmation' => (int) ($factoryStepSummary->awaiting_engineer_confirmation ?? 0),
                 'factories' => Factory::activeWorkshops()->count(),
                 'factory_operators' => User::query()->assignedToFactory()->count(),
             ];
@@ -204,6 +208,7 @@ class AdminOperationsController extends Controller
             'search' => ['nullable', 'string', 'max:255'],
             'factory_id' => ['nullable', 'integer', 'exists:factories,id'],
             'operator_id' => ['nullable', 'integer', 'exists:users,id'],
+            'work_state' => ['nullable', 'in:open'],
             'creator_id' => ['nullable', 'integer', 'exists:users,id'],
             'order_status' => ['nullable', 'string', 'max:100'],
             'factory_status' => ['nullable', 'string', 'max:100'],
@@ -254,9 +259,15 @@ class AdminOperationsController extends Controller
                 $query->whereHas('factoryOrders', fn (Builder $q) => $q->where('factory_id', $factoryId));
             }
 
-            if (!empty($validated['operator_id'])) {
-                $operatorId = (int) $validated['operator_id'];
-                $query->whereHas('factoryOrders', fn (Builder $q) => $q->where('operator_id', $operatorId));
+            if (!empty($validated['operator_id']) || ($validated['work_state'] ?? null) === 'open') {
+                $query->whereHas('factoryOrders', function (Builder $q) use ($validated) {
+                    if (!empty($validated['operator_id'])) $q->where('operator_id', (int) $validated['operator_id']);
+                    if (!empty($validated['factory_id'])) $q->where('factory_id', (int) $validated['factory_id']);
+                    if (($validated['work_state'] ?? null) === 'open') {
+                        [$sql, $bindings] = $this->openFactoryConditionSql('factory_orders');
+                        $q->whereRaw($sql, $bindings);
+                    }
+                });
             }
 
             if (!empty($validated['creator_id'])) {
@@ -264,7 +275,11 @@ class AdminOperationsController extends Controller
             }
 
             if (!empty($validated['order_status'])) {
-                $query->where('status', $validated['order_status']);
+                if (in_array($validated['order_status'], self::CANCELED_FACTORY_STATUSES, true)) {
+                    $query->whereIn('status', self::CANCELED_FACTORY_STATUSES);
+                } else {
+                    $query->where('status', $validated['order_status']);
+                }
             }
 
             if (!empty($validated['factory_status'])) {
@@ -306,10 +321,12 @@ class AdminOperationsController extends Controller
                 $query->oldest('orders.id');
             } elseif ($sort === 'deadline_asc') {
                 $query->orderByRaw('(SELECT finish_date FROM dates WHERE dates.order_id = orders.id LIMIT 1) IS NULL')
-                    ->orderByRaw('(SELECT finish_date FROM dates WHERE dates.order_id = orders.id LIMIT 1) ASC');
+                    ->orderByRaw('(SELECT finish_date FROM dates WHERE dates.order_id = orders.id LIMIT 1) ASC')
+                    ->orderBy('orders.id');
             } elseif ($sort === 'deadline_desc') {
                 $query->orderByRaw('(SELECT finish_date FROM dates WHERE dates.order_id = orders.id LIMIT 1) IS NULL')
-                    ->orderByRaw('(SELECT finish_date FROM dates WHERE dates.order_id = orders.id LIMIT 1) DESC');
+                    ->orderByRaw('(SELECT finish_date FROM dates WHERE dates.order_id = orders.id LIMIT 1) DESC')
+                    ->orderBy('orders.id');
             } else {
                 $query->latest('orders.id');
             }
@@ -414,7 +431,7 @@ class AdminOperationsController extends Controller
         }
 
         if ($range === 'overdue') {
-            $query->whereNotIn('status', self::CLOSED_ORDER_STATUSES)
+            $query->where(fn (Builder $q) => $q->whereNull('status')->orWhereNotIn('status', self::CLOSED_ORDER_STATUSES))
                 ->whereHas('dates', fn (Builder $q) => $q->where('finish_date', '<', now()));
             return;
         }

@@ -156,7 +156,7 @@ class Order extends Model
 
         if (!$isCustomer) {
             throw ValidationException::withMessages([
-                'user_id' => ['Պատվերի հաճախորդը պետք է լինի գրանցված հաճախորդի հաշիվ։'],
+                'user_id' => ['Պատվերի պատվիրատուն պետք է լինի գրանցված պատվիրատուի հաշիվ։'],
             ]);
         }
     }

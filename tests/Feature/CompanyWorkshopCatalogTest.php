@@ -311,6 +311,80 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->getJson('/api/admin/order/'.$order->id, $this->headers())->assertOk()->assertJsonCount(1, 'factory_orders')->assertJsonPath('factory_orders.0.factory.value', 'POWDER');
     }
 
+    public function test_dashboard_counts_pending_tasks_once_and_separates_confirmed_completions_from_both_cancellation_spellings(): void
+    {
+        $review = $this->in(function () {
+            $order = Order::create(['name' => 'Two proofs, one task', 'user_id' => $this->client->id, 'creator_id' => $this->engineer->id, 'status' => 'pending']);
+            foreach (['DXF', 'POWDER'] as $code) $order->factoryOrders()->create(['factory_id' => $this->factories[$code]->id, 'status' => 'finished', 'confirmation_required' => true, 'confirmation_method' => 'text']);
+            foreach (['completed', 'canceled', 'cancelled'] as $status) Order::create(['name' => $status, 'user_id' => $this->client->id, 'creator_id' => $this->engineer->id, 'status' => $status]);
+            return $order;
+        });
+        $this->as($this->account('admin'));
+        $this->getJson('/api/admin/dashboard', $this->headers())->assertOk()->assertJsonPath('summary.total_orders', 4)->assertJsonPath('summary.awaiting_engineer_confirmation', 1)->assertJsonPath('summary.completed_orders', 1)->assertJsonPath('summary.canceled_orders', 2);
+        $this->getJson('/api/admin/dashboard/orders?confirmation=waiting', $this->headers())->assertOk()->assertJsonPath('pagination.total', 1)->assertJsonPath('orders.0.id', $review->id);
+        $this->getJson('/api/admin/dashboard/orders?order_status=completed', $this->headers())->assertOk()->assertJsonPath('pagination.total', 1)->assertJsonPath('orders.0.status', 'completed');
+        foreach (['canceled', 'cancelled'] as $status) $this->getJson('/api/admin/dashboard/orders?order_status='.$status, $this->headers())->assertOk()->assertJsonPath('pagination.total', 2);
+    }
+
+    public function test_workload_task_list_requires_open_work_for_the_operator_in_the_same_workshop(): void
+    {
+        $operator = $this->account('operator', $this->factories['DXF']->id);
+        $otherOperator = $this->account('operator', $this->factories['POWDER']->id);
+        $open = $this->in(function () use ($operator, $otherOperator) {
+            $order = Order::create(['name' => 'Open work', 'user_id' => $this->client->id, 'creator_id' => $this->engineer->id, 'status' => 'pending']);
+            $order->factoryOrders()->create(['factory_id' => $this->factories['DXF']->id, 'operator_id' => $operator->id, 'status' => 'confirmed']);
+            $order->factoryOrders()->create(['factory_id' => $this->factories['POWDER']->id, 'operator_id' => $otherOperator->id, 'status' => 'pending']);
+            foreach (['finished', 'canceled'] as $status) {
+                $closed = Order::create(['name' => 'Closed work '.$status, 'user_id' => $this->client->id, 'creator_id' => $this->engineer->id, 'status' => $status === 'finished' ? 'completed' : 'canceled']);
+                $closed->factoryOrders()->create(['factory_id' => $this->factories['DXF']->id, 'operator_id' => $operator->id, 'status' => $status, 'completed_at' => $status === 'finished' ? now() : null]);
+            }
+            return $order;
+        });
+        $this->as($this->account('admin'));
+        $url = '/api/admin/dashboard/orders?work_state=open&operator_id='.$operator->id;
+        $this->getJson($url, $this->headers())->assertOk()->assertJsonPath('pagination.total', 1)->assertJsonPath('orders.0.id', $open->id);
+        $this->getJson($url.'&factory_id='.$this->factories['POWDER']->id, $this->headers())->assertOk()->assertJsonPath('pagination.total', 0);
+        $this->getJson($url, ['X-Company-ID' => $this->other->id])->assertForbidden();
+    }
+
+    public function test_overdue_list_is_paginated_beyond_the_attention_preview_and_includes_unset_status(): void
+    {
+        $this->in(function () {
+            for ($i = 0; $i < 13; $i++) {
+                $order = Order::create(['name' => 'Overdue '.$i, 'user_id' => $this->client->id, 'creator_id' => $this->engineer->id, 'status' => $i === 0 ? '' : 'pending']);
+                $order->dates()->create(['finish_date' => now()->subDays(3)]);
+            }
+            foreach (['completed', 'canceled'] as $status) {
+                $order = Order::create(['name' => 'Not overdue '.$status, 'user_id' => $this->client->id, 'creator_id' => $this->engineer->id, 'status' => $status]);
+                $order->dates()->create(['finish_date' => now()->subDays(3)]);
+            }
+        });
+        $this->as($this->account('admin'));
+        $this->getJson('/api/admin/dashboard', $this->headers())->assertOk()->assertJsonPath('summary.overdue_orders', 13);
+        $first = $this->getJson('/api/admin/dashboard/orders?time_range=overdue&per_page=12', $this->headers())->assertOk()->assertJsonCount(12, 'orders')->assertJsonPath('pagination.total', 13)->assertJsonPath('pagination.last_page', 2);
+        $second = $this->getJson('/api/admin/dashboard/orders?time_range=overdue&per_page=12&page=2', $this->headers())->assertOk()->assertJsonCount(1, 'orders')->assertJsonPath('pagination.total', 13);
+        $this->assertNotContains($second->json('orders.0.id'), array_column($first->json('orders'), 'id'));
+    }
+
+    public function test_general_attachment_formats_bind_the_correct_record_and_remain_private_per_company(): void
+    {
+        $foreign = app(CompanyContext::class)->run($this->other, fn () => \App\Models\FileExtension::create(['extension' => 'dxf']));
+        $this->as($this->account('admin'));
+        $created = $this->postJson('/api/admin/file-extensions', ['extension' => '.PDF'], $this->headers())->assertCreated()->assertJsonPath('data.extension', 'pdf')->json('data');
+        $id = $created['id'];
+        $this->putJson('/api/admin/file-extensions/'.$id, ['extension' => '.DXF'], $this->headers())->assertOk()->assertJsonPath('data.id', $id)->assertJsonPath('data.extension', 'dxf');
+        $this->assertDatabaseHas('file_extensions', ['id' => $id, 'company_id' => $this->company->id, 'extension' => 'dxf']);
+        $this->putJson('/api/admin/file-extensions/'.$id, ['extension' => 'dxf'], $this->headers())->assertOk();
+        $this->postJson('/api/admin/file-extensions', ['extension' => 'DXF'], $this->headers())->assertUnprocessable();
+        $this->postJson('/api/admin/file-extensions', ['extension' => '../bad'], $this->headers())->assertUnprocessable();
+        $this->getJson('/api/admin/file-extensions/'.$id, $this->headers())->assertOk()->assertJsonPath('id', $id);
+        $this->putJson('/api/admin/file-extensions/'.$foreign->id, ['extension' => 'txt'], $this->headers())->assertNotFound();
+        $this->deleteJson('/api/admin/file-extensions/'.$foreign->id, [], $this->headers())->assertNotFound();
+        $this->deleteJson('/api/admin/file-extensions/'.$id, [], $this->headers())->assertOk();
+        $this->assertDatabaseMissing('file_extensions', ['id' => $id]);
+        $this->assertDatabaseHas('file_extensions', ['id' => $foreign->id, 'company_id' => $this->other->id, 'extension' => 'dxf']);
+    }
+
     private function payload(array $ids): array { return ['user_id' => $this->client->id, 'pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'name' => '987.01', 'description' => 'Catalog task', 'finish_date' => '2099-01-01', 'link_existing_files' => true, 'selected_files' => array_map(fn ($id) => ['id' => $id, 'quantity' => 1], $ids)]; }
     private function in(callable $callback): mixed { return app(CompanyContext::class)->run($this->company, $callback); }
     private function account(string $role, ?int $factory = null): User { return $this->in(function () use ($role, $factory) { $user = User::create(['name' => $role, 'email' => $role.'-'.uniqid().'@example.invalid', 'password' => 'test-password', 'role_id' => Role::where('name', $role)->value('id'), 'factory_id' => $factory]); $m = CompanyMembership::where('user_id', $user->id)->first(); $m->permissions()->sync(Permission::whereIn('slug', ['orders.view', 'orders.create', 'orders.update', 'factory.view', 'factory.download', 'factory.order_update', 'pmp.view', 'pmp_files.view', 'pmp_files.upload'])->pluck('id')->mapWithKeys(fn ($id) => [$id => ['allowed' => true]])->all()); return $user; }); }
