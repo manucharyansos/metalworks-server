@@ -12,7 +12,7 @@ use App\Models\PrefixCode;
 use App\Models\RemoteNumber;
 use App\Models\SelectedFile;
 use App\Models\User;
-use App\Support\{TaskNotifier, TaskStages, TaskWorkflow};
+use App\Support\{ProductionRoute, TaskNotifier, TaskStages, TaskWorkflow};
 use App\Models\TaskChangeRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -176,6 +176,8 @@ class EngineerController extends Controller
                 $order->dates()->create(['finish_date' => $validatedData['finish_date']]);
 
                 TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $validatedData['reference_file_visibility'] ?? [], $factoryOperators, $validatedData['workshop_settings'] ?? [], $validatedData['file_routing'] ?? []);
+                if (isset($validatedData['production_route'])) ProductionRoute::apply($order, $validatedData['production_route']);
+                else ProductionRoute::refreshReadiness($order, null);
 
                 return $order;
             });
@@ -353,6 +355,7 @@ class EngineerController extends Controller
                     // The jobs are rebuilt from the new files, but the people and the
                     // per-workshop deadline, priority and proof chosen at creation stay.
                     $kept = $order->factoryOrders()->get()->keyBy('factory_id');
+                    $keptRoute = ProductionRoute::snapshot($kept);
                     $operators = $kept->filter(fn ($step) => $step->operator_id)
                         ->map(fn ($step) => ['factory_id' => $step->factory_id, 'user_id' => $step->operator_id]);
                     $workshopSettings = $kept->map(fn ($step) => [
@@ -363,6 +366,14 @@ class EngineerController extends Controller
                     $order->selectedFiles()->delete();
                     $order->factoryOrders()->each(function ($step) { $step->files()->detach(); $step->delete(); });
                     TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $order->reference_file_visibility ?? [], $operators, $workshopSettings, $routing);
+                    $currentFactories = $order->factoryOrders()->pluck('factory_id')->all();
+                    $preserved = array_values(array_filter($keptRoute, fn ($stage) => in_array($stage['factory_id'], $currentFactories)));
+                    foreach (array_diff($currentFactories, array_column($preserved, 'factory_id')) as $factoryId) {
+                        $preserved[] = ['factory_id' => (int) $factoryId, 'predecessor_factory_ids' => [], 'deadline' => null];
+                    }
+                    ProductionRoute::apply($order, $validatedData['production_route'] ?? ['mode' => 'custom', 'stages' => $preserved]);
+                } elseif (isset($validatedData['production_route'])) {
+                    ProductionRoute::apply($order, $validatedData['production_route'], $request->user());
                 }
             });
 

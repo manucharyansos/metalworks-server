@@ -234,6 +234,9 @@ class EngineerOrderFilesTest extends TestCase
                 $t->boolean('confirmation_required')->default(false); $t->string('confirmation_method')->nullable();
                 $t->text('evidence_text')->nullable(); $t->string('evidence_photo_path')->nullable();
                 $t->timestamp('engineer_confirmation_at')->nullable(); $t->unsignedBigInteger('engineer_confirmation_user_id')->nullable(); $t->timestamp('completed_at')->nullable();
+                $t->unsignedBigInteger('depends_on_id')->nullable(); $t->json('predecessor_ids')->nullable();
+                $t->unsignedInteger('route_position')->default(0); $t->timestamp('ready_at')->nullable();
+                $t->date('deadline')->nullable(); $t->string('priority')->default('normal');
                 foreach (['cancel_date', 'finish_date', 'operator_finish_date', 'admin_confirmation_date'] as $field) $t->timestamp($field)->nullable();
             },
             'factory_order_files' => function (Blueprint $t) {

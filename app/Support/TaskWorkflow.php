@@ -26,7 +26,7 @@ final class TaskWorkflow
             'workshop_settings.*.confirmation_method' => 'nullable|required_if:workshop_settings.*.confirmation_required,true|in:photo,text,photo_text',
             'workshop_settings.*.deadline' => 'nullable|date_format:Y-m-d',
             'workshop_settings.*.priority' => 'required|in:normal,high,urgent',
-        ];
+        ] + ProductionRoute::rules();
     }
 
     public static function evidenceMethods(?string $method): array

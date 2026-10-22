@@ -242,6 +242,139 @@ class CompanyTaskRoutingTest extends TestCase
     private function assign(Order $order, FactoryOrder $step, ?int $operator) { return $this->putJson('/api/tasks/'.$order->id.'/workshops/'.$step->id.'/operator',['operator_id'=>$operator],$this->headers()); }
     private function add(Order $order,array $extra=[]) { return $this->postJson('/api/tasks/'.$order->id.'/workshops',array_replace(['factory_id'=>$this->factories['DLD']->id,'operator_id'=>$this->bendOperator->id,'files'=>[['id'=>$this->files['DXF']->id,'quantity'=>2]]],$extra),$this->headers()); }
     private function in(Company $company, callable $callback): mixed { return app(CompanyContext::class)->run($company, $callback); }
+    public function test_creation_builds_a_sequential_route_with_workshop_deadlines_and_private_files(): void
+    {
+        $plan = $this->routePlan('sequential');
+        $order = $this->createTask($this->routePayload($plan));
+        $steps = $order->factoryOrders()->get()->keyBy('factory_id');
+        $laser = $steps[$this->factories['DXF']->id]; $bend = $steps[$this->factories['DLD']->id]; $powder = $steps[$this->factories['POWDER']->id];
+        $this->assertFalse($laser->is_blocked); $this->assertTrue($bend->is_blocked); $this->assertTrue($powder->is_blocked);
+        $this->assertSame([$laser->id], $bend->dependencyIds()); $this->assertSame([$bend->id], $powder->dependencyIds());
+        $this->assertSame($plan['stages'][1]['deadline'], $bend->deadline);
+        $this->as($this->bendOperator);
+        foreach (['accepted', 'confirmed', 'finished'] as $status) $this->act($order, $status)->assertUnprocessable();
+        $board = $this->getJson('/api/factories/factory/'.$bend->factory_id, $this->headers())->assertOk();
+        $this->assertCount(1, $board->json('orders.0.factory_orders'));
+        $this->assertSame([$this->factories['DXF']->name], $board->json('orders.0.factory_orders.0.waiting_for'));
+        $this->assertArrayNotHasKey('depends_on', $board->json('orders.0.factory_orders.0'));
+        foreach (['operator@example', 'Laser private data'] as $secret) $this->assertStringNotContainsString($secret, $board->getContent());
+        $this->as($this->operator); $this->act($order, 'finished')->assertOk();
+        $this->assertFalse($bend->fresh()->is_blocked); $this->assertTrue($powder->fresh()->is_blocked);
+        $this->assertSame(1, \App\Models\TaskNotification::where('factory_order_id', $bend->id)->where('type', 'step.ready')->where('user_id', $this->bendOperator->id)->count());
+        $this->as($this->bendOperator); $this->act($order, 'finished')->assertOk();
+        $this->assertFalse($powder->fresh()->is_blocked); $this->assertSame('pending', $order->fresh()->status);
+    }
+
+    public function test_mixed_join_waits_for_all_predecessors_and_engineer_approval_then_notifies_once(): void
+    {
+        $powderOperator = $this->account('powder', 'operator', $this->factories['POWDER']->id);
+        $plan = $this->routePlan('custom');
+        $plan['stages'][2]['predecessor_factory_ids'] = [$this->factories['DXF']->id, $this->factories['DLD']->id];
+        $data = $this->routePayload($plan);
+        $data['factory_operators'][] = ['factory_id' => $this->factories['POWDER']->id, 'user_id' => $powderOperator->id];
+        $data['workshop_settings'] = [['factory_id' => $this->factories['DLD']->id, 'confirmation_required' => true, 'confirmation_method' => 'text', 'priority' => 'normal']];
+        $order = $this->createTask($data); $steps = $order->factoryOrders()->get()->keyBy('factory_id');
+        $bend = $steps[$this->factories['DLD']->id]; $powder = $steps[$this->factories['POWDER']->id];
+        $this->as($this->operator); $this->act($order, 'finished')->assertOk();
+        $this->as($this->bendOperator); $this->act($order, 'finished', ['evidence_text' => 'Bending checked'])->assertOk();
+        $this->assertTrue($powder->fresh()->is_blocked);
+        $this->assertSame(0, \App\Models\TaskNotification::where('type', 'step.ready')->where('factory_order_id', $powder->id)->count());
+        $this->as($this->engineer); $this->approve($bend)->assertOk(); $this->approve($bend)->assertOk();
+        $this->assertFalse($powder->fresh()->is_blocked);
+        $notifications = \App\Models\TaskNotification::where('type', 'step.ready')->where('factory_order_id', $powder->id)->get();
+        $this->assertCount(1, $notifications); $this->assertSame($powderOperator->id, $notifications->first()->user_id);
+        $this->assertSame($powder->factory_id, $notifications->first()->data['factory_id']);
+        $this->as($powderOperator); $this->act($order, 'finished')->assertOk(); $this->assertSame('completed', $order->fresh()->status);
+    }
+
+    public function test_route_edits_validate_cycles_foreign_workshops_stale_edits_and_started_history(): void
+    {
+        $order = $this->createTask($this->routePayload($this->routePlan('parallel')));
+        $before = \App\Support\ProductionRoute::snapshot($order->factoryOrders()->get());
+        $plan = $this->routePlan('custom'); $plan['stages'][0]['predecessor_factory_ids'] = [$this->factories['DLD']->id];
+        $plan['stages'][1]['predecessor_factory_ids'] = [$this->factories['DXF']->id];
+        $this->routeUpdate($order, $plan, $before)->assertUnprocessable()->assertJsonValidationErrors('production_route');
+        $plan = $this->routePlan('sequential');
+        foreach ([$this->otherEngineer, $this->operator, $this->customer] as $user) { $this->as($user); $this->routeUpdate($order, $plan, $before)->assertForbidden(); }
+        $this->as($this->manager); $this->routeUpdate($order, $plan, $before)->assertOk();
+        $this->routeUpdate($order, $this->routePlan('parallel'), $before)->assertStatus(409);
+        $current = \App\Support\ProductionRoute::snapshot($order->factoryOrders()->get());
+        $foreign = $plan; $foreign['stages'][0]['predecessor_factory_ids'] = [999999]; $foreign['mode'] = 'custom';
+        $this->routeUpdate($order, $foreign, $current)->assertUnprocessable();
+        $this->as($this->operator); $this->act($order, 'confirmed')->assertOk();
+        $this->as($this->engineer); $changed = $this->routePlan('custom');
+        $changed['stages'][0]['predecessor_factory_ids'] = [$this->factories['DLD']->id];
+        $this->routeUpdate($order, $changed, $current)->assertUnprocessable();
+        $this->assertSame($current, \App\Support\ProductionRoute::snapshot($order->factoryOrders()->get()));
+    }
+
+    public function test_creation_route_validation_rolls_back_task_files_and_notifications(): void
+    {
+        $plan = $this->routePlan('custom');
+        $plan['stages'][0]['predecessor_factory_ids'] = [$this->factories['DLD']->id];
+        $plan['stages'][1]['predecessor_factory_ids'] = [$this->factories['DXF']->id];
+        $this->as($this->engineer);
+        $this->postJson('/api/engineers/engineer', $this->payload($this->routePayload($plan)), $this->headers())->assertUnprocessable();
+        $this->assertSame(0, Order::count()); $this->assertSame(0, FactoryOrder::count());
+        $this->assertSame(0, \App\Models\TaskNotification::count());
+    }
+
+    public function test_route_survives_file_edit_recreated_job_ids_and_migration_retry_without_data_loss(): void
+    {
+        $data = $this->routePayload($this->routePlan('sequential'));
+        $order = $this->createTask($data);
+        $snapshot = \App\Support\ProductionRoute::snapshot($order->factoryOrders()->get());
+        $oldIds = $order->factoryOrders()->pluck('id')->all();
+        unset($data['production_route']);
+        $this->putJson('/api/engineers/engineer/'.$order->id, $this->payload($data), $this->headers())->assertOk();
+        $steps = $order->factoryOrders()->get();
+        $this->assertSame($snapshot, \App\Support\ProductionRoute::snapshot($steps));
+        foreach ($steps as $step) $this->assertSame([], array_intersect($step->dependencyIds(), $oldIds));
+        $migration = require database_path('migrations/2026_10_22_120000_add_production_routes.php'); $migration->up(); $migration->up();
+        $this->assertSame($snapshot, \App\Support\ProductionRoute::snapshot($order->factoryOrders()->get()));
+    }
+
+    public function test_unassigned_ready_stage_notifies_only_eligible_company_workshop_operators(): void
+    {
+        $order = $this->createTask($this->routePayload($this->routePlan('sequential')));
+        $bend = $order->factoryOrders()->where('factory_id', $this->factories['DLD']->id)->firstOrFail();
+        $this->assign($order, $bend, null)->assertOk();
+        $this->as($this->operator); $this->act($order, 'finished')->assertOk();
+        $ids = \App\Models\TaskNotification::where('type', 'step.ready')->where('factory_order_id', $bend->id)->pluck('user_id')->all();
+        $this->assertSame([$this->bendOperator->id], $ids);
+        $this->assertFalse($bend->fresh()->is_blocked);
+    }
+
+    public function test_four_company_workshops_and_new_catalog_names_work_with_every_route_mode(): void
+    {
+        $fourth = $this->factories['IQS']; $fourth->update(['name' => 'Եռակցում և հավաքում']);
+        foreach (['sequential', 'parallel', 'custom'] as $mode) {
+            $plan = $this->routePlan($mode);
+            $plan['stages'][] = ['factory_id' => $fourth->id, 'predecessor_factory_ids' => array_column($plan['stages'], 'factory_id'), 'deadline' => null];
+            $order = $this->createTask($this->routePayload($plan));
+            $this->assertSame(4, $order->factoryOrders()->count());
+            $last = $order->factoryOrders()->where('factory_id', $fourth->id)->firstOrFail();
+            $this->assertCount($mode === 'parallel' ? 0 : ($mode === 'sequential' ? 1 : 3), $last->dependencyIds());
+            $this->assertSame($mode !== 'parallel', $last->is_blocked);
+            $this->assertSame('Եռակցում և հավաքում', $last->factory->name);
+        }
+    }
+
+    private function routePlan(string $mode): array
+    {
+        return ['mode' => $mode, 'stages' => array_map(fn ($key, $index) => ['factory_id' => $this->factories[$key]->id,
+            'predecessor_factory_ids' => [], 'deadline' => now()->addDays($index + 1)->toDateString()], ['DXF', 'DLD', 'POWDER'], [0,1,2])];
+    }
+    private function routePayload(array $plan): array
+    {
+        return ['production_route' => $plan, 'file_routing' => [['file_id' => $this->files['DXF']->id, 'factory_ids' => array_column($plan['stages'], 'factory_id')]],
+            'factory_operators' => [['factory_id' => $this->factories['DXF']->id, 'user_id' => $this->operator->id], ['factory_id' => $this->factories['DLD']->id, 'user_id' => $this->bendOperator->id]]];
+    }
+    private function routeUpdate(Order $order, array $plan, array $previous)
+    {
+        return $this->putJson('/api/tasks/'.$order->id.'/production-route', ['production_route' => $plan, 'previous_route' => $previous], $this->headers());
+    }
+
     private function headers(): array { return ['X-Company-ID' => (string) $this->company->id, 'Accept' => 'application/json']; }
     private function as(User $user): void { app(CompanyContext::class)->set(null); $user->unsetRelation('role')->unsetRelation('factory'); Sanctum::actingAs($user); }
     private function account(string $name, string $role, ?int $factoryId = null): User
@@ -255,7 +388,7 @@ class CompanyTaskRoutingTest extends TestCase
     }
     private function payload(array $extra = []): array
     {
-        return array_replace(['user_id' => $this->customer->id, 'description' => 'A private task', 'name' => '990.01', 'finish_date' => '2026-10-20', 'pmp_id' => $this->pmp->id, 'link_existing_files' => true, 'selected_files' => [['id' => $this->files['DXF']->id, 'quantity' => 2]]], $extra);
+        return array_replace(['user_id' => $this->customer->id, 'description' => 'A private task', 'name' => '990.01', 'finish_date' => now()->addDays(7)->toDateString(), 'pmp_id' => $this->pmp->id, 'link_existing_files' => true, 'selected_files' => [['id' => $this->files['DXF']->id, 'quantity' => 2]]], $extra);
     }
     private function createTask(array $extra = []): Order
     {

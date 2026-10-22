@@ -27,12 +27,12 @@ class FactoryOrder extends Model
         'operator_id',
         'confirmation_required', 'confirmation_method', 'evidence_text', 'evidence_photo_path',
         'engineer_confirmation_at', 'engineer_confirmation_user_id', 'completed_at',
-        'depends_on_id', 'return_note', 'returned_at', 'deadline', 'priority',
+        'depends_on_id', 'predecessor_ids', 'route_position', 'ready_at', 'return_note', 'returned_at', 'deadline', 'priority',
     ];
 
-    protected $casts = ['confirmation_required' => 'boolean'];
+    protected $casts = ['confirmation_required' => 'boolean', 'predecessor_ids' => 'array', 'route_position' => 'integer'];
     protected $hidden = ['evidence_photo_path', 'dependsOn'];
-    protected $appends = ['awaiting_engineer_confirmation', 'has_evidence_photo', 'is_blocked'];
+    protected $appends = ['awaiting_engineer_confirmation', 'has_evidence_photo', 'is_blocked', 'waiting_for'];
 
     public function dependsOn(): BelongsTo
     {
@@ -58,10 +58,28 @@ class FactoryOrder extends Model
 
     public function getIsBlockedAttribute(): bool
     {
-        if (!$this->depends_on_id) return false;
-        $previous = $this->dependsOn;
-        if ($previous?->factory && !$previous->factory->is_workshop) return false;
-        return !$previous?->isWorkCompleted();
+        $ids = $this->dependencyIds();
+        if (!$ids) return false;
+        $steps = $this->prerequisites();
+        return $steps->count() !== count($ids) || $steps->contains(fn ($step) => $step->factory?->is_workshop && !$step->isWorkCompleted());
+    }
+
+    public function dependencyIds(): array
+    {
+        return array_values(array_unique(array_map('intval', $this->predecessor_ids ?? ($this->depends_on_id ? [$this->depends_on_id] : []))));
+    }
+
+    private function prerequisites()
+    {
+        // Never serialize another workshop's files or operator through this relation.
+        $ids = $this->dependencyIds();
+        return $ids ? self::where('order_id', $this->order_id)->whereIn('id', $ids)->with('factory')->get() : collect();
+    }
+
+    public function getWaitingForAttribute(): array
+    {
+        return $this->prerequisites()->filter(fn ($step) => $step->factory?->is_workshop && !$step->isWorkCompleted())
+            ->map(fn ($step) => $step->factory->name)->values()->all();
     }
 
     public function getAwaitingEngineerConfirmationAttribute(): bool

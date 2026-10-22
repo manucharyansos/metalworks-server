@@ -75,24 +75,25 @@ final class TaskRouting
                 throw ValidationException::withMessages(['files' => ['Ընտրեք առնվազն մեկ աշխատանքային ֆայլ։']]);
             }
             if ($step && $step->files->pluck('id')->intersect($ids)->isNotEmpty()) throw ValidationException::withMessages(['files' => ['Ֆայլն արդեն կցված է այս արտադրամասի աշխատանքին։']]);
-            $predecessorId = array_key_exists('depends_on_id', $data) ? $data['depends_on_id'] : $step?->depends_on_id;
-            if ($predecessorId) {
-                $source = $steps->firstWhere('id', $predecessorId);
-                if (!$source || in_array($source->status, ['canceled', 'cancelled'], true)) throw ValidationException::withMessages(['depends_on_id' => ['Ընտրեք այս առաջադրանքի գործող կամ ավարտված արտադրամասի աշխատանքը։']]);
-                $seen = $step ? [$step->id] : [];
-                while ($source) {
-                    if (in_array($source->id, $seen, true)) throw ValidationException::withMessages(['depends_on_id' => ['Արտադրամասերի հերթականությունը չի կարող շրջան կազմել։']]);
-                    $seen[] = $source->id;
-                    $source = $source->depends_on_id ? $steps->firstWhere('id', $source->depends_on_id) : null;
-                }
+            $dependencyField = array_key_exists('predecessor_ids', $data) ? 'predecessor_ids' : 'depends_on_id';
+            $predecessorIds = array_key_exists('predecessor_ids', $data) ? array_map('intval', $data['predecessor_ids'])
+                : (array_key_exists('depends_on_id', $data) ? ($data['depends_on_id'] ? [(int) $data['depends_on_id']] : []) : ($step?->dependencyIds() ?? []));
+            foreach ($predecessorIds as $id) {
+                $source = $steps->firstWhere('id', $id);
+                if (!$source || in_array($source->status, ['canceled', 'cancelled'], true)) throw ValidationException::withMessages([$dependencyField => ['Ընտրեք այս առաջադրանքի գործող կամ ավարտված արտադրամասի աշխատանքը։']]);
             }
+            $targetId = $step?->id ?? 0;
+            $graph = $steps->mapWithKeys(fn ($existing) => [$existing->id => $existing->dependencyIds()])->all();
+            $graph[$targetId] = $predecessorIds;
+            ProductionRoute::validateGraph($graph, $dependencyField);
             $operatorId = array_key_exists('operator_id', $data) ? $data['operator_id'] : $step?->operator_id;
             $operator = self::operator($operatorId, (int) $factory->id);
             $step ??= new FactoryOrder(['order_id' => $order->id, 'factory_id' => $factory->id, 'status' => 'pending'] + TaskWorkflow::settings($order->toArray()));
             foreach (['deadline', 'priority'] as $field) if (array_key_exists($field, $data)) $step->$field = $data[$field];
             if (array_key_exists('confirmation_required', $data)) $step->fill(TaskWorkflow::settings($data));
             $previousOperatorId = $step->operator_id;
-            $step->fill(['operator_id' => $operator?->id, 'depends_on_id' => $predecessorId])->save();
+            $step->fill(['operator_id' => $operator?->id, 'depends_on_id' => $predecessorIds[0] ?? null, 'predecessor_ids' => $predecessorIds,
+                'route_position' => $step->exists ? $step->route_position : ((int) $steps->max('route_position') + 1)])->save();
             $shares = collect($order->reference_file_visibility ?? [])->keyBy('file_id');
             foreach ($data['files'] as $item) {
                 $file = $files->get($item['id']);
@@ -112,8 +113,9 @@ final class TaskRouting
             OrderLog::create(['order_id' => $order->id, 'user_id' => $actor->id, 'action' => 'factory_order.work_added',
                 'message' => sprintf('Արտադրամաս «%s»․ ավելացվել է %d ֆայլով աշխատանք։', $factory->name, count($ids)),
                 'meta' => ['factory_order_id' => $step->id, 'factory_id' => $factory->id, 'file_ids' => $ids,
-                    'depends_on_id' => $predecessorId, 'from_operator_id' => $previousOperatorId,
+                    'depends_on_id' => $predecessorIds[0] ?? null, 'predecessor_ids' => $predecessorIds, 'from_operator_id' => $previousOperatorId,
                     'operator_id' => $operator?->id, 'reopened_task' => $wasCompleted]]);
+            ProductionRoute::refreshReadiness($order, $actor);
             return $step;
         });
     }

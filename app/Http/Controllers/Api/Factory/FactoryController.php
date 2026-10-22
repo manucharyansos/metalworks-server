@@ -18,6 +18,7 @@ use App\Models\OrderLog;
 use App\Support\TaskAccess;
 use App\Support\TaskChangeRequests;
 use App\Support\TaskNotifier;
+use App\Support\ProductionRoute;
 use App\Models\TaskChangeRequest;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
@@ -182,7 +183,7 @@ class FactoryController extends Controller
                         ['requested_status' => in_array($status, [null, 'waiting'], true) ? 'pending' : $status, 'note' => $data['factory_order']['request_note'] ?? null]);
                     return [$order, $step->fresh(), $step->status, $changeRequest];
                 }
-                if ($step->is_blocked && in_array($status, ['confirmed', 'finished'], true)) {
+                if ($step->is_blocked && in_array($status, ['accepted', 'confirmed', 'finished'], true)) {
                     throw ValidationException::withMessages(['factory_order.status' => ['Նախորդ արտադրամասի աշխատանքը դեռ չի ավարտվել։ Անհրաժեշտության դեպքում պետք է նաև ինժեների հաստատումը։']]);
                 }
                 if ($step->completed_at || in_array($step->status, ['finished', 'completed', 'done'], true)) {
@@ -259,6 +260,7 @@ class FactoryController extends Controller
                     'message' => sprintf('Արտադրամաս «%s»․ %s → %s', $step->factory->name, $previous ?? 'Սպասում', $status ?? 'Սպասում'),
                     'meta' => ['factory_id' => $factoryId, 'factory_order_id' => $step->id, 'from_status' => $previous, 'to_status' => $status]]);
                 $order->updateStatusIfAllFactoriesCompleted();
+                ProductionRoute::refreshReadiness($order, $user);
                 return [$order, $step, $previous, null];
             });
         } catch (\Throwable $e) {

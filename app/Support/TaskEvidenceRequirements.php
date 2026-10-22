@@ -82,6 +82,7 @@ final class TaskEvidenceRequirements
                 $order->save();
             }
             $order->updateStatusIfAllFactoriesCompleted();
+            ProductionRoute::refreshReadiness($order, $actor);
             return [$order, $changes];
         });
     }
