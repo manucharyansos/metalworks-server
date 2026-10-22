@@ -52,39 +52,43 @@ final class TaskWorkflow
         return $file->routing_factory_id ? [(int) $file->routing_factory_id] : [];
     }
 
-    public static function workshopIds(Pmp $pmp, array $selected, array $routing = []): array
+    public static function workshopIds(Pmp $pmp, array $selected, array $routing = [], array $visibility = []): array
     {
-        return $pmp->files->whereIn('id', array_column($selected, 'id'))->reject(fn ($file) => $file->is_reference_file)
-            ->flatMap(fn ($file) => self::destinations($file, $routing))->unique()->values()->all();
+        $shares = collect($visibility)->keyBy('file_id');
+        return $pmp->files->whereIn('id', array_column($selected, 'id'))
+            ->flatMap(fn ($file) => $file->is_reference_file
+                ? array_map('intval', $shares->get($file->id)['factory_ids'] ?? [])
+                : self::destinations($file, $routing))->unique()->values()->all();
     }
 
     public static function validateFiles(array $selected, Pmp $pmp, array $visibility, array $workshopSettings = [], array $routing = []): void
     {
         $files = $pmp->files->whereIn('id', array_column($selected, 'id'));
-        $workshopIds = self::workshopIds($pmp, $selected, $routing);
-        if (!$workshopIds || Factory::activeWorkshops()->whereIn('id', $workshopIds)->count() !== count($workshopIds)) {
-            throw ValidationException::withMessages(['selected_files' => ['Աշխատանքային ֆայլի համար ընտրեք այս ընկերության գործող արտադրամասը։']]);
-        }
+        $workshopIds = self::workshopIds($pmp, $selected, $routing, $visibility);
+        $activeIds = Factory::activeWorkshops()->pluck('id')->map(fn ($id) => (int) $id)->all();
         foreach ($routing as $row) {
             $file = $files->firstWhere('id', $row['file_id']);
-            if (!$file || $file->is_reference_file || count(array_unique($row['factory_ids'])) !== count($row['factory_ids']) || array_diff($row['factory_ids'], $workshopIds)) {
+            if (!$file || $file->is_reference_file || count(array_unique($row['factory_ids'])) !== count($row['factory_ids']) || array_diff($row['factory_ids'], $activeIds)) {
                 throw ValidationException::withMessages(['file_routing' => ['Ընտրեք այս առաջադրանքի աշխատանքային ֆայլերն ու գործող արտադրամասերը։']]);
             }
         }
-        if (array_diff(array_column($workshopSettings, 'factory_id'), $workshopIds)) {
-            throw ValidationException::withMessages(['workshop_settings' => ['Կարգավորումները պետք է պատկանեն ընտրված արտադրամասերի աշխատանքներին։']]);
-        }
         foreach ($visibility as $row) {
             $file = $files->firstWhere('id', $row['file_id']);
-            if (!$file || !$file->is_reference_file || count(array_unique($row['factory_ids'])) !== count($row['factory_ids']) || array_diff($row['factory_ids'], $workshopIds)) {
+            if (!$file || !$file->is_reference_file || count(array_unique($row['factory_ids'])) !== count($row['factory_ids']) || array_diff($row['factory_ids'], $activeIds)) {
                 throw ValidationException::withMessages(['reference_file_visibility' => ['Տեղեկատու ֆայլը և ընտրված արտադրամասերը պետք է պատկանեն այս առաջադրանքին և ընկերությանը։']]);
             }
+        }
+        if (!$workshopIds || array_diff($workshopIds, $activeIds)) {
+            throw ValidationException::withMessages(['selected_files' => ['Ընտրեք գործող արտադրամասը կամ տեղեկատու ֆայլը տեսնող արտադրամասերը։']]);
+        }
+        if (array_diff(array_column($workshopSettings, 'factory_id'), $workshopIds)) {
+            throw ValidationException::withMessages(['workshop_settings' => ['Կարգավորումները պետք է պատկանեն ընտրված արտադրամասերի աշխատանքներին։']]);
         }
     }
 
     public static function attachFiles(Order $order, Pmp $pmp, array $selected, array $visibility, $operators, array $workshopSettings = [], array $routing = []): void
     {
-        $ids = self::workshopIds($pmp, $selected, $routing);
+        $ids = self::workshopIds($pmp, $selected, $routing, $visibility);
         if (Factory::activeWorkshops()->whereIn('id', $ids)->sharedLock()->get(['id'])->count() !== count($ids)) throw ValidationException::withMessages(['file_routing' => ['Արտադրամասերի հասանելիությունը փոխվել է։ Թարմացրեք ընտրությունը։']]);
         $settings = self::settings($order->toArray());
         $shares = collect($visibility)->keyBy('file_id');
