@@ -236,6 +236,71 @@ class CompanyTaskWorkflowTest extends TestCase
         foreach (['INFO', 'PDF'] as $value) $this->getJson('/api/secure-files/pmp/'.$this->files[$value]->id, $this->headers())->assertForbidden();
     }
 
+    public function test_info_only_task_is_private_to_checked_workshops_and_can_complete(): void
+    {
+        $info = $this->files['INFO'];
+        $order = $this->createTask([
+            'description' => '',
+            'selected_files' => [['id' => $info->id, 'quantity' => 3]],
+            'reference_file_visibility' => [['file_id' => $info->id, 'factory_ids' => [$this->factories['DXF']->id]]],
+            'factory_operators' => [['factory_id' => $this->factories['DXF']->id, 'user_id' => $this->operator->id]],
+            'production_route' => ['mode' => 'parallel', 'stages' => [['factory_id' => $this->factories['DXF']->id, 'deadline' => null]]],
+        ]);
+        $this->assertSame('', $order->description);
+        $this->assertSame(1, $order->factoryOrders()->count());
+        $step = $order->factoryOrders()->firstOrFail();
+        $this->assertSame($this->factories['DXF']->id, $step->factory_id);
+        $this->assertSame([$info->id], $step->files()->pluck('pmp_files.id')->all());
+        $this->assertSame(3, $step->files()->first()->pivot->quantity);
+        $this->as($this->bendOperator);
+        $this->getJson('/api/secure-files/pmp/'.$info->id, $this->headers())->assertForbidden();
+        $this->getJson('/api/factories/factory/'.$this->factories['DLD']->id, $this->headers())->assertOk()->assertJsonCount(0, 'orders');
+        $this->as($this->operator);
+        $this->get('/api/secure-files/pmp/'.$info->id, $this->headers())->assertOk();
+        $this->getJson('/api/factories/factory/'.$this->factories['DXF']->id, $this->headers())->assertOk()->assertJsonPath('orders.0.factory_orders.0.files.0.id', $info->id);
+        $this->act($order, 'finished')->assertOk()->assertJsonPath('status', 'completed');
+    }
+
+    public function test_whole_info_only_subgroup_uses_visibility_without_individual_file_selection(): void
+    {
+        [$remote, $info, $pdf] = $this->in($this->company, function () {
+            $remote = RemoteNumber::create(['pmp_id' => $this->pmp->id, 'remote_number' => '02', 'remote_number_name' => 'Only reference files']);
+            $files = [];
+            foreach (['INFO', 'PDF'] as $value) $files[] = PmpFiles::create(['pmp_id' => $this->pmp->id, 'remote_number_id' => $remote->id, 'factory_id' => $this->factories[$value]->id, 'path' => 'companies/'.$this->company->id.'/qa/only-'.$value.'.txt', 'original_name' => 'only-'.$value.'.txt']);
+            return [$remote, ...$files];
+        });
+        $order = $this->createTask([
+            'remote_number_id' => $remote->id, 'link_existing_files' => false, 'selected_files' => [],
+            'reference_file_visibility' => [
+                ['file_id' => $info->id, 'factory_ids' => [$this->factories['DXF']->id]],
+                ['file_id' => $pdf->id, 'factory_ids' => [$this->factories['DLD']->id]],
+            ],
+        ]);
+        $this->assertSame([$info->id, $pdf->id], $order->selectedFiles()->orderBy('pmp_file_id')->pluck('pmp_file_id')->all());
+        $this->assertSame(2, $order->factoryOrders()->count());
+        $this->assertSame([$info->id], $order->factoryOrders()->where('factory_id', $this->factories['DXF']->id)->firstOrFail()->files()->pluck('pmp_files.id')->all());
+        $this->assertSame([$pdf->id], $order->factoryOrders()->where('factory_id', $this->factories['DLD']->id)->firstOrFail()->files()->pluck('pmp_files.id')->all());
+    }
+
+    public function test_reference_only_delivery_rejects_unselected_files_archived_and_foreign_recipients(): void
+    {
+        $foreign = $this->in($this->otherCompany, fn () => Factory::activeWorkshops()->firstOrFail());
+        $archived = $this->in($this->company, fn () => Factory::create(['name' => 'Archived', 'value' => 'OLD', 'is_active' => false]));
+        $this->as($this->engineer);
+        foreach ([$foreign->id, $archived->id, $this->factories['INFO']->id, $this->factories['SW']->id] as $id) {
+            $this->postJson('/api/engineers/engineer', $this->payload([
+                'selected_files' => [['id' => $this->files['INFO']->id, 'quantity' => 1]],
+                'reference_file_visibility' => [['file_id' => $this->files['INFO']->id, 'factory_ids' => [$id]]],
+            ]), $this->headers())->assertUnprocessable()->assertJsonValidationErrors('reference_file_visibility');
+        }
+        $this->postJson('/api/engineers/engineer', $this->payload([
+            'selected_files' => [['id' => $this->files['INFO']->id, 'quantity' => 1]],
+            'reference_file_visibility' => [['file_id' => $this->files['PDF']->id, 'factory_ids' => [$this->factories['DXF']->id]]],
+        ]), $this->headers())->assertUnprocessable()->assertJsonValidationErrors('reference_file_visibility');
+        $this->assertDatabaseCount('orders', 0);
+        Mail::assertNothingSent();
+    }
+
     public function test_visibility_cannot_share_production_files_or_reference_files_to_foreign_workshops(): void
     {
         $foreign = $this->in($this->otherCompany, fn () => Factory::where('value', 'DXF')->firstOrFail());

@@ -150,7 +150,7 @@ class EngineerController extends Controller
             TaskWorkflow::validateFiles($selectedFiles, $pmp, $validatedData['reference_file_visibility'] ?? [], $validatedData['workshop_settings'] ?? [], $validatedData['file_routing'] ?? []);
 
             $factoryOperatorsInput = collect($validatedData['factory_operators'] ?? []);
-            $this->validateFactoryOperators($factoryOperatorsInput, TaskWorkflow::workshopIds($pmp, $selectedFiles, $validatedData['file_routing'] ?? []));
+            $this->validateFactoryOperators($factoryOperatorsInput, TaskWorkflow::workshopIds($pmp, $selectedFiles, $validatedData['file_routing'] ?? [], $validatedData['reference_file_visibility'] ?? []));
             $factoryOperators = $factoryOperatorsInput->keyBy('factory_id');
 
             $order = DB::transaction(function () use (
