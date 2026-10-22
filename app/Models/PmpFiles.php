@@ -21,10 +21,15 @@ class PmpFiles extends Model
         'quantity',
         'material_type',
         'thickness',
+        'dimensions',
+        'production_factory_ids',
+        'inspection_required',
     ];
 
+    protected $casts = ['production_factory_ids' => 'array', 'inspection_required' => 'boolean'];
+
     protected $with = ['category.defaultWorkshop'];
-    protected $appends = ['is_reference_file', 'routing_factory_id'];
+    protected $appends = ['is_reference_file', 'routing_factory_id', 'routing_factory_ids'];
 
     protected static function booted(): void
     {
@@ -42,8 +47,15 @@ class PmpFiles extends Model
     public function getIsReferenceFileAttribute(): bool { return $this->category ? $this->category->is_reference : (bool) $this->factory?->is_reference; }
     public function getRoutingFactoryIdAttribute(): ?int
     {
+        if ($this->production_factory_ids !== null) return $this->production_factory_ids[0] ?? null;
         $factory = $this->category ? $this->category->defaultWorkshop : $this->factory;
         return $factory && $factory->is_workshop && $factory->is_active !== false && !$factory->is_reference ? (int) $factory->id : null;
+    }
+
+    public function getRoutingFactoryIdsAttribute(): array
+    {
+        return $this->production_factory_ids !== null ? array_map('intval', $this->production_factory_ids)
+            : ($this->routing_factory_id ? [(int) $this->routing_factory_id] : []);
     }
 
     public function pmp(): BelongsTo

@@ -94,7 +94,7 @@ class CompanyWorkshopCatalogTest extends TestCase
         $category = $this->postJson('/api/file-categories', ['name' => 'Production drawings', 'is_reference' => false, 'default_factory_id' => $workshop['id'], 'extensions' => ['.DXF', 'pdf']], $this->headers())->assertCreated()->json('category');
         $this->assertFalse($this->in(fn () => Factory::find($category['legacy_factory_id'])->is_workshop));
         $this->as($this->engineer);
-        $drawing = $this->post('/api/engineers/uploadPmpFile', ['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'file_category_id' => $category['id'], 'file' => UploadedFile::fake()->create('panel.dxf', 2)], $this->headers())->assertCreated()->assertJsonPath('file.file_category_id', $category['id'])->assertJsonPath('file.routing_factory_id', $workshop['id'])->json('file');
+        $drawing = $this->post('/api/engineers/uploadPmpFile', ['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'file_category_id' => $category['id'], 'file' => UploadedFile::fake()->create('panel.dxf', 2), 'quantity' => 1, 'material_type' => 'Steel', 'thickness' => 2], $this->headers())->assertCreated()->assertJsonPath('file.file_category_id', $category['id'])->assertJsonPath('file.routing_factory_id', $workshop['id'])->json('file');
         $info = $this->file($this->factories['INFO']->id, 'note.txt');
         $powder = $this->factories['POWDER']->id;
         $order = $this->postJson('/api/engineers/engineer', $this->payload([$drawing['id'], $info->id]) + ['file_routing' => [['file_id' => $drawing['id'], 'factory_ids' => [$workshop['id'], $powder]]], 'reference_file_visibility' => [['file_id' => $info->id, 'factory_ids' => [$powder]]]], $this->headers())->assertCreated()->assertJsonCount(2, 'order.factory_orders')->json('order');
@@ -314,6 +314,104 @@ class CompanyWorkshopCatalogTest extends TestCase
             $this->post('/api/engineers/uploadPmpFile', $body + ['file' => UploadedFile::fake()->create('large-'.$size.'.pdf', $size, 'application/pdf')], $this->headers())->assertCreated();
         }
         $this->post('/api/engineers/uploadPmpFile', $body + ['file' => UploadedFile::fake()->create('too-large.pdf', 102401, 'application/pdf')], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('file');
+    }
+
+    public function test_uploaded_file_plan_becomes_the_task_route_and_preserves_attributes(): void
+    {
+        $weld = $this->in(fn () => Factory::create(['name' => 'Welding', 'value' => 'WELD']));
+        $path = [$this->factories['DXF']->id, $this->factories['DLD']->id, $weld->id, $this->factories['POWDER']->id];
+        $this->as($this->engineer);
+        $file = $this->post('/api/engineers/uploadPmpFile', [
+            'pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'factory_id' => $this->factories['DXF']->id,
+            'file' => UploadedFile::fake()->createWithContent('route.dxf', 'DXF fixture'),
+            'quantity' => 3, 'material_type' => 'Steel', 'thickness' => 1.5, 'dimensions' => '1000 × 2000 mm',
+            'production_factory_ids' => json_encode($path), 'inspection_required' => 1,
+        ], $this->headers())->assertCreated()->assertJsonPath('file.routing_factory_ids', $path)->assertJsonPath('file.inspection_required', true)->json('file');
+        $body = array_replace($this->payload([$file['id']]), ['link_existing_files' => false, 'selected_files' => []]);
+        $order = $this->postJson('/api/engineers/engineer', $body, $this->headers())->assertCreated()->json('order');
+        $steps = $this->in(fn () => Order::findOrFail($order['id'])->factoryOrders()->orderBy('route_position')->get());
+        $this->assertSame($path, $steps->pluck('factory_id')->all());
+        foreach ($steps as $index => $step) {
+            $this->assertSame($index ? [$steps[$index - 1]->id] : [], $step->dependencyIds());
+            $attachment = $this->in(fn () => $step->files()->firstOrFail());
+            $this->assertSame(3, $attachment->pivot->quantity);
+            $this->assertSame('1000 × 2000 mm', $attachment->pivot->dimensions);
+            $this->assertTrue((bool) $attachment->pivot->inspection_required);
+        }
+        $this->in(fn () => PmpFiles::findOrFail($file['id'])->update(['dimensions' => 'Changed library dimensions', 'inspection_required' => false]));
+        $this->assertSame('1000 × 2000 mm', $this->in(fn () => $steps[0]->files()->firstOrFail()->pivot->dimensions));
+        $this->assertCount(4, $steps, 'Inspection is a file requirement, not another workshop');
+    }
+
+    public function test_bulk_upload_retains_an_independent_plan_for_each_file(): void
+    {
+        $this->as($this->engineer);
+        $plans = [
+            ['production_factory_ids' => [$this->factories['IQS']->id, $this->factories['DLD']->id], 'inspection_required' => true],
+            ['production_factory_ids' => [$this->factories['POWDER']->id], 'inspection_required' => false],
+        ];
+        $this->in(fn () => \App\Models\FactoryFileExtension::firstOrCreate(['factory_id' => $this->factories['IQS']->id, 'extension' => 'pdf']));
+        $files = $this->post('/api/engineers/uploadPmpFile', [
+            'pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'factory_id' => $this->factories['IQS']->id,
+            'files' => [UploadedFile::fake()->createWithContent('model.igs', 'IGES'), UploadedFile::fake()->createWithContent('notes.pdf', 'PDF')],
+            'file_plans' => json_encode($plans),
+        ], $this->headers())->assertCreated()->assertJsonCount(2, 'files')->json('files');
+        foreach ($files as $index => $file) {
+            $this->assertSame($plans[$index]['production_factory_ids'], $file['routing_factory_ids']);
+            $this->assertSame($plans[$index]['inspection_required'], $file['inspection_required']);
+            Storage::disk('private')->assertExists($file['path']);
+        }
+        $this->assertSame('IGS', $this->in(fn () => FileCategory::where('code', 'IQS')->firstOrFail()->name));
+    }
+
+    public function test_bulk_upload_failures_are_atomic_and_attribute_files_must_be_individual(): void
+    {
+        $this->as($this->engineer);
+        $base = ['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'factory_id' => $this->factories['INFO']->id];
+        $before = Storage::disk('private')->allFiles();
+        foreach ([['one.txt', 'one.txt', 409], ['one.txt', 'part.dxf', 422], ['one.txt', 'unsafe.php', 422]] as [$first, $second, $status]) {
+            $this->post('/api/engineers/uploadPmpFile', $base + ['files' => [UploadedFile::fake()->createWithContent($first, 'first'), UploadedFile::fake()->createWithContent($second, 'second')]], $this->headers())->assertStatus($status);
+            $this->assertDatabaseCount('pmp_files', 0);
+            $this->assertSame($before, Storage::disk('private')->allFiles());
+        }
+        $this->post('/api/engineers/uploadPmpFile', $base + ['files' => [UploadedFile::fake()->createWithContent('one.txt', 'first')],
+            'expected_file_count' => 2], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('files');
+        $this->assertDatabaseCount('pmp_files', 0);
+        $this->assertSame($before, Storage::disk('private')->allFiles());
+        $this->in(fn () => \App\Models\FactoryFileExtension::firstOrCreate(['factory_id' => $this->factories['DXF']->id, 'extension' => 'ic']));
+        $this->post('/api/engineers/uploadPmpFile', array_replace($base, ['factory_id' => $this->factories['DXF']->id,
+            'file' => UploadedFile::fake()->createWithContent('part.ic', 'IC')]), $this->headers())->assertUnprocessable()->assertJsonValidationErrors(['quantity', 'material_type', 'thickness']);
+        $this->post('/api/engineers/uploadPmpFile', array_replace($base, ['factory_id' => $this->factories['DXF']->id,
+            'file' => UploadedFile::fake()->createWithContent('part.ic', 'IC'), 'quantity' => 1, 'material_type' => 'Steel', 'thickness' => 0]), $this->headers())->assertCreated();
+    }
+
+    public function test_file_plans_reject_foreign_archived_reference_and_duplicate_targets(): void
+    {
+        $foreign = app(CompanyContext::class)->run($this->other, fn () => Factory::activeWorkshops()->firstOrFail());
+        $archived = $this->in(fn () => Factory::create(['name' => 'Archived', 'value' => 'OLD', 'is_active' => false]));
+        $this->as($this->engineer);
+        foreach ([[$foreign->id], [$archived->id], [$this->factories['INFO']->id], [$this->factories['DXF']->id, $this->factories['DXF']->id]] as $ids) {
+            $this->post('/api/engineers/uploadPmpFile', ['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id,
+                'factory_id' => $this->factories['IQS']->id, 'file' => UploadedFile::fake()->createWithContent('model.igs', 'IGES'),
+                'production_factory_ids' => json_encode($ids)], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('production_factory_ids');
+            $this->assertDatabaseCount('pmp_files', 0);
+        }
+    }
+
+    public function test_upload_options_use_upload_permission_and_are_company_scoped(): void
+    {
+        $material = function (string $name) {
+            $group = \App\Models\MaterialGroup::create(['name' => 'Sheet metal']);
+            $category = \App\Models\MaterialCategory::create(['name' => 'Steel', 'material_group_id' => $group->id]);
+            return \App\Models\Material::create(['description' => $name, 'material_category_id' => $category->id, 'width' => 1000, 'length' => 2000, 'thickness' => 2]);
+        };
+        $this->in(fn () => $material('Our steel'));
+        app(CompanyContext::class)->run($this->other, fn () => $material('Private material'));
+        $this->as($this->engineer);
+        $this->getJson('/api/engineers/pmp-file-options', $this->headers())->assertOk()->assertJsonCount(1, 'materials')
+            ->assertJsonPath('materials.0.description', 'Our steel')->assertJsonCount(4, 'workshops');
+        $this->as($this->client);
+        $this->getJson('/api/engineers/pmp-file-options', $this->headers())->assertForbidden();
     }
 
     private function file(int $factory, string $name): PmpFiles { return $this->in(function () use ($factory, $name) { $path = 'companies/'.$this->company->id.'/qa/'.$name; Storage::disk('private')->put($path, 'private bytes'); return PmpFiles::create(['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'factory_id' => $factory, 'original_name' => $name, 'path' => $path]); }); }

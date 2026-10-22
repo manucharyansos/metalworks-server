@@ -98,7 +98,8 @@ final class TaskRouting
             foreach ($data['files'] as $item) {
                 $file = $files->get($item['id']);
                 $revisionId = $order->selectedFiles()->where('pmp_file_id', $file->id)->value('task_file_revision_id');
-                $step->files()->attach($file->id, ['quantity' => $item['quantity'], 'material_type' => $file->material_type, 'thickness' => $file->thickness, 'task_file_revision_id' => $revisionId]);
+                $step->files()->attach($file->id, ['quantity' => $item['quantity'], 'material_type' => $file->material_type, 'thickness' => $file->thickness,
+                    'dimensions' => $file->dimensions, 'inspection_required' => (bool) $file->inspection_required, 'task_file_revision_id' => $revisionId]);
                 if ($file->is_reference_file) {
                     $row = $shares->get($file->id, ['file_id' => $file->id, 'factory_ids' => []]);
                     $row['factory_ids'] = array_values(array_unique([...$row['factory_ids'], $factory->id]));
