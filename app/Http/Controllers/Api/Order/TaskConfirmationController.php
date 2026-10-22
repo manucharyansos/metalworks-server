@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Api\Order;
 
 use App\Http\Controllers\Controller;
 use App\Models\{FactoryOrder, Order, OrderLog};
-use App\Support\{TaskNotifier, TaskWorkflow};
+use App\Support\{ProductionRoute, TaskNotifier, TaskWorkflow};
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -30,6 +30,7 @@ class TaskConfirmationController extends Controller
             OrderLog::create(['order_id' => $order->id, 'user_id' => $request->user()->id, 'action' => 'factory_order.engineer_confirmed',
                 'message' => 'Ինժեները հաստատել է արտադրամասի աշխատանքի ավարտը։', 'meta' => ['factory_order_id' => $step->id, 'factory_id' => $step->factory_id]]);
             $order->updateStatusIfAllFactoriesCompleted();
+            ProductionRoute::refreshReadiness($order, $request->user());
             $confirmed = true;
             return $order;
         });
@@ -59,6 +60,7 @@ class TaskConfirmationController extends Controller
                     'previous_evidence_text' => $step->evidence_text, 'previous_evidence_photo_path' => $step->evidence_photo_path]]);
             $step->update(['status' => 'confirmed', 'operator_finish_date' => null, 'finish_date' => null, 'completed_at' => null,
                 'evidence_text' => null, 'evidence_photo_path' => null, 'return_note' => $note, 'returned_at' => now()]);
+            ProductionRoute::refreshReadiness($order, $request->user());
             return $order;
         });
         TaskNotifier::finishReturned($request->user(), $order, FactoryOrder::findOrFail($factoryOrder->id), $note);

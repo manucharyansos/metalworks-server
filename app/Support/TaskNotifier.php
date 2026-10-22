@@ -108,6 +108,22 @@ final class TaskNotifier
         foreach ($order->factoryOrders()->whereNotNull('operator_id')->get() as $step) self::operatorChanged($actor, $order, $step, null);
     }
 
+    public static function stepReady(?User $actor, Order $order, FactoryOrder $step): void
+    {
+        $recipients = $step->operator_id ? [$step->operator_id] : User::assignedToFactory((int) $step->factory_id)
+            ->forRoles(MembershipAssignments::OPERATORS)->pluck('users.id')->unique()->all();
+        foreach ($recipients as $id) self::send($id, $actor, 'step.ready', $order, $step,
+            sprintf('Նախորդ փուլերն ավարտված են։ «%s» արտադրամասի հերթն է (%s)։', self::factory($step), self::ref($order)),
+            ['deadline' => $step->deadline ?: $order->dates?->finish_date]);
+    }
+
+    public static function routeChanged(User $actor, Order $order, FactoryOrder $step): void
+    {
+        self::send($step->operator_id, $actor, 'step.route_changed', $order, $step,
+            sprintf('Փոխվել է «%s» արտադրամասի հերթականությունը կամ ժամկետը (%s)։', self::factory($step), self::ref($order)),
+            ['deadline' => $step->deadline ?: $order->dates?->finish_date]);
+    }
+
     private static function send(?int $recipientId, ?User $actor, string $type, Order $order, ?FactoryOrder $step, string $message, array $data = []): void
     {
         if (!$recipientId || ($actor && (int) $actor->id === (int) $recipientId)) return;
@@ -118,7 +134,7 @@ final class TaskNotifier
                 'message' => mb_substr($message, 0, 1000),
                 'data' => $data + array_filter([
                     'order_number' => $order->orderNumber?->number, 'order_name' => $order->name,
-                    'factory' => $step ? self::factory($step) : null, 'actor' => $actor?->name,
+                    'factory' => $step ? self::factory($step) : null, 'factory_id' => $step?->factory_id, 'actor' => $actor?->name,
                 ], fn ($value) => $value !== null && $value !== ''),
             ]);
         } catch (\Throwable $e) {

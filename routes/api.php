@@ -63,6 +63,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
         Route::post('notifications/read', [\App\Http\Controllers\Api\NotificationController::class, 'read']);
         Route::post('task-requests/{taskChangeRequest}/withdraw', [\App\Http\Controllers\Api\Order\TaskChangeRequestController::class, 'withdraw'])->whereNumber('taskChangeRequest')->middleware('permission:factory.order_update');
         Route::get('task-workload', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'workload']);
+        Route::put('tasks/{order}/production-route', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'productionRoute'])->whereNumber('order')->middleware('permission:orders.update');
         Route::put('tasks/{order}/evidence-requirements', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'evidenceRequirements'])->whereNumber('order')->middleware('permission:orders.update');
         Route::put('tasks/{order}/workshops/{factoryOrder}/settings', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'workshopSettings'])->whereNumber('order')->whereNumber('factoryOrder')->middleware('permission:orders.update');
         Route::put('tasks/{order}/workshops/{factoryOrder}/operator', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'assign'])->middleware('permission:orders.update');

@@ -92,7 +92,7 @@ final class TaskChangeRequests
 
             if ($approve && $reopen) {
                 if (!in_array($locked->requested_status, ['pending', 'accepted', 'confirmed'], true)) throw ValidationException::withMessages(['decision' => ['Վերաբացման կարգավիճակը վավեր չէ։']]);
-                if ($step->is_blocked && $locked->requested_status === 'confirmed') throw ValidationException::withMessages(['decision' => ['Նախորդ արտադրամասի աշխատանքը դեռ չի ավարտվել։']]);
+                if ($step->is_blocked && in_array($locked->requested_status, ['accepted', 'confirmed'], true)) throw ValidationException::withMessages(['decision' => ['Նախորդ արտադրամասի աշխատանքը դեռ չի ավարտվել։']]);
                 $step->update(['status' => $locked->requested_status, 'canceling' => '', 'cancel_date' => null,
                     'completed_at' => null, 'finish_date' => null, 'operator_finish_date' => null]);
                 $order->status = 'pending'; $order->completed_at = null; $order->save();
@@ -131,6 +131,7 @@ final class TaskChangeRequests
                 'message' => sprintf('Արտադրամաս «%s»․ %s՝ %s։', $step->factory->name, self::label($locked), $approve ? 'ինժեները համաձայնել է' : 'ինժեները մերժել է'),
                 'meta' => ['factory_order_id' => $step->id, 'request_id' => $locked->id, 'resolution' => $resolution, 'note' => $note]]);
             $order->updateStatusIfAllFactoriesCompleted();
+            ProductionRoute::refreshReadiness($order, $actor);
             return [$locked, $order, $step, $previousOperatorId];
         });
 

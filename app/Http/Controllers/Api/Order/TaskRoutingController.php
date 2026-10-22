@@ -4,11 +4,29 @@ namespace App\Http\Controllers\Api\Order;
 
 use App\Http\Controllers\Controller;
 use App\Models\{FactoryOrder, Order};
-use App\Support\{TaskEvidenceRequirements, TaskNotifier, TaskRouting, TaskWorkflow};
+use App\Support\{ProductionRoute, TaskEvidenceRequirements, TaskNotifier, TaskRouting, TaskWorkflow};
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class TaskRoutingController extends Controller
 {
+    public function productionRoute(Request $request, Order $order)
+    {
+        TaskRouting::authorize($request->user(), $order);
+        $data = $request->validate(['production_route' => 'required|array', 'previous_route' => 'required|array',
+            'previous_route.*.factory_id' => 'required|integer',
+            'previous_route.*.predecessor_factory_ids' => 'present|array',
+            'previous_route.*.predecessor_factory_ids.*' => 'integer',
+            'previous_route.*.deadline' => 'present|nullable|date_format:Y-m-d',
+        ] + ProductionRoute::rules());
+        DB::transaction(function () use ($request, $order, $data) {
+            $locked = Order::whereKey($order->id)->lockForUpdate()->firstOrFail();
+            TaskRouting::authorize($request->user(), $locked);
+            ProductionRoute::apply($locked, $data['production_route'], $request->user(), $data['previous_route']);
+        });
+        return response()->json(['order' => TaskRouting::order($order), 'workload' => TaskRouting::workload()]);
+    }
+
     public function workshopSettings(Request $request, Order $order, FactoryOrder $factoryOrder)
     {
         TaskRouting::authorize($request->user(), $order);
@@ -68,6 +86,7 @@ class TaskRoutingController extends Controller
             'confirmation_required' => 'sometimes|boolean', 'confirmation_method' => TaskWorkflow::rules()['confirmation_method'],
             'operator_id' => 'sometimes|nullable|integer|exists:users,id',
             'depends_on_id' => 'nullable|integer|exists:factory_orders,id',
+            'predecessor_ids' => 'sometimes|array|max:100', 'predecessor_ids.*' => 'required|integer|distinct',
             'files' => 'required|array|min:1|max:200', 'files.*.id' => 'required|integer|distinct|exists:pmp_files,id',
             'files.*.quantity' => 'required|integer|min:1|max:1000000']);
         $step = TaskRouting::addWork($request->user(), $order, $data);
