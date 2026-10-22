@@ -154,7 +154,7 @@ class FactoryOrder extends Model
     {
         return $this->belongsToMany(PmpFiles::class, 'factory_order_files')
             ->using(CompanyPivot::class)
-            ->withPivot(['quantity', 'material_type', 'thickness', 'task_file_revision_id'])
+            ->withPivot(['quantity', 'material_type', 'thickness', 'dimensions', 'inspection_required', 'task_file_revision_id'])
             ->withTimestamps();
     }
 

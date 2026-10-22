@@ -49,7 +49,7 @@ final class TaskWorkflow
     {
         $override = collect($routing)->firstWhere('file_id', $file->id);
         if ($override !== null) return array_values(array_unique(array_map('intval', $override['factory_ids'])));
-        return $file->routing_factory_id ? [(int) $file->routing_factory_id] : [];
+        return $file->routing_factory_ids;
     }
 
     public static function workshopIds(Pmp $pmp, array $selected, array $routing = [], array $visibility = []): array
@@ -104,6 +104,7 @@ final class TaskWorkflow
                     $stepSettings + ['status' => 'pending', 'operator_id' => $operators->get($factoryId)['user_id'] ?? null]);
                 $step->files()->syncWithoutDetaching([$file->id => [
                     'quantity' => $item['quantity'], 'material_type' => $file->material_type, 'thickness' => $file->thickness,
+                    'dimensions' => $file->dimensions, 'inspection_required' => (bool) $file->inspection_required,
                 ]]);
             }
         }

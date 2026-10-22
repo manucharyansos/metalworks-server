@@ -176,7 +176,8 @@ class EngineerController extends Controller
                 $order->dates()->create(['finish_date' => $validatedData['finish_date']]);
 
                 TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $validatedData['reference_file_visibility'] ?? [], $factoryOperators, $validatedData['workshop_settings'] ?? [], $validatedData['file_routing'] ?? []);
-                if (isset($validatedData['production_route'])) ProductionRoute::apply($order, $validatedData['production_route']);
+                $plan = $validatedData['production_route'] ?? \App\Support\ProjectFilePlan::taskPlan($pmp, $selectedFiles, $validatedData['file_routing'] ?? [], $validatedData['reference_file_visibility'] ?? []);
+                if ($plan) ProductionRoute::apply($order, $plan);
                 else ProductionRoute::refreshReadiness($order, null);
 
                 return $order;
@@ -515,7 +516,7 @@ class EngineerController extends Controller
 
             $selectedFiles = $files->map(fn ($file) => [
                 'id' => $file->id,
-                'quantity' => 1,
+                'quantity' => (int) $file->quantity > 0 ? (int) $file->quantity : 1,
             ])->values()->toArray();
         }
 

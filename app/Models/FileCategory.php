@@ -16,7 +16,7 @@ class FileCategory extends Model
     {
         $factory = Factory::find($id);
         if (!$factory) return null;
-        $names = ['SW' => 'CAD նախագծեր', 'DLD' => 'Կռման գծագրեր', 'DXF' => 'DXF գծագրեր', 'IQS' => '3D գծագրեր', 'INFO' => 'Տեղեկատու ֆայլեր', 'PDF' => 'PDF փաստաթղթեր'];
+        $names = ['SW' => 'CAD նախագծեր', 'DLD' => 'Կռման գծագրեր', 'DXF' => 'DXF գծագրեր', 'IQS' => 'IGS', 'INFO' => 'Տեղեկատու ֆայլեր', 'PDF' => 'PDF փաստաթղթեր'];
         return self::firstOrCreate(['legacy_factory_id' => $id], ['name' => $names[$factory->value] ?? $factory->name, 'code' => $factory->value ?: 'FILES_'.$id,
             'default_factory_id' => $factory->is_workshop && !$factory->is_reference ? $id : null,
             'is_reference' => $factory->is_reference, 'is_active' => true]);

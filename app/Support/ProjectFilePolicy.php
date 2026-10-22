@@ -8,6 +8,11 @@ use Illuminate\Validation\ValidationException;
 
 final class ProjectFilePolicy
 {
+    public static function needsAttributes(string $filename): bool
+    {
+        return in_array(strtolower(pathinfo($filename, PATHINFO_EXTENSION)), ['dxf', 'ic'], true);
+    }
+
     public static function extensions(Factory $factory): array
     {
         // The database is authoritative, including an intentionally empty list.

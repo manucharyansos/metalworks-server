@@ -302,6 +302,8 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
 
             Route::post('uploadPmpFile', [PmpFilesController::class, 'upload'])
                 ->middleware('permission:pmp_files.upload');
+            Route::get('pmp-file-options', [PmpFilesController::class, 'uploadOptions'])
+                ->middleware('permission:pmp_files.upload');
 
             Route::delete('pmpFiles/{file}', [PmpFilesController::class, 'destroy'])
                 ->middleware('permission:pmp_files.delete');

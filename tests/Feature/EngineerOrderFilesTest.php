@@ -220,7 +220,7 @@ class EngineerOrderFilesTest extends TestCase
             'pmp_files' => function (Blueprint $t) {
                 $t->unsignedBigInteger('pmp_id'); $t->unsignedBigInteger('remote_number_id')->nullable(); $t->unsignedBigInteger('factory_id');
                 $t->string('path'); $t->string('original_name'); $t->integer('quantity')->nullable();
-                $t->string('material_type')->nullable(); $t->string('thickness')->nullable();
+                $t->string('material_type')->nullable(); $t->string('thickness')->nullable(); $t->string('dimensions')->nullable(); $t->boolean('inspection_required')->default(false);
             },
             'orders' => function (Blueprint $t) {
                 $t->unsignedBigInteger('user_id'); $t->unsignedBigInteger('creator_id'); $t->unsignedBigInteger('remote_number_id')->nullable();
@@ -242,7 +242,7 @@ class EngineerOrderFilesTest extends TestCase
             'factory_order_files' => function (Blueprint $t) {
                 $t->unsignedBigInteger('task_file_revision_id')->nullable();
                 $t->unsignedBigInteger('factory_order_id'); $t->unsignedBigInteger('pmp_files_id'); $t->integer('quantity');
-                $t->string('material_type')->nullable(); $t->string('thickness')->nullable();
+                $t->string('material_type')->nullable(); $t->string('thickness')->nullable(); $t->string('dimensions')->nullable(); $t->boolean('inspection_required')->default(false);
             },
             'order_numbers' => function (Blueprint $t) { $t->unsignedBigInteger('order_id'); $t->string('number'); },
             'prefix_codes' => function (Blueprint $t) { $t->unsignedBigInteger('order_id'); $t->string('code'); },
