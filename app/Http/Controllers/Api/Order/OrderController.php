@@ -58,7 +58,7 @@ class OrderController extends Controller
         try {
             $validatedData = $request->validate([
                 'user_id' => 'required|exists:users,id',
-                'description' => 'required|string',
+                'description' => 'sometimes|nullable|string',
                 'name' => 'required|string',
                 'status' => 'nullable|string',
                 'factories' => 'nullable|array',
@@ -77,7 +77,7 @@ class OrderController extends Controller
                     'user_id' => $validatedData['user_id'],
                     'creator_id' => $request->user()->id,
                     'name' => $validatedData['name'],
-                    'description' => $validatedData['description'],
+                    'description' => $validatedData['description'] ?? '',
                     'status' => 'pending',
                 ]);
 
@@ -199,7 +199,7 @@ class OrderController extends Controller
         try {
             $validatedData = $request->validate([
                 'name' => 'required|string|max:255',
-                'description' => 'required|string',
+                'description' => 'sometimes|nullable|string',
                 'status' => 'sometimes|required|string|in:pending,in_progress,completed,cancelled',
                 'factories' => 'required|array|min:1',
                 'factories.*.id' => 'required|exists:factories,id',
@@ -225,7 +225,7 @@ class OrderController extends Controller
 
                 $order->update([
                     'name' => $validatedData['name'],
-                    'description' => $validatedData['description'],
+                    'description' => array_key_exists('description', $validatedData) ? ($validatedData['description'] ?? '') : $order->description,
                     'status' => $validatedData['status'] ?? $order->status,
                 ]);
 

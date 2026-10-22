@@ -127,7 +127,7 @@ class EngineerController extends Controller
         try {
             $validatedData = $request->validate([
                 'user_id' => 'required|exists:users,id',
-                'description' => 'required|string',
+                'description' => 'sometimes|nullable|string',
                 'name' => 'required|string|max:255',
                 'status' => 'nullable|string',
                 'finish_date' => 'required|date',
@@ -164,7 +164,7 @@ class EngineerController extends Controller
                     'user_id' => $validatedData['user_id'],
                     'creator_id' => $request->user()->id,
                     'name' => $validatedData['name'],
-                    'description' => $validatedData['description'],
+                    'description' => $validatedData['description'] ?? '',
                     'status' => 'pending',
                     'remote_number_id' => $validatedData['remote_number_id'] ?? null,
                     'link_existing_files' => $validatedData['link_existing_files'],
@@ -293,7 +293,7 @@ class EngineerController extends Controller
         try {
             $validatedData = $request->validate([
                 'user_id' => 'required|exists:users,id',
-                'description' => 'required|string',
+                'description' => 'sometimes|nullable|string',
                 'name' => 'required|string|max:255',
                 'status' => 'nullable|string',
                 'finish_date' => 'required|date',
@@ -338,7 +338,7 @@ class EngineerController extends Controller
                 $order->update([
                     'user_id' => $validatedData['user_id'],
                     'name' => $validatedData['name'],
-                    'description' => $validatedData['description'],
+                    'description' => array_key_exists('description', $validatedData) ? ($validatedData['description'] ?? '') : $order->description,
                     'status' => $order->status,
                     'remote_number_id' => $validatedData['remote_number_id'] ?? null,
                     'link_existing_files' => $validatedData['link_existing_files'] ?? $order->link_existing_files,
