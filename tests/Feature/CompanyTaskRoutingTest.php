@@ -67,6 +67,44 @@ class CompanyTaskRoutingTest extends TestCase
     }
 
 
+    public function test_description_can_be_missing_empty_or_null_without_affecting_workshop_files(): void
+    {
+        foreach (['missing', '', null, '   '] as $description) {
+            $this->as($this->engineer);
+            $data = $this->payload();
+            if ($description === 'missing') unset($data['description']);
+            else $data['description'] = $description;
+            $response = $this->postJson('/api/engineers/engineer', $data, $this->headers())->assertCreated();
+            $order = Order::findOrFail($response->json('order.id'));
+            $this->assertSame('', $order->description);
+            $this->assertSame(1, $order->factoryOrders()->count());
+            $this->assertSame(2, $order->selectedFiles()->firstOrFail()->quantity);
+        }
+        $before = Order::count();
+        $this->postJson('/api/engineers/engineer', $this->payload(['description' => ['invalid']]), $this->headers())
+            ->assertUnprocessable()->assertJsonValidationErrors('description');
+        $this->assertSame($before, Order::count());
+    }
+
+    public function test_descriptionless_tasks_remain_editable_and_omitting_description_preserves_existing_text(): void
+    {
+        $order = $this->createTask(['description' => 'Keep this text']);
+        $data = $this->payload();
+        unset($data['description']);
+        $this->putJson('/api/engineers/engineer/'.$order->id, $data, $this->headers())->assertOk();
+        $this->assertSame('Keep this text', $order->fresh()->description);
+        $this->putJson('/api/engineers/engineer/'.$order->id, $this->payload(['description' => null]), $this->headers())->assertOk();
+        $this->assertSame('', $order->fresh()->description);
+        foreach ([[$this->manager, '/api/orders/order/'], [$this->admin, '/api/admin/order/']] as [$actor, $route]) {
+            $this->as($actor);
+            $this->putJson($route.$order->id, ['name' => $order->name, 'description' => '', 'factories' => [['id' => $this->factories['DXF']->id]]], $this->headers())->assertOk();
+            $this->assertSame('', $order->fresh()->description);
+        }
+        $this->as($this->manager);
+        $created = $this->postJson('/api/orders/order', ['name' => 'Management task', 'user_id' => $this->customer->id, 'factories' => [['id' => $this->factories['DXF']->id]]], $this->headers())->assertCreated();
+        $this->assertSame('', Order::findOrFail($created->json('id'))->description);
+    }
+
     public function test_workload_counts_all_company_jobs_without_disclosing_other_engineers_tasks(): void
     {
         $own = $this->createTask(['factory_operators' => [['factory_id' => $this->factories['DXF']->id, 'user_id' => $this->operator->id]], 'finish_date' => '2026-01-01']);
