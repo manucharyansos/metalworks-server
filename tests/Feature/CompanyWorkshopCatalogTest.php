@@ -594,6 +594,93 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->assertDatabaseHas('file_extensions', ['id' => $foreign->id, 'company_id' => $this->other->id, 'extension' => 'dxf']);
     }
 
+    public function test_file_details_show_the_task_snapshot_and_actual_destinations_to_every_authorized_role(): void
+    {
+        $file = $this->file($this->factories['DXF']->id, 'metadata.dxf');
+        $this->in(fn () => $file->update(['quantity' => 2, 'material_type' => 'Steel', 'thickness' => 0,
+            'dimensions' => '1000 × 2000', 'inspection_required' => true, 'production_factory_ids' => [$this->factories['IQS']->id]]));
+        $this->as($this->engineer);
+        $payload = $this->payload([$file->id]);
+        $payload['selected_files'][0]['quantity'] = 3;
+        $payload['file_routing'] = [['file_id' => $file->id, 'factory_ids' => [$this->factories['DXF']->id, $this->factories['DLD']->id]]];
+        $order = $this->postJson('/api/engineers/engineer', $payload, $this->headers())->assertCreated()->json('order');
+        $step = collect($order['factory_orders'])->firstWhere('factory_id', $this->factories['DXF']->id);
+        $this->in(fn () => $file->update(['quantity' => 99, 'material_type' => 'Changed material', 'thickness' => 8,
+            'dimensions' => 'Changed dimensions', 'inspection_required' => false, 'production_factory_ids' => [$this->factories['POWDER']->id]]));
+        foreach ([$this->engineer, $this->manager, $this->account('admin'), $this->account('operator', $this->factories['DXF']->id)] as $actor) {
+            $this->as($actor);
+            $response = $this->getJson('/api/secure-files/pmp/'.$file->id.'/details?factory_order_id='.$step['id'], $this->headers())
+                ->assertOk()->assertJsonPath('details.source', 'task')->assertJsonPath('details.quantity', 3)
+                ->assertJsonPath('details.material_type', 'Steel')->assertJsonPath('details.dimensions', '1000 × 2000')
+                ->assertJsonPath('details.inspection_required', true)->assertJsonPath('details.workshops.0.current', true)
+                ->assertJsonMissingPath('details.path')->assertJsonMissingPath('details.files');
+            $this->assertEquals(0, $response->json('details.thickness'));
+            $this->assertSame([$this->factories['DXF']->id, $this->factories['DLD']->id], array_column($response->json('details.workshops'), 'id'));
+            $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+        }
+        $this->as($this->engineer);
+        $this->getJson('/api/secure-files/pmp/'.$file->id.'/details', $this->headers())->assertOk()
+            ->assertJsonPath('details.source', 'project')->assertJsonPath('details.quantity', 99)
+            ->assertJsonPath('details.dimensions', 'Changed dimensions')->assertJsonPath('details.inspection_required', false)
+            ->assertJsonPath('details.workshops.0.id', $this->factories['POWDER']->id);
+    }
+
+    public function test_file_details_preserve_empty_task_attributes_instead_of_inheriting_later_library_values(): void
+    {
+        $file = $this->file($this->factories['DXF']->id, 'legacy-empty.dxf');
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+        $this->in(fn () => $file->update(['dimensions' => 'Later dimensions', 'material_type' => 'Later material', 'inspection_required' => true]));
+        $this->getJson('/api/secure-files/pmp/'.$file->id.'/details?order_id='.$order['id'], $this->headers())->assertOk()
+            ->assertJsonPath('details.dimensions', null)->assertJsonPath('details.material_type', null)->assertJsonPath('details.inspection_required', false);
+    }
+
+    public function test_file_details_enforce_company_workshop_operator_and_task_visibility(): void
+    {
+        $file = $this->file($this->factories['DXF']->id, 'allowed.dxf');
+        $private = $this->file($this->factories['INFO']->id, 'private-for-bending.txt');
+        $this->as($this->engineer);
+        $payload = $this->payload([$file->id, $private->id]);
+        $payload['reference_file_visibility'] = [['file_id' => $private->id, 'factory_ids' => [$this->factories['DLD']->id]]];
+        $order = $this->postJson('/api/engineers/engineer', $payload, $this->headers())->assertCreated()->json('order');
+        $otherOperator = $this->account('operator', $this->factories['DXF']->id);
+        $second = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]) + [
+            'factory_operators' => [['factory_id' => $this->factories['DXF']->id, 'user_id' => $otherOperator->id]],
+        ], $this->headers())->assertCreated()->json('order');
+        $operator = $this->account('operator', $this->factories['DXF']->id);
+        $this->as($operator);
+        $this->getJson('/api/secure-files/pmp/'.$file->id.'/details?order_id='.$order['id'], $this->headers())->assertOk();
+        $this->getJson('/api/secure-files/pmp/'.$private->id.'/details?order_id='.$order['id'], $this->headers())->assertForbidden();
+        $this->getJson('/api/secure-files/pmp/'.$file->id.'/details?order_id='.$second['id'], $this->headers())->assertForbidden();
+        $this->getJson('/api/secure-files/pmp/'.$file->id.'/details?factory_order_id='.$second['factory_orders'][0]['id'], $this->headers())->assertForbidden();
+        $this->as($this->account('engineer'));
+        $this->getJson('/api/secure-files/pmp/'.$file->id.'/details?order_id='.$order['id'], $this->headers())->assertForbidden();
+        $this->as($this->client);
+        $this->getJson('/api/secure-files/pmp/'.$file->id.'/details', $this->headers())->assertForbidden();
+        $foreign = app(CompanyContext::class)->run($this->other, function () {
+            $project = Pmp::create(['group' => '998', 'group_name' => 'Private project', 'admin_confirmation' => false]);
+            $remote = RemoteNumber::create(['pmp_id' => $project->id, 'remote_number' => '01', 'remote_number_name' => 'Private subgroup']);
+            return PmpFiles::create(['pmp_id' => $project->id, 'remote_number_id' => $remote->id,
+                'factory_id' => Factory::where('value', 'DXF')->value('id'), 'original_name' => 'foreign.dxf', 'path' => 'foreign.dxf']);
+        });
+        $this->as($this->manager);
+        $this->getJson('/api/secure-files/pmp/'.$foreign->id.'/details', $this->headers())->assertNotFound();
+    }
+
+    public function test_revision_details_use_the_requested_task_file_and_reject_mismatched_context(): void
+    {
+        $file = $this->file($this->factories['DXF']->id, 'original.dxf');
+        $other = $this->file($this->factories['DXF']->id, 'other.dxf');
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+        $revision = $this->in(fn () => \App\Models\TaskFileRevision::create(['order_id' => $order['id'], 'pmp_file_id' => $file->id,
+            'user_id' => $this->engineer->id, 'version' => 2, 'file_path' => 'private/revision.dxf', 'original_name' => 'revision.dxf', 'file_size' => 8]));
+        $this->getJson('/api/secure-files/pmp/'.$file->id.'/details?revision_id='.$revision->id, $this->headers())->assertOk()
+            ->assertJsonPath('details.original_name', 'revision.dxf')->assertJsonPath('details.order_id', $order['id']);
+        $this->getJson('/api/secure-files/pmp/'.$other->id.'/details?revision_id='.$revision->id, $this->headers())->assertNotFound();
+        $this->getJson('/api/secure-files/pmp/'.$file->id.'/details?factory_order_id[]=1', $this->headers())->assertUnprocessable();
+    }
+
     private function payload(array $ids): array { return ['user_id' => $this->client->id, 'pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'name' => '987.01', 'description' => 'Catalog task', 'finish_date' => '2099-01-01', 'link_existing_files' => true, 'selected_files' => array_map(fn ($id) => ['id' => $id, 'quantity' => 1], $ids)]; }
     private function in(callable $callback): mixed { return app(CompanyContext::class)->run($this->company, $callback); }
     private function account(string $role, ?int $factory = null): User { return $this->in(function () use ($role, $factory) { $user = User::create(['name' => $role, 'email' => $role.'-'.uniqid().'@example.invalid', 'password' => 'test-password', 'role_id' => Role::where('name', $role)->value('id'), 'factory_id' => $factory]); $m = CompanyMembership::where('user_id', $user->id)->first(); $m->permissions()->sync(Permission::whereIn('slug', ['orders.view', 'orders.create', 'orders.update', 'factory.view', 'factory.download', 'factory.order_update', 'pmp.view', 'pmp_files.view', 'pmp_files.upload'])->pluck('id')->mapWithKeys(fn ($id) => [$id => ['allowed' => true]])->all()); return $user; }); }

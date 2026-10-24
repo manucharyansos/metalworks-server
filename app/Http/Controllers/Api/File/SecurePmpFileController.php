@@ -12,6 +12,14 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class SecurePmpFileController extends Controller
 {
+    public function details(Request $request, PmpFiles $file): JsonResponse
+    {
+        $context = $request->validate(['factory_order_id' => 'nullable|integer|min:1',
+            'order_id' => 'nullable|integer|min:1', 'revision_id' => 'nullable|integer|min:1']);
+        return response()->json(['details' => \App\Support\FileProductionDetails::forFile($request->user(), $file, $context)], 200,
+            ['Cache-Control' => 'private, no-store, max-age=0', 'Pragma' => 'no-cache']);
+    }
+
     public function show(Request $request, PmpFiles $file): BinaryFileResponse|JsonResponse
     {
         $user = $request->user();
