@@ -47,9 +47,9 @@ class CompanyWorkshopCatalogTest extends TestCase
         $sections = $this->getJson('/api/file-categories', $this->headers())->assertOk()->assertJsonCount(6, 'categories')->json('categories');
         $this->assertContains('SW', array_column($sections, 'code')); $this->assertContains('INFO', array_column($sections, 'code'));
         $this->assertNotContains('POWDER', array_column($sections, 'code'));
-        $this->getJson('/api/staff/worker-options', $this->headers())->assertOk()->assertJsonCount(4, 'factories');
+        $this->getJson('/api/staff/worker-options', $this->headers())->assertOk()->assertJsonCount(6, 'factories');
         $this->as($this->engineer);
-        $this->getJson('/api/factories/factory', $this->headers())->assertOk()->assertJsonCount(4);
+        $this->getJson('/api/factories/factory', $this->headers())->assertOk()->assertJsonCount(6);
         $this->postJson('/api/workshops', ['name' => 'Welding'], $this->headers())->assertForbidden();
     }
 
@@ -68,6 +68,76 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->deleteJson('/api/factories/factory/'.$created['id'], [], $this->headers())->assertUnprocessable();
         $this->assertDatabaseHas('factories', ['id' => $created['id'], 'name' => 'Assembly']);
         $this->putJson('/api/workshops/'.$this->factories['INFO']->id, ['name' => 'Info workshop'], $this->headers())->assertNotFound();
+    }
+
+    public function test_default_catalog_has_six_real_workshops_and_independent_file_sections(): void
+    {
+        $this->as($this->manager);
+        $workshops = collect($this->getJson('/api/workshops', $this->headers())->assertOk()->json('workshops'))->keyBy('value');
+        $expected = ['DXF' => 'Լազերային կտրում՝ լիստեր', 'IQS' => 'Լազերային կտրում՝ խողովակներ',
+            'DLD' => 'Կռում', 'WELD' => 'Զոդում', 'ROLL' => 'Վալց', 'POWDER' => 'Փոշեներկում'];
+        $this->assertCount(6, $workshops);
+        foreach ($expected as $code => $name) {
+            $this->assertSame($name, $workshops[$code]['name']);
+            $this->assertTrue($workshops[$code]['is_workshop']);
+        }
+        $this->in(fn () => (new FactorySeeder)->run());
+        $this->assertSame($workshops->pluck('id', 'value')->all(), collect($this->getJson('/api/workshops', $this->headers())->assertOk()->json('workshops'))->pluck('id', 'value')->all());
+        $sections = collect($this->getJson('/api/file-categories', $this->headers())->assertOk()->assertJsonCount(6, 'categories')->json('categories'))->keyBy('code');
+        $this->assertSame('IGS', $sections['IQS']['name']);
+        $this->assertSame('DXF գծագրեր', $sections['DXF']['name']);
+        $this->assertFalse($sections->has('WELD'));
+        $this->assertFalse($sections->has('ROLL'));
+    }
+
+    public function test_catalog_upgrade_is_repeatable_keeps_workshop_ids_and_does_not_change_other_companies(): void
+    {
+        $file = $this->file($this->factories['DXF']->id, 'existing.dxf');
+        $operator = $this->account('operator', $this->factories['DXF']->id);
+        $this->as($this->engineer);
+        $task = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+        $this->in(function () {
+            $this->factories['DXF']->update(['name' => 'Laser cutting']);
+            $this->factories['IQS']->update(['name' => 'Laser']);
+            $this->factories['DLD']->update(['name' => 'Bend']);
+            $this->factories['POWDER']->update(['name' => 'Our custom coating name', 'is_active' => false]);
+            Factory::whereIn('value', ['WELD', 'ROLL'])->delete();
+        });
+        $existing = $this->in(fn () => Factory::create(['name' => 'Welding', 'value' => 'WORK_EXISTING_WELD', 'is_active' => true]));
+        $foreign = DB::table('factories')->where('company_id', $this->other->id)->orderBy('id')->get()->toJson();
+        $categories = DB::table('file_categories')->where('company_id', $this->company->id)->orderBy('id')->get()->toJson();
+        $migration = require database_path('migrations/2026_10_27_120000_complete_metalworks_production_workshops.php');
+        $migration->up(); $migration->up();
+        $this->in(fn () => (new FactorySeeder)->run());
+        $this->assertSame($foreign, DB::table('factories')->where('company_id', $this->other->id)->orderBy('id')->get()->toJson());
+        $this->assertSame($categories, DB::table('file_categories')->where('company_id', $this->company->id)->orderBy('id')->get()->toJson());
+        $this->assertSame(6, $this->in(fn () => Factory::workshops()->count()));
+        foreach (['DXF' => 'Լազերային կտրում՝ լիստեր', 'IQS' => 'Լազերային կտրում՝ խողովակներ', 'DLD' => 'Կռում'] as $code => $name) {
+            $this->assertDatabaseHas('factories', ['id' => $this->factories[$code]->id, 'company_id' => $this->company->id, 'name' => $name]);
+        }
+        $this->assertDatabaseHas('factories', ['id' => $existing->id, 'name' => 'Զոդում', 'value' => 'WORK_EXISTING_WELD']);
+        $this->assertDatabaseHas('factories', ['id' => $this->factories['POWDER']->id, 'name' => 'Our custom coating name', 'is_active' => false]);
+        $this->assertDatabaseHas('factory_orders', ['order_id' => $task['id'], 'factory_id' => $this->factories['DXF']->id]);
+        $this->assertDatabaseHas('membership_assignments', ['user_id' => $operator->id, 'factory_id' => $this->factories['DXF']->id]);
+        $this->assertDatabaseHas('pmp_files', ['id' => $file->id, 'factory_id' => $this->factories['DXF']->id]);
+    }
+
+    public function test_every_production_workshop_can_receive_files_and_its_operator_can_open_their_details(): void
+    {
+        $file = $this->file($this->factories['DXF']->id, 'all-processes.dxf');
+        $path = array_map(fn ($code) => $this->factories[$code]->id, ['DXF', 'IQS', 'DLD', 'WELD', 'ROLL', 'POWDER']);
+        $this->in(fn () => $file->update(['production_factory_ids' => $path, 'dimensions' => '250 × 500', 'inspection_required' => true]));
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->assertJsonCount(6, 'order.factory_orders')->json('order');
+        foreach ($path as $id) {
+            $operator = $this->account('operator', $id);
+            $this->as($operator);
+            $this->getJson('/api/factories/factory', $this->headers())->assertOk()->assertJsonCount(1)->assertJsonPath('0.id', $id);
+            $this->getJson('/api/secure-files/pmp/'.$file->id.'/details?order_id='.$order['id'], $this->headers())->assertOk()
+                ->assertJsonPath('details.dimensions', '250 × 500')->assertJsonPath('details.inspection_required', true)->assertJsonCount(6, 'details.workshops');
+            $other = $path[0] === $id ? $path[1] : $path[0];
+            $this->getJson('/api/factories/factory/'.$other, $this->headers())->assertForbidden();
+        }
     }
 
     public function test_archiving_requires_open_jobs_and_staff_to_be_transferred_and_keeps_files_and_history(): void
@@ -318,7 +388,7 @@ class CompanyWorkshopCatalogTest extends TestCase
 
     public function test_uploaded_file_plan_becomes_the_task_route_and_preserves_attributes(): void
     {
-        $weld = $this->in(fn () => Factory::create(['name' => 'Welding', 'value' => 'WELD']));
+        $weld = $this->factories['WELD'];
         $path = [$this->factories['DXF']->id, $this->factories['DLD']->id, $weld->id, $this->factories['POWDER']->id];
         $this->as($this->engineer);
         $file = $this->post('/api/engineers/uploadPmpFile', [
@@ -409,7 +479,7 @@ class CompanyWorkshopCatalogTest extends TestCase
         app(CompanyContext::class)->run($this->other, fn () => $material('Private material'));
         $this->as($this->engineer);
         $this->getJson('/api/engineers/pmp-file-options', $this->headers())->assertOk()->assertJsonCount(1, 'materials')
-            ->assertJsonPath('materials.0.description', 'Our steel')->assertJsonCount(4, 'workshops');
+            ->assertJsonPath('materials.0.description', 'Our steel')->assertJsonCount(6, 'workshops');
         $this->as($this->client);
         $this->getJson('/api/engineers/pmp-file-options', $this->headers())->assertForbidden();
     }
@@ -457,7 +527,7 @@ class CompanyWorkshopCatalogTest extends TestCase
         });
         $this->as($this->account('admin'));
         $dashboard = $this->getJson('/api/admin/dashboard', $this->headers())->assertOk();
-        $dashboard->assertJsonPath('summary.factories', 4)->assertJsonPath('summary.factory_operators', 0)->assertJsonPath('summary.unassigned_factory_steps', 1)->assertJsonPath('summary.awaiting_engineer_confirmation', 0);
+        $dashboard->assertJsonPath('summary.factories', 6)->assertJsonPath('summary.factory_operators', 0)->assertJsonPath('summary.unassigned_factory_steps', 1)->assertJsonPath('summary.awaiting_engineer_confirmation', 0);
         $this->assertNotContains('SW', array_column($dashboard->json('filters.factories'), 'value'));
         $this->getJson('/api/admin/order/'.$order->id, $this->headers())->assertOk()->assertJsonCount(1, 'factory_orders')->assertJsonPath('factory_orders.0.id', $real->id)->assertJsonPath('factory_orders.0.files.0.id', $note->id);
         $this->getJson('/api/admin/dashboard/orders', $this->headers())->assertOk()->assertJsonCount(1, 'orders.0.factory_orders');

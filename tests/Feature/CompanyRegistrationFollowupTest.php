@@ -262,7 +262,7 @@ class CompanyRegistrationFollowupTest extends TestCase
 
         $this->actingManager();
         $this->getJson('/api/registration-requests?status=all')->assertOk()->assertJsonCount(2, 'data')->assertJsonCount(2, 'companies')->assertJsonPath('type_counts.client', 1)->assertJsonPath('type_counts.employee', 1);
-        $this->getJson('/api/staff/worker-options')->assertOk()->assertJsonPath('can_manage_companies', true)->assertJsonCount(2, 'companies')->assertJsonCount(4, 'companies.1.factories');
+        $this->getJson('/api/staff/worker-options')->assertOk()->assertJsonPath('can_manage_companies', true)->assertJsonCount(2, 'companies')->assertJsonCount(6, 'companies.1.factories');
         $this->putJson('/api/company-access/'.$client->id, ['access' => [['company_id' => $this->b->id, 'enabled' => true]]])->assertOk();
         $this->assertDatabaseHas('clients', ['user_id' => $client->id, 'company_id' => $this->b->id]);
         CompanyMembership::where('user_id', $this->manager->id)->where('company_id', $this->b->id)->update(['is_active' => false]);
