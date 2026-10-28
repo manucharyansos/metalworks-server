@@ -32,9 +32,10 @@ class UserController extends Controller
         //
     }
 
-    public function store(Request $request)
+    public function store(Request $request): JsonResponse
     {
-        //
+        // Staff accounts are created through /api/workers and company access.
+        return $this->notImplemented();
     }
 
     public function show(User $user): JsonResponse
@@ -54,14 +55,20 @@ class UserController extends Controller
 
     public function update(Request $request, string $id): JsonResponse
     {
-        return response()->json([
-            'message' => 'User update is not implemented on this endpoint.',
-        ], 501);
+        return $this->notImplemented();
     }
 
-    public function destroy(string $id)
+    public function destroy(string $id): JsonResponse
     {
-        //
+        // Employees are removed per company through the workers endpoints.
+        return $this->notImplemented();
+    }
+
+    private function notImplemented(): JsonResponse
+    {
+        return response()->json([
+            'message' => 'This user operation is not available on this endpoint.',
+        ], 501);
     }
 
     private function ensureStaffAccount(User $user): void
