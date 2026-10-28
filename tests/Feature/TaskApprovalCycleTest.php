@@ -478,7 +478,7 @@ class TaskApprovalCycleTest extends TestCase
         $this->as($this->operator); $this->act($order, 'finished', ['evidence_text' => 'Submitted'])->assertOk();
         $this->travel(5)->days();
         $this->as($this->engineer); $this->approve($step)->assertOk();
-        $this->assertSame(now()->format('Y-m-d H:i:s'), $step->fresh()->completed_at);
+        $this->assertSame(now()->format('Y-m-d H:i:s'), $step->fresh()->getRawOriginal('completed_at'));
         $this->as($this->operator);
         $url = '/api/factories/factory/'.$this->factories['DXF']->id;
         $this->getJson($url, $this->headers())->assertOk()->assertJsonCount(1, 'orders');

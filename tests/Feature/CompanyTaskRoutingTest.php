@@ -219,10 +219,10 @@ class CompanyTaskRoutingTest extends TestCase
     {
         $order = $this->createTask(['confirmation_required' => true, 'confirmation_method' => 'text']); $laser = $order->factoryOrders()->firstOrFail();
         $this->as($this->operator); $this->act($order, 'finished', ['evidence_text' => 'Original completed work'])->assertOk();
-        $this->as($this->engineer); $this->approve($laser)->assertOk(); $stamp = $laser->fresh()->completed_at;
+        $this->as($this->engineer); $this->approve($laser)->assertOk(); $stamp = $laser->fresh()->getRawOriginal('completed_at');
         $this->assertNotNull($order->fresh()->completed_at);
         $this->add($order, ['depends_on_id' => $laser->id])->assertCreated()->assertJsonPath('order.status', 'pending')->assertJsonPath('order.completed_at', null);
-        $this->assertSame($stamp, $laser->fresh()->completed_at); $this->assertSame('Original completed work', $laser->fresh()->evidence_text);
+        $this->assertSame($stamp, $laser->fresh()->getRawOriginal('completed_at')); $this->assertSame('Original completed work', $laser->fresh()->evidence_text);
         $this->assertTrue($order->logs()->where('action','factory_order.work_added')->first()->meta['reopened_task']);
         $this->assign($order, $laser, $this->secondOperator->id)->assertUnprocessable();
     }

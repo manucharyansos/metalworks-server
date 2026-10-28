@@ -122,9 +122,9 @@ class CompanyTaskWorkflowTest extends TestCase
         $this->as($this->engineer);
         $this->getJson('/api/engineers/engineer?confirmation=waiting', $this->headers())->assertOk()->assertJsonPath('orders.0.factory_orders.0.evidence_text', 'Checked dimensions and completed cutting.');
         $this->approve($step)->assertOk()->assertJsonPath('order.status', 'completed');
-        $stamp = $step->fresh()->engineer_confirmation_at;
+        $stamp = $step->fresh()->getRawOriginal('engineer_confirmation_at');
         $this->approve($step)->assertOk();
-        $this->assertSame($stamp, $step->fresh()->engineer_confirmation_at);
+        $this->assertSame($stamp, $step->fresh()->getRawOriginal('engineer_confirmation_at'));
         $this->assertSame($this->engineer->id, (int) $step->fresh()->engineer_confirmation_user_id);
         $this->assertDatabaseCount('order_logs', 2);
     }
@@ -208,9 +208,9 @@ class CompanyTaskWorkflowTest extends TestCase
             ->assertJsonPath('orders.0.factory_orders.0.has_evidence_photo', true);
         $this->get('/api/secure-files/evidence/'.$step->id, $this->headers())->assertOk();
         $this->approve($step)->assertOk()->assertJsonPath('order.status', 'completed');
-        $stamp = $step->fresh()->engineer_confirmation_at;
+        $stamp = $step->fresh()->getRawOriginal('engineer_confirmation_at');
         $this->approve($step)->assertOk();
-        $this->assertSame($stamp, $step->fresh()->engineer_confirmation_at);
+        $this->assertSame($stamp, $step->fresh()->getRawOriginal('engineer_confirmation_at'));
     }
 
     public function test_combined_confirmation_cannot_approve_a_partial_stored_proof(): void
@@ -448,9 +448,9 @@ class CompanyTaskWorkflowTest extends TestCase
         $this->as($this->engineer); $this->changeEvidence($order, true, 'text')->assertOk()->assertJsonPath('order.status', 'pending');
         $this->assertSame('confirmed', $step->fresh()->status); $this->assertNull($step->fresh()->completed_at);
         $this->as($this->operator); $this->act($order, 'finished', ['evidence_text' => 'Done'])->assertOk();
-        $this->as($this->engineer); $this->approve($step)->assertOk(); $approval = $step->fresh()->engineer_confirmation_at;
+        $this->as($this->engineer); $this->approve($step)->assertOk(); $approval = $step->fresh()->getRawOriginal('engineer_confirmation_at');
         $this->changeEvidence($order, true, 'photo', true, 'text')->assertOk()->assertJsonPath('order.status', 'completed');
-        $this->assertSame($approval, $step->fresh()->engineer_confirmation_at); $this->assertSame('text', $step->fresh()->confirmation_method);
+        $this->assertSame($approval, $step->fresh()->getRawOriginal('engineer_confirmation_at')); $this->assertSame('text', $step->fresh()->confirmation_method);
         $this->changeWorkshop($order, $step, ['priority' => 'urgent'])->assertUnprocessable();
     }
 

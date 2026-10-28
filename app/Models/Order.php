@@ -49,6 +49,8 @@ class Order extends Model
         'link_existing_files' => 'boolean',
         'confirmation_required' => 'boolean',
         'reference_file_visibility' => 'array',
+        // Serialized with its timezone so browsers show the local time.
+        'completed_at' => 'datetime',
     ];
 
     public function creator(): BelongsTo
