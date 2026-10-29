@@ -85,9 +85,25 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->assertSame($workshops->pluck('id', 'value')->all(), collect($this->getJson('/api/workshops', $this->headers())->assertOk()->json('workshops'))->pluck('id', 'value')->all());
         $sections = collect($this->getJson('/api/file-categories', $this->headers())->assertOk()->assertJsonCount(6, 'categories')->json('categories'))->keyBy('code');
         $this->assertSame('IGS', $sections['IQS']['name']);
-        $this->assertSame('DXF գծագրեր', $sections['DXF']['name']);
+        $this->assertSame('DXF', $sections['DXF']['name']);
+        $this->assertSame('INFO', $sections['INFO']['name']);
         $this->assertFalse($sections->has('WELD'));
         $this->assertFalse($sections->has('ROLL'));
+    }
+
+    public function test_default_file_sections_get_their_short_codes_back_and_custom_names_stay(): void
+    {
+        $sections = fn () => DB::table('file_categories')->where('company_id', $this->company->id)->orderBy('id');
+        foreach (['SW' => 'CAD նախագծեր', 'DLD' => 'Կռման գծագրեր', 'DXF' => 'DXF գծագրեր', 'IQS' => '3D գծագրեր', 'PDF' => 'PDF փաստաթղթեր', 'INFO' => 'Our reference folder'] as $code => $name) {
+            $sections()->where('code', $code)->update(['name' => $name]);
+        }
+        $ids = $sections()->pluck('id', 'code')->all();
+        $migration = require database_path('migrations/2026_10_29_090000_restore_file_section_codes.php');
+        $migration->up(); $migration->up();
+        $names = $sections()->whereIn('code', ['SW', 'DLD', 'DXF', 'IQS', 'PDF', 'INFO'])->pluck('name', 'code')->all();
+        ksort($names);
+        $this->assertSame(['DLD' => 'DLD', 'DXF' => 'DXF', 'INFO' => 'Our reference folder', 'IQS' => 'IGS', 'PDF' => 'PDF', 'SW' => 'SW'], $names);
+        $this->assertSame($ids, $sections()->pluck('id', 'code')->all());
     }
 
     public function test_catalog_upgrade_is_repeatable_keeps_workshop_ids_and_does_not_change_other_companies(): void
