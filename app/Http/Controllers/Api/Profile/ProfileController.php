@@ -46,7 +46,7 @@ class ProfileController extends Controller
                 'client' => $user->client,
             ],
             'capabilities' => [
-                'client_orders' => app(\App\Support\CompanyContext::class)->id() && (optional($user->role)->name === 'authenticatedUser' || (bool) $user->client),
+                'client_orders' => app(\App\Support\CompanyContext::class)->id() && (bool) ($user->client?->access_enabled),
                 'factory_work' => app(\App\Support\CompanyContext::class)->id() && !empty($user->factory_id),
             ],
         ]);
@@ -287,7 +287,7 @@ class ProfileController extends Controller
     public function orders(Request $request): JsonResponse
     {
         $user = $this->profileUser($request);
-        $isClient = optional($user->role)->name === 'authenticatedUser' || (bool) $user->client;
+        $isClient = $user->client ? (bool) $user->client->access_enabled : optional($user->role)->name === 'authenticatedUser';
 
         abort_unless($isClient, 403, 'Forbidden');
 

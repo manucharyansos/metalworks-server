@@ -11,7 +11,9 @@ class Client extends Model
 {
     use HasFactory, \App\Models\Concerns\BelongsToCompany;
 
+    protected $casts = ['access_enabled' => 'boolean'];
     protected $fillable = [
+        'access_enabled',
         'name',
         'phone',
         'address',

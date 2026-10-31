@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\{Company, CompanyMembership, Factory, Role, User};
+use App\Models\{Company, CompanyMembership, Client, Factory, Role, User};
 use App\Support\CompanyContext;
 use App\Support\CompanyManagement;
 use App\Support\MembershipAssignments;
@@ -22,7 +22,7 @@ class CompanyAccessController extends Controller
     private function showUser(Request $request, User $user)
     {
         $this->assertTarget($user);
-        $client = $this->isClient($user);
+        $client = $this->isClient($user) || $request->input('access_type') === 'customer';
         $companies = CompanyManagement::companies($request->user());
         $memberships = CompanyMembership::where('user_id', $user->id)->whereIn('company_id', $companies->modelKeys())->get()->keyBy('company_id');
         return response()->json([
@@ -30,16 +30,15 @@ class CompanyAccessController extends Controller
             'current_company_id' => app(CompanyContext::class)->id(),
             'unmanaged_companies' => CompanyManagement::unassignedDirectory($companies),
             'roles' => $client ? [] : Role::whereIn('name', $this->roles($request->user()))->orderBy('name')->get(['id', 'name', 'value']),
-            'companies' => $companies->map(function (Company $company) use ($memberships, $request, $client) {
+            'companies' => $companies->map(function (Company $company) use ($memberships, $request, $client, $user) {
                 $membership = $memberships->get($company->id);
                 $roleNames = app(CompanyContext::class)->run($company, fn () => MembershipAssignments::roleNames($membership));
-                $readOnly = (!$request->user()->is_platform_admin && in_array('admin', $roleNames, true))
-                    || ($client && (bool) array_intersect($roleNames, MembershipAssignments::STAFF_ROLES));
+                $readOnly = !$client && !$request->user()->is_platform_admin && in_array('admin', $roleNames, true);
                 return [
                     'id' => $company->id, 'name' => $company->name, 'read_only' => $readOnly,
                     'selection_locked' => $readOnly || $company->id === app(CompanyContext::class)->id(),
                     'factories' => $client ? [] : Factory::withoutGlobalScope('company')->activeWorkshops()->where('company_id', $company->id)->orderBy('name')->get(['id', 'name']),
-                    'access' => ['company_id' => $company->id, 'enabled' => (bool) $membership?->is_active, ...($client ? [] : [
+                    'access' => ['company_id' => $company->id, 'enabled' => $client ? Client::withoutGlobalScope('company')->where('company_id', $company->id)->where('user_id', $user->id)->where('access_enabled', true)->exists() : (bool) $membership?->is_active, ...($client ? [] : [
                         'role_id' => $membership?->role_id, 'factory_id' => $membership?->factory_id,
                         'assignments' => app(CompanyContext::class)->run($company, fn () => MembershipAssignments::rows($membership))])],
                 ];
@@ -68,11 +67,29 @@ class CompanyAccessController extends Controller
             abort_unless($companies->has(app(CompanyContext::class)->id()), 403, 'You can no longer manage the selected company.');
             app(CompanyContext::class)->forgetMembership($user->id);
             $this->assertTarget($user);
-            $client = $this->isClient($user);
+            $client = $this->isClient($user) || $request->input('access_type') === 'customer';
             foreach ($data['access'] as $row) {
                 $company = $companies->get($row['company_id']);
                 abort_unless($company, 403, 'You cannot manage access to this company.');
                 $membership = CompanyMembership::where('company_id', $company->id)->where('user_id', $user->id)->lockForUpdate()->first();
+                if ($client) {
+                    abort_if(!empty($row['factory_id']) || !empty($row['assignments']) || (!empty($row['role_id']) && (int) $row['role_id'] !== (int) Role::where('name', 'authenticatedUser')->value('id')), 422, 'Customer links do not include employee positions.');
+                    abort_if($company->id === app(CompanyContext::class)->id() && !$row['enabled'], 409, 'Remove this customer through the customer form.');
+                    app(CompanyContext::class)->run($company, function () use ($row, $user, $membership) {
+                        $contact = Client::where('user_id', $user->id)->first();
+                        if (!$row['enabled']) {
+                            $contact?->update(['access_enabled' => false]);
+                            if ($membership && !array_intersect(MembershipAssignments::roleNames($membership), MembershipAssignments::STAFF_ROLES)) $membership->update(['is_active' => false]);
+                            return;
+                        }
+                        if ($membership && !array_intersect(MembershipAssignments::roleNames($membership), MembershipAssignments::STAFF_ROLES)) $membership->update(['is_active' => true]);
+                        // Never rewrite an existing employee membership or its grants.
+                        if (!$membership) CompanyMembership::create(['company_id' => app(CompanyContext::class)->id(), 'user_id' => $user->id, 'role_id' => Role::where('name', 'authenticatedUser')->value('id'), 'is_active' => true]);
+                        if ($contact) $contact->update(['access_enabled' => true]);
+                        else Client::create(['user_id' => $user->id, 'name' => $user->name, 'last_name' => $user->last_name, 'phone' => '', 'type' => 'physPerson', 'access_enabled' => true]);
+                    });
+                    continue;
+                }
                 $unchanged = (bool) $membership?->is_active === (bool) $row['enabled']
                     && (int) $membership?->role_id === (int) ($row['role_id'] ?? null)
                     && (int) $membership?->factory_id === (int) ($row['factory_id'] ?? null);
@@ -131,7 +148,9 @@ class CompanyAccessController extends Controller
 
     private function assertTarget(User $user): void
     {
-        abort_unless(app(CompanyContext::class)->membership($user->id)?->is_active, 404);
+        if (request()->input('access_type') === 'customer') {
+            abort_unless(Client::where('user_id', $user->id)->where('access_enabled', true)->exists(), 404);
+        } else abort_unless(app(CompanyContext::class)->membership($user->id)?->is_active, 404);
         abort_if($user->is_platform_admin, 422, 'Platform administrator access is managed separately.');
     }
 }

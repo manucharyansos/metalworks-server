@@ -29,6 +29,18 @@ class ResolveCompany
             // membership/platform checks and must not inherit a selected tenant.
             if ($request->is('api/companies', 'api/companies/*')) return $next($request);
 
+            if ($request->is('api/profile/customer-companies')) return $next($request);
+            $customerCompany = $request->is('api/profile', 'api/profile/*') ? $request->query('customer_company_id') : null;
+            if ($customerCompany !== null) {
+                abort_unless(ctype_digit((string) $customerCompany), 403);
+                $company = Company::where('is_active', true)->findOrFail((int) $customerCompany);
+                abort_unless(\App\Models\Client::withoutGlobalScope('company')->where('company_id', $company->id)->where('user_id', $user->id)->where('access_enabled', true)->exists(), 403, 'Customer access denied.');
+                $context->set($company); $context->customer(true);
+                $user->unsetRelation('role')->unsetRelation('factory')->unsetRelation('worker')->unsetRelation('client');
+                $response = $next($request);
+                $response->headers->set('Cache-Control', 'private, no-store');
+                return $response;
+            }
             $selected = $request->header('X-Company-ID', $request->query('company_id'));
             $query = Company::query()->where('is_active', true);
             if (!$user->is_platform_admin) {

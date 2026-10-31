@@ -22,7 +22,7 @@ class ClientController extends Controller
     public function index(): JsonResponse
     {
         $clients = Client::with('user:id,name,email')
-            ->whereHas('user', fn ($query) => $query->forRoles(['authenticatedUser']))
+            ->where('access_enabled', true)
             ->orderByDesc('id')
             ->get();
 
@@ -36,7 +36,7 @@ class ClientController extends Controller
         ]);
 
         $existing = User::withoutGlobalScope('company')->where('email', $request->email)->first();
-        if ($existing && (!$request->user()->is_platform_admin || CompanyMembership::where('company_id', app(CompanyContext::class)->id())->where('user_id', $existing->id)->where('is_active', true)->exists())) {
+        if ($existing && Client::where('user_id', $existing->id)->where('access_enabled', true)->exists()) {
             throw ValidationException::withMessages(['email' => ['This email is already registered. Company access is managed by the platform administrator.']]);
         }
         $request->validate([
@@ -64,9 +64,9 @@ class ClientController extends Controller
                 'role_id' => $roleId,
             ]);
 
-            CompanyMembership::updateOrCreate(['company_id' => app(CompanyContext::class)->id(), 'user_id' => $user->id], ['role_id' => $roleId, 'factory_id' => null, 'is_active' => true]);
+            CompanyMembership::firstOrCreate(['company_id' => app(CompanyContext::class)->id(), 'user_id' => $user->id], ['role_id' => $roleId, 'factory_id' => null, 'is_active' => true]);
             app(CompanyContext::class)->forgetMembership($user->id);
-            return $user->client()->updateOrCreate([], $clientData);
+            return $user->client()->updateOrCreate([], [...$clientData, 'access_enabled' => true]);
         });
 
         return response()->json(new ClientResource($client->load('user')), 201);
@@ -120,7 +120,9 @@ class ClientController extends Controller
         }
 
         DB::transaction(function () use ($client, $user): void {
-            app(\App\Support\CompanyContext::class)->membership($user->id)->update(['is_active' => false]);
+            $client->update(['access_enabled' => false]);
+            $membership = app(CompanyContext::class)->membership($user->id);
+            if ($membership && !array_intersect(\App\Support\MembershipAssignments::roleNames($membership), \App\Support\MembershipAssignments::STAFF_ROLES)) $membership->update(['is_active' => false]);
             app(\App\Support\CompanyContext::class)->forgetMembership($user->id);
         });
 
@@ -132,7 +134,7 @@ class ClientController extends Controller
         $user->loadMissing('role');
 
         abort_unless(
-            $user->role?->name === 'authenticatedUser',
+            Client::where('user_id', $user->id)->where('access_enabled', true)->exists(),
             404,
             'Customer not found'
         );

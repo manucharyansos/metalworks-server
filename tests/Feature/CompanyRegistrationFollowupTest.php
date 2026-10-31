@@ -342,9 +342,9 @@ class CompanyRegistrationFollowupTest extends TestCase
         $membership = CompanyMembership::create(['company_id' => $this->b->id, 'user_id' => $person->id, 'role_id' => $this->role('engineer')]);
         $this->manageSecond(); $this->actingManager();
         $url = '/api/company-access/'.$person->id;
-        $this->getJson($url)->assertOk()->assertJsonPath('companies.1.read_only', true);
-        $this->putJson($url, ['access' => [['company_id' => $this->b->id, 'enabled' => false]]])->assertForbidden();
-        $this->putJson($url, ['access' => [$this->access($this->b, 'authenticatedUser')]])->assertForbidden();
+        $this->getJson($url)->assertOk()->assertJsonPath('companies.1.read_only', false);
+        $this->putJson($url, ['access' => [['company_id' => $this->b->id, 'enabled' => false]]])->assertOk();
+        $this->putJson($url, ['access' => [$this->access($this->b, 'authenticatedUser')]])->assertOk();
         $this->assertSame($this->role('engineer'), $membership->fresh()->role_id);
         $this->assertTrue($membership->fresh()->is_active);
     }

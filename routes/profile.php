@@ -5,6 +5,10 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth:sanctum', 'detect.device', 'setlocale'])->prefix('profile')->group(function () {
+    Route::get('/customer-companies', function (Request $request) {
+        $ids = \App\Models\Client::withoutGlobalScope('company')->where('user_id', $request->user()->id)->where('access_enabled', true)->pluck('company_id');
+        return response()->json(['employee_company_ids' => \App\Models\CompanyMembership::where('user_id', $request->user()->id)->where('is_active', true)->whereHas('role', fn ($q) => $q->whereIn('name', \App\Support\MembershipAssignments::STAFF_ROLES))->pluck('company_id'), 'companies' => \App\Models\Company::where('is_active', true)->whereIn('id', $ids)->orderBy('id')->get()->map(fn ($company) => $company->summary())])->header('Cache-Control', 'private, no-store');
+    });
     Route::get('/', [ProfileController::class, 'show']);
     Route::patch('/', [ProfileController::class, 'update']);
 

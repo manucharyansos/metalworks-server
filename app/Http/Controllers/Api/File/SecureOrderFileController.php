@@ -61,7 +61,7 @@ class SecureOrderFileController extends Controller
             return true;
         }
 
-        if ((int) $order->user_id === (int) $user->id) {
+        if ((int) $order->user_id === (int) $user->id && \App\Models\Client::where('user_id', $user->id)->where('access_enabled', true)->exists()) {
             return true;
         }
 

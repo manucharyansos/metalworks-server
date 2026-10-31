@@ -20,6 +20,8 @@ class ProfileOrderFilesTest extends TestCase
         parent::setUp();
         config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:']);
         DB::purge('sqlite');
+        Schema::create('clients', function (Blueprint $t) { $t->id(); $t->unsignedBigInteger('company_id'); $t->unsignedBigInteger('user_id'); $t->boolean('access_enabled')->default(true); });
+        DB::table('clients')->insert(['company_id' => 1, 'user_id' => 7, 'access_enabled' => true]);
         foreach (['orders', 'files', 'selected_files', 'pmp_files', 'task_file_revisions', 'file_categories'] as $name) {
             Schema::create($name, function (Blueprint $t) use ($name) {
                 $t->id(); $t->unsignedBigInteger('company_id')->default(1);

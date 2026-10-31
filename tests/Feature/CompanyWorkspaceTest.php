@@ -206,6 +206,7 @@ class CompanyWorkspaceTest extends TestCase
     public function test_customer_checkbox_controls_directory_orders_and_files_without_staff_redirects(): void
     {
         $customer = $this->account($this->a, 'checkbox-client@example.invalid', 'authenticatedUser');
+        $this->in($this->a, fn () => \App\Models\Client::create(['user_id' => $customer->id, 'name' => 'Customer', 'phone' => '', 'type' => 'physPerson']));
         $staffCompany = Company::create(['name' => 'Staff workspace', 'slug' => 'staff-workspace']);
         CompanyMembership::create(['company_id' => $staffCompany->id, 'user_id' => $customer->id, 'role_id' => Role::where('name', 'engineer')->value('id'), 'is_active' => true]);
         Sanctum::actingAs($customer);
@@ -240,6 +241,38 @@ class CompanyWorkspaceTest extends TestCase
         $this->getJson('/api/user', ['X-Company-ID' => $this->a->id])->assertOk()->assertJsonCount(1, 'companies');
         $this->getJson('/api/profile/orders', ['X-Company-ID' => $this->b->id])->assertForbidden();
         $this->assertDatabaseHas('orders', ['id' => $second->id, 'user_id' => $customer->id]);
+    }
+
+
+    public function test_customer_and_employee_access_in_one_company_are_independent(): void
+    {
+        $person = $this->account($this->a, 'dual-person@example.invalid', 'authenticatedUser');
+        $this->in($this->a, fn () => \App\Models\Client::create(['user_id' => $person->id, 'name' => 'Dual', 'phone' => '', 'type' => 'physPerson']));
+        $membership = CompanyMembership::create(['company_id' => $this->b->id, 'user_id' => $person->id, 'role_id' => Role::where('name', 'engineer')->value('id'), 'is_active' => true]);
+        $permission = Permission::where('slug', 'orders.view')->firstOrFail();
+        $membership->permissions()->attach($permission->id, ['allowed' => true]);
+        $before = $membership->assignments()->pluck('id')->all();
+        Sanctum::actingAs($this->owner);
+        $url = '/api/company-access/'.$person->id.'?access_type=customer';
+        $this->putJson($url, ['access' => [['company_id' => $this->b->id, 'enabled' => true]]], ['X-Company-ID' => $this->a->id])->assertOk();
+        $this->assertSame($before, $membership->fresh()->assignments()->pluck('id')->all());
+        $this->assertDatabaseHas('membership_permissions', ['membership_id' => $membership->id, 'permission_id' => $permission->id, 'allowed' => true]);
+        $order = $this->in($this->b, fn () => Order::create(['name' => 'Dual customer order', 'user_id' => $person->id, 'creator_id' => $person->id, 'status' => 'pending']));
+        Sanctum::actingAs($person);
+        $this->getJson('/api/profile/customer-companies')->assertOk()->assertJsonCount(2, 'companies');
+        $this->getJson('/api/profile?customer_company_id='.$this->b->id)->assertOk()->assertJsonPath('user.role.name', 'authenticatedUser')->assertJsonPath('user.factory_id', null);
+        $this->getJson('/api/profile/orders?customer_company_id='.$this->b->id)->assertOk()->assertJsonPath('data.0.id', $order->id);
+        $this->getJson('/api/user', ['X-Company-ID' => $this->b->id])->assertOk()->assertJsonPath('role.name', 'engineer')->assertJsonPath('permissions.0', 'orders.view');
+        Sanctum::actingAs($this->owner);
+        $this->putJson($url, ['access' => [['company_id' => $this->b->id, 'enabled' => false]]], ['X-Company-ID' => $this->a->id])->assertOk();
+        Sanctum::actingAs($person);
+        $this->getJson('/api/profile?customer_company_id='.$this->b->id)->assertForbidden();
+        $this->getJson('/api/user', ['X-Company-ID' => $this->b->id])->assertOk()->assertJsonPath('role.name', 'engineer');
+        $this->assertDatabaseHas('orders', ['id' => $order->id]);
+        // Revoking employee access does not revoke a separately enabled customer link.
+        $this->in($this->b, fn () => \App\Models\Client::where('user_id', $person->id)->update(['access_enabled' => true]));
+        $membership->update(['is_active' => false]);
+        $this->getJson('/api/profile/orders?customer_company_id='.$this->b->id)->assertOk()->assertJsonPath('data.0.id', $order->id);
     }
 
     private function in(Company $company, callable $fn): mixed { return app(CompanyContext::class)->run($company, $fn); }

@@ -81,6 +81,7 @@ class User extends Authenticatable
     {
         $context = app(CompanyContext::class);
         if (!$context->id() || !$this->id) return $value === null ? null : (int) $value;
+        if ($context->isCustomer()) return (int) Role::where('name', 'authenticatedUser')->value('id');
         if ($this->is_platform_admin) return (int) Role::where('name', 'admin')->value('id');
         return $context->assignment($this->id)?->role_id ?? $context->membership($this->id)?->role_id;
     }
@@ -89,7 +90,7 @@ class User extends Authenticatable
     {
         $context = app(CompanyContext::class);
         if (!$context->id() || !$this->id) return $value === null ? null : (int) $value;
-        if ($this->is_platform_admin) return null;
+        if ($context->isCustomer() || $this->is_platform_admin) return null;
         if ($assignment = $context->assignment($this->id)) return $assignment->factory_id;
         return $context->membership($this->id)?->factory_id;
     }
@@ -98,6 +99,15 @@ class User extends Authenticatable
     {
         $id = app(CompanyContext::class)->id();
         if (!$id) return $query->whereHas('role', fn ($q) => $exclude ? $q->whereNotIn('name', $names) : $q->whereIn('name', $names));
+        if (!$exclude && $names === ['authenticatedUser'] && Schema::hasColumn('clients', 'access_enabled')) {
+            return $query->where(function ($q) use ($id) {
+                $q->whereExists(fn ($c) => $c->selectRaw('1')->from('clients')->whereColumn('clients.user_id', 'users.id')->where('clients.company_id', $id)->where('clients.access_enabled', true))
+                    ->orWhere(function ($legacy) use ($id) {
+                        $legacy->whereNotExists(fn ($c) => $c->selectRaw('1')->from('clients')->whereColumn('clients.user_id', 'users.id')->where('clients.company_id', $id))
+                            ->whereExists(fn ($m) => $m->selectRaw('1')->from('company_memberships as cm')->join('roles as r', 'r.id', '=', 'cm.role_id')->whereColumn('cm.user_id', 'users.id')->where('cm.company_id', $id)->where('cm.is_active', true)->where('r.name', 'authenticatedUser'));
+                    });
+            });
+        }
         return $query->whereIn('users.id', function ($q) use ($id, $names, $exclude) {
             $q->select('cm.user_id')->from('company_memberships as cm')->join('roles as cr', 'cr.id', '=', 'cm.role_id')
                 ->where('cm.company_id', $id)->where('cm.is_active', true);

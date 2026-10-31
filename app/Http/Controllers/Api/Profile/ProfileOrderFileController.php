@@ -12,6 +12,8 @@ class ProfileOrderFileController extends Controller
 {
     private function ownedOrder(Request $request, int $orderId): Order
     {
+        $contact = \App\Models\Client::where('user_id', $request->user()->id)->first();
+        abort_unless($contact && $contact->access_enabled, 403, 'Customer access denied.');
         // Order's company scope is applied in addition to customer ownership.
         return Order::where('user_id', $request->user()->id)->findOrFail($orderId);
     }
