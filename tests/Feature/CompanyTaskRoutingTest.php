@@ -398,6 +398,55 @@ class CompanyTaskRoutingTest extends TestCase
         }
     }
 
+    public function test_route_adds_workshops_without_files_with_their_own_settings_and_keeps_them_on_file_edits(): void
+    {
+        $dxf = $this->factories['DXF']->id; $powder = $this->factories['POWDER']->id;
+        $deadline = now()->addDays(5)->toDateString();
+        $routing = [['file_id' => $this->files['DXF']->id, 'factory_ids' => [$dxf]]];
+        $order = $this->createTask([
+            'production_route' => ['mode' => 'sequential', 'stages' => [
+                ['factory_id' => $dxf, 'predecessor_factory_ids' => [], 'deadline' => null],
+                ['factory_id' => $powder, 'predecessor_factory_ids' => [], 'deadline' => $deadline],
+            ]],
+            'file_routing' => $routing,
+            'workshop_settings' => [['factory_id' => $powder, 'confirmation_required' => false, 'confirmation_method' => null, 'priority' => 'urgent', 'deadline' => $deadline]],
+            'factory_operators' => [['factory_id' => $dxf, 'user_id' => $this->operator->id]],
+        ]);
+        $steps = $order->factoryOrders()->withCount('files')->get()->keyBy('factory_id');
+        $this->assertCount(2, $steps);
+        $this->assertSame(1, (int) $steps[$dxf]->files_count);
+        $this->assertSame(0, (int) $steps[$powder]->files_count);
+        $this->assertSame('urgent', $steps[$powder]->priority);
+        $this->assertSame($deadline, $steps[$powder]->deadline);
+        $this->assertSame([$steps[$dxf]->id], $steps[$powder]->dependencyIds());
+        $this->assertTrue($steps[$powder]->is_blocked);
+
+        $this->putJson('/api/engineers/engineer/'.$order->id, $this->payload(['file_routing' => $routing]), $this->headers())->assertOk();
+        $after = $order->factoryOrders()->withCount('files')->get()->keyBy('factory_id');
+        $this->assertCount(2, $after);
+        $this->assertSame(0, (int) $after[$powder]->files_count);
+        $this->assertSame('urgent', $after[$powder]->priority);
+        $this->assertSame([$after[$dxf]->id], $after[$powder]->dependencyIds());
+    }
+
+    public function test_route_only_stages_must_be_active_workshops_of_the_company(): void
+    {
+        $dxf = $this->factories['DXF']->id;
+        $foreign = $this->in($this->otherCompany, fn () => Factory::where('value', 'POWDER')->value('id'));
+        foreach ([$foreign, $this->factories['INFO']->id] as $extra) {
+            $this->as($this->engineer);
+            $this->postJson('/api/engineers/engineer', $this->payload([
+                'production_route' => ['mode' => 'parallel', 'stages' => [
+                    ['factory_id' => $dxf, 'predecessor_factory_ids' => [], 'deadline' => null],
+                    ['factory_id' => $extra, 'predecessor_factory_ids' => [], 'deadline' => null],
+                ]],
+                'file_routing' => [['file_id' => $this->files['DXF']->id, 'factory_ids' => [$dxf]]],
+            ]), $this->headers())->assertUnprocessable()->assertJsonValidationErrors('production_route');
+        }
+        $this->assertSame(0, Order::count());
+        $this->assertSame(0, FactoryOrder::count());
+    }
+
     private function routePlan(string $mode): array
     {
         return ['mode' => $mode, 'stages' => array_map(fn ($key, $index) => ['factory_id' => $this->factories[$key]->id,

@@ -147,10 +147,12 @@ class EngineerController extends Controller
 
             $selectedFiles = $this->resolveSelectedFiles($validatedData, $pmp);
             $this->validateSelectedFilesBelongToPmp($selectedFiles, $pmp, $validatedData['remote_number_id'] ?? null);
-            TaskWorkflow::validateFiles($selectedFiles, $pmp, $validatedData['reference_file_visibility'] ?? [], $validatedData['workshop_settings'] ?? [], $validatedData['file_routing'] ?? []);
+            $fileWorkshops = TaskWorkflow::workshopIds($pmp, $selectedFiles, $validatedData['file_routing'] ?? [], $validatedData['reference_file_visibility'] ?? []);
+            $routeWorkshops = TaskWorkflow::routeOnlyWorkshopIds($validatedData['production_route'] ?? null, $fileWorkshops);
+            TaskWorkflow::validateFiles($selectedFiles, $pmp, $validatedData['reference_file_visibility'] ?? [], $validatedData['workshop_settings'] ?? [], $validatedData['file_routing'] ?? [], $routeWorkshops);
 
             $factoryOperatorsInput = collect($validatedData['factory_operators'] ?? []);
-            $this->validateFactoryOperators($factoryOperatorsInput, TaskWorkflow::workshopIds($pmp, $selectedFiles, $validatedData['file_routing'] ?? [], $validatedData['reference_file_visibility'] ?? []));
+            $this->validateFactoryOperators($factoryOperatorsInput, array_merge($fileWorkshops, $routeWorkshops));
             $factoryOperators = $factoryOperatorsInput->keyBy('factory_id');
 
             $order = DB::transaction(function () use (
@@ -158,7 +160,8 @@ class EngineerController extends Controller
                 $validatedData,
                 $pmp,
                 $selectedFiles,
-                $factoryOperators
+                $factoryOperators,
+                $routeWorkshops
             ) {
                 $order = Order::create([
                     'user_id' => $validatedData['user_id'],
@@ -175,7 +178,7 @@ class EngineerController extends Controller
                 $order->prefixCode()->create(['code' => $this->generateUniquePrefixCode()]);
                 $order->dates()->create(['finish_date' => $validatedData['finish_date']]);
 
-                TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $validatedData['reference_file_visibility'] ?? [], $factoryOperators, $validatedData['workshop_settings'] ?? [], $validatedData['file_routing'] ?? []);
+                TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $validatedData['reference_file_visibility'] ?? [], $factoryOperators, $validatedData['workshop_settings'] ?? [], $validatedData['file_routing'] ?? [], $routeWorkshops);
                 $plan = $validatedData['production_route'] ?? \App\Support\ProjectFilePlan::taskPlan($pmp, $selectedFiles, $validatedData['file_routing'] ?? [], $validatedData['reference_file_visibility'] ?? []);
                 if ($plan) ProductionRoute::apply($order, $plan);
                 else ProductionRoute::refreshReadiness($order, null);
@@ -355,8 +358,14 @@ class EngineerController extends Controller
                 if (($validatedData['link_existing_files'] ?? false) && !empty($selectedFiles)) {
                     // The jobs are rebuilt from the new files, but the people and the
                     // per-workshop deadline, priority and proof chosen at creation stay.
-                    $kept = $order->factoryOrders()->get()->keyBy('factory_id');
+                    $kept = $order->factoryOrders()->withCount('files')->get()->keyBy('factory_id');
                     $keptRoute = ProductionRoute::snapshot($kept);
+                    // Workshops that were only route stages (no files) keep their job.
+                    $activeWorkshops = Factory::activeWorkshops()->pluck('id')->map(fn ($id) => (int) $id)->all();
+                    $routeOnly = array_values(array_diff(
+                        array_intersect($kept->filter(fn ($step) => (int) $step->files_count === 0)->keys()->map(fn ($id) => (int) $id)->all(), $activeWorkshops),
+                        TaskWorkflow::workshopIds($pmp, $selectedFiles, $routing, $order->reference_file_visibility ?? [])
+                    ));
                     $operators = $kept->filter(fn ($step) => $step->operator_id)
                         ->map(fn ($step) => ['factory_id' => $step->factory_id, 'user_id' => $step->operator_id]);
                     $workshopSettings = $kept->map(fn ($step) => [
@@ -366,7 +375,7 @@ class EngineerController extends Controller
                     ])->values()->all();
                     $order->selectedFiles()->delete();
                     $order->factoryOrders()->each(function ($step) { $step->files()->detach(); $step->delete(); });
-                    TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $order->reference_file_visibility ?? [], $operators, $workshopSettings, $routing);
+                    TaskWorkflow::attachFiles($order, $pmp, $selectedFiles, $order->reference_file_visibility ?? [], $operators, $workshopSettings, $routing, $routeOnly);
                     $currentFactories = $order->factoryOrders()->pluck('factory_id')->all();
                     $preserved = array_values(array_filter($keptRoute, fn ($stage) => in_array($stage['factory_id'], $currentFactories)));
                     foreach (array_diff($currentFactories, array_column($preserved, 'factory_id')) as $factoryId) {

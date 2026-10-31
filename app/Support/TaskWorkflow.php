@@ -61,11 +61,21 @@ final class TaskWorkflow
                 : self::destinations($file, $routing))->unique()->values()->all();
     }
 
-    public static function validateFiles(array $selected, Pmp $pmp, array $visibility, array $workshopSettings = [], array $routing = []): void
+    /** Route stages of workshops that get no files (painting, welding…): they still need their own job. */
+    public static function routeOnlyWorkshopIds(?array $plan, array $fileWorkshopIds): array
+    {
+        $ids = array_map(fn ($row) => (int) ($row['factory_id'] ?? 0), $plan['stages'] ?? []);
+        return array_values(array_diff(array_unique($ids), array_map('intval', $fileWorkshopIds)));
+    }
+
+    public static function validateFiles(array $selected, Pmp $pmp, array $visibility, array $workshopSettings = [], array $routing = [], array $routeWorkshops = []): void
     {
         $files = $pmp->files->whereIn('id', array_column($selected, 'id'));
         $workshopIds = self::workshopIds($pmp, $selected, $routing, $visibility);
         $activeIds = Factory::activeWorkshops()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        if (array_diff($routeWorkshops, $activeIds)) {
+            throw ValidationException::withMessages(['production_route' => ['Երթուղում ընտրեք միայն ընկերության գործող արտադրամասերը։']]);
+        }
         foreach ($routing as $row) {
             $file = $files->firstWhere('id', $row['file_id']);
             if (!$file || $file->is_reference_file || count(array_unique($row['factory_ids'])) !== count($row['factory_ids']) || array_diff($row['factory_ids'], $activeIds)) {
@@ -81,18 +91,24 @@ final class TaskWorkflow
         if (!$workshopIds || array_diff($workshopIds, $activeIds)) {
             throw ValidationException::withMessages(['selected_files' => ['Ընտրեք գործող արտադրամասը կամ տեղեկատու ֆայլը տեսնող արտադրամասերը։']]);
         }
-        if (array_diff(array_column($workshopSettings, 'factory_id'), $workshopIds)) {
+        if (array_diff(array_column($workshopSettings, 'factory_id'), array_merge($workshopIds, $routeWorkshops))) {
             throw ValidationException::withMessages(['workshop_settings' => ['Կարգավորումները պետք է պատկանեն ընտրված արտադրամասերի աշխատանքներին։']]);
         }
     }
 
-    public static function attachFiles(Order $order, Pmp $pmp, array $selected, array $visibility, $operators, array $workshopSettings = [], array $routing = []): void
+    public static function attachFiles(Order $order, Pmp $pmp, array $selected, array $visibility, $operators, array $workshopSettings = [], array $routing = [], array $routeWorkshops = []): void
     {
-        $ids = self::workshopIds($pmp, $selected, $routing, $visibility);
+        $ids = array_values(array_unique(array_merge(self::workshopIds($pmp, $selected, $routing, $visibility), $routeWorkshops)));
         if (Factory::activeWorkshops()->whereIn('id', $ids)->sharedLock()->get(['id'])->count() !== count($ids)) throw ValidationException::withMessages(['file_routing' => ['Արտադրամասերի հասանելիությունը փոխվել է։ Թարմացրեք ընտրությունը։']]);
         $settings = self::settings($order->toArray());
         $shares = collect($visibility)->keyBy('file_id');
         $overrides = collect($workshopSettings)->keyBy('factory_id');
+        foreach ($routeWorkshops as $factoryId) {
+            $override = $overrides->get($factoryId);
+            $stepSettings = $override ? self::settings($override) + ['deadline' => $override['deadline'] ?? null, 'priority' => $override['priority']] : $settings;
+            FactoryOrder::firstOrCreate(['order_id' => $order->id, 'factory_id' => $factoryId],
+                $stepSettings + ['status' => 'pending', 'operator_id' => $operators->get($factoryId)['user_id'] ?? null]);
+        }
         foreach ($selected as $item) {
             $file = $pmp->files->firstWhere('id', (int) $item['id']);
             SelectedFile::create(['order_id' => $order->id, 'pmp_file_id' => $file->id, 'quantity' => $item['quantity']]);
