@@ -103,6 +103,7 @@ final class TaskWorkflow
         $settings = self::settings($order->toArray());
         $shares = collect($visibility)->keyBy('file_id');
         $overrides = collect($workshopSettings)->keyBy('factory_id');
+        $functions = WorkshopFunctions::forFiles($pmp->files->whereIn('id', array_column($selected, 'id')));
         foreach ($routeWorkshops as $factoryId) {
             $override = $overrides->get($factoryId);
             $stepSettings = $override ? self::settings($override) + ['deadline' => $override['deadline'] ?? null, 'priority' => $override['priority']] : $settings;
@@ -121,7 +122,7 @@ final class TaskWorkflow
                 $step->files()->syncWithoutDetaching([$file->id => [
                     'quantity' => $item['quantity'], 'material_type' => $file->material_type, 'thickness' => $file->thickness,
                     'dimensions' => $file->dimensions, 'inspection_required' => (bool) $file->inspection_required,
-                ]]);
+                ] + WorkshopFunctions::pivot($functions, (int) $file->id, (int) $factoryId)]);
             }
         }
     }

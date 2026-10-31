@@ -47,13 +47,16 @@ final class FileProductionDetails
             $pivot = $step?->files->firstWhere('id', $file->id)?->pivot;
             $workshops = $steps->map(fn ($s) => ['id' => (int) $s->factory_id, 'name' => $s->factory->name,
                 'value' => $s->factory->value, 'is_active' => (bool) $s->factory->is_active,
-                'current' => $step && (int) $s->id === (int) $step->id])->values()->all();
+                'current' => $step && (int) $s->id === (int) $step->id,
+                'functions' => self::functions($s->files->firstWhere('id', $file->id)?->pivot?->production_functions)])->values()->all();
         } else {
             $ids = $file->is_reference_file ? [] : $file->routing_factory_ids;
             $catalog = Factory::workshops()->where('company_id', $file->company_id)->whereIn('id', $ids)->get()->keyBy('id');
+            $chosen = WorkshopFunctions::forFiles([$file])[(int) $file->id] ?? [];
             $workshops = collect($ids)->filter(fn ($id) => $catalog->has($id))->map(fn ($id) => [
                 'id' => (int) $id, 'name' => $catalog[$id]->name, 'value' => $catalog[$id]->value,
                 'is_active' => (bool) $catalog[$id]->is_active, 'current' => false,
+                'functions' => self::functions($chosen[(int) $id] ?? []),
             ])->values()->all();
         }
 
@@ -66,5 +69,13 @@ final class FileProductionDetails
             'material_type' => $attribute('material_type'), 'thickness' => $attribute('thickness'),
             'dimensions' => $attribute('dimensions'), 'inspection_required' => (bool) $attribute('inspection_required'),
             'workshops' => $workshops];
+    }
+
+    /** [['id' => …, 'name' => …], …] from a stored list; anything else is dropped. */
+    private static function functions($rows): array
+    {
+        return collect(is_array($rows) ? $rows : [])
+            ->filter(fn ($row) => is_array($row) && isset($row['name']) && $row['name'] !== '')
+            ->map(fn ($row) => ['id' => (int) ($row['id'] ?? 0), 'name' => (string) $row['name']])->values()->all();
     }
 }

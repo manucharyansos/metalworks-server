@@ -9,4 +9,6 @@ class CompanyPivot extends Pivot
 {
     use BelongsToCompany;
     protected $guarded = [];
+    // Task file rows keep the names of the workshop functions chosen for them.
+    protected $casts = ['production_functions' => 'array'];
 }

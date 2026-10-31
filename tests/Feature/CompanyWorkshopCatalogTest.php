@@ -768,6 +768,75 @@ class CompanyWorkshopCatalogTest extends TestCase
     }
 
     private function payload(array $ids): array { return ['user_id' => $this->client->id, 'pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'name' => '987.01', 'description' => 'Catalog task', 'finish_date' => '2099-01-01', 'link_existing_files' => true, 'selected_files' => array_map(fn ($id) => ['id' => $id, 'quantity' => 1], $ids)]; }
+    public function test_managers_keep_workshop_functions_engineers_tick_them_per_file_and_tasks_keep_them(): void
+    {
+        $laser = $this->factories['DXF']; $bend = $this->factories['DLD'];
+        $this->as($this->manager);
+        $engrave = $this->postJson('/api/workshops/'.$laser->id.'/functions', ['name' => ' Engraving '], $this->headers())->assertCreated()->assertJsonPath('function.name', 'Engraving')->json('function');
+        $this->postJson('/api/workshops/'.$laser->id.'/functions', ['name' => 'Deburring'], $this->headers())->assertCreated();
+        $this->postJson('/api/workshops/'.$laser->id.'/functions', ['name' => 'Engraving'], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('name');
+        $flange = $this->postJson('/api/workshops/'.$bend->id.'/functions', ['name' => 'Flange'], $this->headers())->assertCreated()->json('function');
+        $old = $this->postJson('/api/workshops/'.$bend->id.'/functions', ['name' => 'Old'], $this->headers())->assertCreated()->json('function');
+        $this->putJson('/api/workshops/'.$bend->id.'/functions/'.$old['id'], ['is_active' => false], $this->headers())->assertOk()->assertJsonPath('function.is_active', false);
+        $this->putJson('/api/workshops/'.$laser->id.'/functions/'.$flange['id'], ['name' => 'Moved'], $this->headers())->assertNotFound();
+        $listed = collect($this->getJson('/api/workshops', $this->headers())->assertOk()->json('workshops'))->keyBy('id');
+        $this->assertSame(['Engraving', 'Deburring'], array_column($listed[$laser->id]['functions'], 'name'));
+        $this->assertCount(2, $listed[$bend->id]['functions'], 'managers still see archived functions');
+
+        $this->as($this->engineer);
+        $this->postJson('/api/workshops/'.$laser->id.'/functions', ['name' => 'Not allowed'], $this->headers())->assertForbidden();
+        $options = collect($this->getJson('/api/engineers/pmp-file-options', $this->headers())->assertOk()->json('workshops'))->keyBy('id');
+        $this->assertSame(['Flange'], array_column($options[$bend->id]['functions'], 'name'), 'archived functions are not offered');
+        $upload = fn (array $functions, array $path) => $this->post('/api/engineers/uploadPmpFile', [
+            'pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'factory_id' => $laser->id,
+            'file' => UploadedFile::fake()->createWithContent('part-'.uniqid().'.dxf', 'DXF fixture'),
+            'quantity' => 2, 'material_type' => 'Steel', 'thickness' => 2,
+            'production_factory_ids' => json_encode($path), 'production_function_ids' => json_encode($functions),
+        ], $this->headers());
+        $upload([$flange['id']], [$laser->id])->assertUnprocessable()->assertJsonValidationErrors('production_function_ids');
+        $upload([$old['id']], [$laser->id, $bend->id])->assertUnprocessable()->assertJsonValidationErrors('production_function_ids');
+        $file = $upload([$engrave['id'], $flange['id']], [$laser->id, $bend->id])->assertCreated()
+            ->assertJsonPath('file.production_function_ids', [$engrave['id'], $flange['id']])->json('file');
+
+        $body = array_replace($this->payload([$file['id']]), ['link_existing_files' => false, 'selected_files' => []]);
+        $order = $this->postJson('/api/engineers/engineer', $body, $this->headers())->assertCreated()->json('order');
+        $steps = $this->in(fn () => Order::findOrFail($order['id'])->factoryOrders()->with('files')->get()->keyBy('factory_id'));
+        $this->assertSame([['id' => $engrave['id'], 'name' => 'Engraving']], $steps[$laser->id]->files->first()->pivot->production_functions);
+        $this->assertSame([['id' => $flange['id'], 'name' => 'Flange']], $steps[$bend->id]->files->first()->pivot->production_functions);
+
+        // A later rename changes the library, not the task the operator was given.
+        $this->as($this->manager);
+        $this->putJson('/api/workshops/'.$laser->id.'/functions/'.$engrave['id'], ['name' => 'Laser marking'], $this->headers())->assertOk();
+        $this->as($this->account('operator', $laser->id));
+        $task = $this->getJson('/api/secure-files/pmp/'.$file['id'].'/details?factory_order_id='.$steps[$laser->id]->id, $this->headers())->assertOk();
+        $this->assertSame(['Engraving'], array_column($task->json('details.workshops.0.functions'), 'name'));
+        $this->assertTrue($task->json('details.workshops.0.current'));
+        $this->as($this->engineer);
+        $project = collect($this->getJson('/api/secure-files/pmp/'.$file['id'].'/details', $this->headers())->assertOk()->json('details.workshops'))->keyBy('id');
+        $this->assertSame(['Laser marking'], array_column($project[$laser->id]['functions'], 'name'));
+        $this->assertSame(['Flange'], array_column($project[$bend->id]['functions'], 'name'));
+    }
+
+    public function test_workshop_functions_never_cross_company_boundaries(): void
+    {
+        [$foreignWorkshop, $foreign] = app(CompanyContext::class)->run($this->other, function () {
+            $workshop = Factory::where('value', 'DXF')->firstOrFail();
+            return [$workshop, \App\Models\WorkshopFunction::create(['factory_id' => $workshop->id, 'name' => 'Secret'])];
+        });
+        $this->as($this->manager);
+        $this->postJson('/api/workshops/'.$foreignWorkshop->id.'/functions', ['name' => 'Intrusion'], $this->headers())->assertNotFound();
+        $this->putJson('/api/workshops/'.$this->factories['DXF']->id.'/functions/'.$foreign->id, ['name' => 'Taken'], $this->headers())->assertNotFound();
+        $this->assertSame([], collect($this->getJson('/api/workshops', $this->headers())->json('workshops'))->flatMap(fn ($row) => $row['functions'] ?? [])->all());
+        $this->as($this->engineer);
+        $this->post('/api/engineers/uploadPmpFile', [
+            'pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'factory_id' => $this->factories['DXF']->id,
+            'file' => UploadedFile::fake()->createWithContent('foreign.dxf', 'DXF fixture'),
+            'quantity' => 1, 'material_type' => 'Steel', 'thickness' => 1,
+            'production_factory_ids' => json_encode([$this->factories['DXF']->id]), 'production_function_ids' => json_encode([$foreign->id]),
+        ], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('production_function_ids');
+        $this->assertSame('Secret', app(CompanyContext::class)->run($this->other, fn () => $foreign->fresh()->name));
+    }
+
     private function in(callable $callback): mixed { return app(CompanyContext::class)->run($this->company, $callback); }
     private function account(string $role, ?int $factory = null): User { return $this->in(function () use ($role, $factory) { $user = User::create(['name' => $role, 'email' => $role.'-'.uniqid().'@example.invalid', 'password' => 'test-password', 'role_id' => Role::where('name', $role)->value('id'), 'factory_id' => $factory]); $m = CompanyMembership::where('user_id', $user->id)->first(); $m->permissions()->sync(Permission::whereIn('slug', ['orders.view', 'orders.create', 'orders.update', 'factory.view', 'factory.download', 'factory.order_update', 'pmp.view', 'pmp_files.view', 'pmp_files.upload'])->pluck('id')->mapWithKeys(fn ($id) => [$id => ['allowed' => true]])->all()); return $user; }); }
     private function as(User $user): void { app(CompanyContext::class)->set(null); $user->unsetRelation('role')->unsetRelation('factory'); Sanctum::actingAs($user); }

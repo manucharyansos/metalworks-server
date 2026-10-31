@@ -89,4 +89,16 @@ class Factory extends Model
     {
         return $this->hasMany(FactoryFileExtension::class, 'factory_id');
     }
+
+    public function functions(): HasMany
+    {
+        return $this->hasMany(WorkshopFunction::class, 'factory_id')->orderBy('position')->orderBy('id');
+    }
+
+    // Eager-loads functions only once the table exists.
+    public function scopeWithFunctions($query, bool $activeOnly = false)
+    {
+        if (!\App\Support\WorkshopFunctions::enabled()) return $query;
+        return $query->with(['functions' => fn ($functions) => $activeOnly ? $functions->where('is_active', true) : $functions]);
+    }
 }

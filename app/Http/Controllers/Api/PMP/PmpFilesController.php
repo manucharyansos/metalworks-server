@@ -24,7 +24,7 @@ class PmpFilesController extends Controller
     {
         return response()->json([
             'materials' => \App\Models\Material::select('id', 'description', 'width', 'length', 'height', 'thickness')->orderBy('description')->get(),
-            'workshops' => Factory::activeWorkshops()->orderBy('id')->get(['id', 'name', 'value', 'is_workshop', 'is_reference', 'is_active']),
+            'workshops' => Factory::activeWorkshops()->withFunctions(true)->orderBy('id')->get(['id', 'name', 'value', 'is_workshop', 'is_reference', 'is_active']),
         ]);
     }
 
@@ -48,7 +48,7 @@ class PmpFilesController extends Controller
         $storedPaths = [];
         try {
             return DB::transaction(function () use ($request, &$storedPaths) {
-                foreach (['production_factory_ids', 'file_plans'] as $field) {
+                foreach (['production_factory_ids', 'production_function_ids', 'file_plans'] as $field) {
                     if (is_string($request->input($field))) {
                         try { $request->merge([$field => json_decode($request->input($field), true, 512, JSON_THROW_ON_ERROR)]); }
                         catch (\JsonException $e) { throw ValidationException::withMessages([$field => ['Ֆայլի արտադրական ուղու տվյալները սխալ են։']]); }
@@ -66,7 +66,8 @@ class PmpFilesController extends Controller
                     'thickness' => 'nullable|numeric|min:0', 'dimensions' => 'nullable|string|max:255',
                     'file_plans' => 'sometimes|array|max:50',
                     'expected_file_count' => 'sometimes|integer|min:1|max:50',
-                ] + \App\Support\ProjectFilePlan::rules() + \App\Support\ProjectFilePlan::rules('file_plans.*.'));
+                ] + \App\Support\ProjectFilePlan::rules() + \App\Support\ProjectFilePlan::rules('file_plans.*.')
+                    + \App\Support\WorkshopFunctions::rules() + \App\Support\WorkshopFunctions::rules('file_plans.*.'));
                 $batch = $request->hasFile('files');
                 $uploads = $batch ? array_values($request->file('files')) : [$request->file('file')];
                 if (isset($validated['expected_file_count']) && count($uploads) !== (int) $validated['expected_file_count']) {
@@ -94,7 +95,8 @@ class PmpFilesController extends Controller
                 $pmp = Pmp::findOrFail($validated['pmp_id']);
                 $remote = RemoteNumber::findOrFail($validated['remote_number_id']);
                 if ((int) $remote->pmp_id !== (int) $pmp->id) return response()->json(['error' => 'Ընտրված հեռակա համարը չի պատկանում այս նախագծին։'], 422);
-                $names = []; $plans = [];
+                $names = []; $plans = []; $functionIds = [];
+                $fallback = $category ? $category->defaultWorkshop : $factory;
                 foreach ($uploads as $index => $file) {
                     $name = basename(str_replace('\\', '/', $file->getClientOriginalName()));
                     ProjectFilePolicy::assertAllowed($factory, $name);
@@ -110,6 +112,11 @@ class PmpFilesController extends Controller
                     $names[] = $name;
                     $plans[$index] = $batch ? ($validated['file_plans'][$index] ?? []) : $validated;
                     \App\Support\ProjectFilePlan::validate($plans[$index], $reference, $batch ? 'file_plans.'.$index.'.production_factory_ids' : 'production_factory_ids');
+                    // Ticked functions must belong to a workshop on the file's production path.
+                    $path = array_key_exists('production_factory_ids', $plans[$index]) && $plans[$index]['production_factory_ids'] !== null
+                        ? array_map('intval', $plans[$index]['production_factory_ids'])
+                        : (!$reference && $fallback && $fallback->is_workshop && $fallback->is_active !== false && !$fallback->is_reference ? [(int) $fallback->id] : []);
+                    $functionIds[$index] = \App\Support\WorkshopFunctions::validated($plans[$index], $path, $batch ? 'file_plans.'.$index.'.production_function_ids' : 'production_function_ids');
                 }
                 $path = 'companies/'.app(\App\Support\CompanyContext::class)->id()."/PMP_{$pmp->group}.{$remote->remote_number}/{$factory->value}";
                 $records = [];
@@ -131,6 +138,7 @@ class PmpFilesController extends Controller
                         'production_factory_ids' => array_key_exists('production_factory_ids', $plan) && $plan['production_factory_ids'] !== null
                             ? array_map('intval', $plan['production_factory_ids']) : null,
                         'inspection_required' => (bool) ($plan['inspection_required'] ?? false),
+                        ...(\App\Support\WorkshopFunctions::enabled() ? ['production_function_ids' => $functionIds[$index]] : []),
                     ]);
                 }
                 return response()->json(['message' => 'Ֆայլերը հաջողությամբ վերբեռնվեցին'] + ($batch ? ['files' => $records] : ['file' => $records[0]]), 201);

@@ -52,6 +52,8 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::get('workshops', [\App\Http\Controllers\Api\WorkshopController::class, 'index']);
             Route::post('workshops', [\App\Http\Controllers\Api\WorkshopController::class, 'store']);
             Route::put('workshops/{workshop}', [\App\Http\Controllers\Api\WorkshopController::class, 'update'])->whereNumber('workshop');
+            Route::post('workshops/{workshop}/functions', [\App\Http\Controllers\Api\WorkshopFunctionController::class, 'store'])->whereNumber('workshop');
+            Route::put('workshops/{workshop}/functions/{workshopFunction}', [\App\Http\Controllers\Api\WorkshopFunctionController::class, 'update'])->whereNumber('workshop')->whereNumber('workshopFunction');
             Route::post('file-categories', [\App\Http\Controllers\Api\FileCategoryController::class, 'store']);
             Route::put('file-categories/{fileCategory}', [\App\Http\Controllers\Api\FileCategoryController::class, 'update'])->whereNumber('fileCategory');
             Route::delete('file-categories/{fileCategory}', [\App\Http\Controllers\Api\FileCategoryController::class, 'destroy'])->whereNumber('fileCategory');

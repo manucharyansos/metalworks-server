@@ -23,10 +23,11 @@ class PmpFiles extends Model
         'thickness',
         'dimensions',
         'production_factory_ids',
+        'production_function_ids',
         'inspection_required',
     ];
 
-    protected $casts = ['production_factory_ids' => 'array', 'inspection_required' => 'boolean'];
+    protected $casts = ['production_factory_ids' => 'array', 'production_function_ids' => 'array', 'inspection_required' => 'boolean'];
 
     protected $with = ['category.defaultWorkshop'];
     protected $appends = ['is_reference_file', 'routing_factory_id', 'routing_factory_ids'];
