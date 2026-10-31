@@ -36,6 +36,8 @@ Route::middleware(['auth:sanctum', 'detect.device', 'setlocale'])->prefix('profi
 
     Route::patch('/password', [ProfileController::class, 'updatePassword'])
         ->middleware('throttle:10,1');
+    Route::get('/orders/{orderId}/files', [\App\Http\Controllers\Api\Profile\ProfileOrderFileController::class, 'index'])->whereNumber('orderId');
+    Route::get('/orders/{orderId}/files/{fileKey}', [\App\Http\Controllers\Api\Profile\ProfileOrderFileController::class, 'show'])->whereNumber('orderId')->where('fileKey', '(order|selected)-[0-9]+');
     Route::get('/orders', [ProfileController::class, 'orders']);
     Route::get('/factory-work', [ProfileController::class, 'factoryWork']);
 });
