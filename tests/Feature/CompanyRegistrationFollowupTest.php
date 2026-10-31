@@ -144,7 +144,7 @@ class CompanyRegistrationFollowupTest extends TestCase
         $this->assertSame($this->role('engineer'), $original->fresh()->role_id);
         $this->assertDatabaseHas('membership_permissions', ['membership_id' => $original->id, 'permission_id' => $permission->id, 'allowed' => true]);
         Sanctum::actingAs($person);
-        $this->getJson('/api/user', ['X-Company-ID' => $this->b->id])->assertOk()->assertJsonPath('role.name', 'authenticatedUser')->assertJsonCount(2, 'companies');
+        $this->getJson('/api/user', ['X-Company-ID' => $this->b->id])->assertOk()->assertJsonPath('role.name', 'authenticatedUser')->assertJsonCount(1, 'companies')->assertJsonPath('companies.0.id', $this->b->id);
         $this->getJson('/api/user', ['X-Company-ID' => $this->a->id])->assertOk()->assertJsonPath('role.name', 'engineer')->assertJsonPath('permissions.0', 'pmp.view');
     }
 

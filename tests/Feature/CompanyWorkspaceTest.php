@@ -202,6 +202,46 @@ class CompanyWorkspaceTest extends TestCase
         $this->assertSame('different copy', Storage::disk('private')->get('orders/mismatch.txt'));
     }
 
+
+    public function test_customer_checkbox_controls_directory_orders_and_files_without_staff_redirects(): void
+    {
+        $customer = $this->account($this->a, 'checkbox-client@example.invalid', 'authenticatedUser');
+        $staffCompany = Company::create(['name' => 'Staff workspace', 'slug' => 'staff-workspace']);
+        CompanyMembership::create(['company_id' => $staffCompany->id, 'user_id' => $customer->id, 'role_id' => Role::where('name', 'engineer')->value('id'), 'is_active' => true]);
+        Sanctum::actingAs($customer);
+        $this->getJson('/api/user', ['X-Company-ID' => $this->a->id])->assertOk()->assertJsonCount(1, 'companies')->assertJsonPath('companies.0.id', $this->a->id);
+        $this->getJson('/api/profile/orders', ['X-Company-ID' => $this->b->id])->assertForbidden();
+
+        Sanctum::actingAs($this->owner);
+        $this->putJson('/api/company-access/'.$customer->id, ['access' => [['company_id' => $this->b->id, 'enabled' => true]]], ['X-Company-ID' => $this->a->id])->assertOk();
+        $this->assertDatabaseHas('clients', ['user_id' => $customer->id, 'company_id' => $this->b->id]);
+        $this->assertDatabaseHas('company_memberships', ['user_id' => $customer->id, 'company_id' => $staffCompany->id, 'role_id' => Role::where('name', 'engineer')->value('id')]);
+        $first = $this->in($this->a, fn () => Order::create(['user_id' => $customer->id, 'creator_id' => $this->owner->id, 'name' => 'Own A', 'status' => 'pending']));
+        $creator = $this->account($this->b, 'creator-b@example.invalid', 'manager');
+        $second = $this->in($this->b, fn () => Order::create(['user_id' => $customer->id, 'creator_id' => $creator->id, 'name' => 'Own B', 'status' => 'pending']));
+        $stranger = $this->account($this->b, 'other-client@example.invalid', 'authenticatedUser');
+        $private = $this->in($this->b, fn () => Order::create(['user_id' => $stranger->id, 'creator_id' => $creator->id, 'name' => 'Other customer', 'status' => 'pending']));
+        $file = $this->in($this->b, fn () => File::create(['order_id' => $second->id, 'path' => 'customer/b.txt', 'original_name' => 'b.txt']));
+        Storage::disk('private')->put('customer/b.txt', 'own order file');
+        Sanctum::actingAs($customer);
+        foreach ([$this->a, $this->b] as $company) {
+            $this->getJson('/api/user', ['X-Company-ID' => $company->id])->assertOk()->assertJsonCount(2, 'companies')->assertJsonPath('role.name', 'authenticatedUser');
+        }
+        $this->getJson('/api/profile/orders', ['X-Company-ID' => $this->a->id])->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $first->id);
+        $this->getJson('/api/profile/orders', ['X-Company-ID' => $this->b->id])->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', $second->id);
+        $this->getJson('/api/profile/orders/'.$second->id.'/files', ['X-Company-ID' => $this->a->id])->assertNotFound();
+        $this->getJson('/api/profile/orders/'.$private->id.'/files', ['X-Company-ID' => $this->b->id])->assertNotFound();
+        $this->getJson('/api/profile/orders/'.$second->id.'/files', ['X-Company-ID' => $this->b->id])->assertOk()->assertJsonPath('files.0.original_name', 'b.txt');
+        $this->get('/api/profile/orders/'.$second->id.'/files/order-'.$file->id.'?download=1', ['X-Company-ID' => $this->b->id])->assertOk();
+
+        Sanctum::actingAs($this->owner);
+        $this->putJson('/api/company-access/'.$customer->id, ['access' => [['company_id' => $this->b->id, 'enabled' => false]]], ['X-Company-ID' => $this->a->id])->assertOk();
+        Sanctum::actingAs($customer);
+        $this->getJson('/api/user', ['X-Company-ID' => $this->a->id])->assertOk()->assertJsonCount(1, 'companies');
+        $this->getJson('/api/profile/orders', ['X-Company-ID' => $this->b->id])->assertForbidden();
+        $this->assertDatabaseHas('orders', ['id' => $second->id, 'user_id' => $customer->id]);
+    }
+
     private function in(Company $company, callable $fn): mixed { return app(CompanyContext::class)->run($company, $fn); }
 
     private function account(Company $company, string $email, string $role): User

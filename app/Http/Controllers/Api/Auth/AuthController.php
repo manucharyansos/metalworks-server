@@ -188,6 +188,12 @@ class AuthController extends Controller
         } else { $permissions = collect(); }
         $companies = \App\Models\Company::where('is_active', true);
         if (!$user->is_platform_admin) $companies->whereHas('memberships', fn ($q) => $q->where('user_id', $user->id)->where('is_active', true));
+        // Customer selectors contain customer memberships only. Employee access
+        // belonging to the same identity is preserved in its own workspace.
+        if (!$user->is_platform_admin && $role === 'authenticatedUser') {
+            $companies->whereHas('memberships', fn ($q) => $q->where('user_id', $user->id)
+                ->where('is_active', true)->whereHas('role', fn ($r) => $r->where('name', 'authenticatedUser')));
+        }
         $assignments = $context->id() && !$user->is_platform_admin ? $user->workAssignments() : [];
 
         return response()->json([
