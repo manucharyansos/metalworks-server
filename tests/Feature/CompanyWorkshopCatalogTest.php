@@ -520,7 +520,7 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->as($this->manager);
         $url = '/api/project-files/'.$file['id'].'/instructions';
         $new = [['factory_id' => $laser->id, 'text' => 'Mark part 13']];
-        $this->putJson($url, ['production_instructions' => $new, 'previous_instructions' => $rows], $this->headers())->assertOk()->assertJsonPath('details.production_instructions', $new);
+        $this->putJson($url, ['production_instructions' => $new, 'previous_instructions' => $rows], $this->headers())->assertOk()->assertJsonCount(1, 'details.production_instructions')->assertJsonPath('details.production_instructions.0.factory_id', $laser->id)->assertJsonPath('details.production_instructions.0.text', 'Mark part 13');
         $this->putJson($url, ['production_instructions' => [], 'previous_instructions' => $rows], $this->headers())->assertConflict();
         $this->assertSame('Mark part 12', $this->in(fn () => $step->fresh()->files->first()->pivot->production_functions[0]['name']));
         $this->as($this->engineer);
