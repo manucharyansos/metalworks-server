@@ -48,7 +48,7 @@ class PmpFilesController extends Controller
         $storedPaths = [];
         try {
             return DB::transaction(function () use ($request, &$storedPaths) {
-                foreach (['production_factory_ids', 'production_function_ids', 'file_plans'] as $field) {
+                foreach (['production_factory_ids', 'production_function_ids', 'production_instructions', 'file_plans'] as $field) {
                     if (is_string($request->input($field))) {
                         try { $request->merge([$field => json_decode($request->input($field), true, 512, JSON_THROW_ON_ERROR)]); }
                         catch (\JsonException $e) { throw ValidationException::withMessages([$field => ['Ֆայլի արտադրական ուղու տվյալները սխալ են։']]); }
@@ -67,6 +67,7 @@ class PmpFilesController extends Controller
                     'file_plans' => 'sometimes|array|max:50',
                     'expected_file_count' => 'sometimes|integer|min:1|max:50',
                 ] + \App\Support\ProjectFilePlan::rules() + \App\Support\ProjectFilePlan::rules('file_plans.*.')
+                    + \App\Support\FileWorkshopInstructions::rules() + \App\Support\FileWorkshopInstructions::rules('file_plans.*.')
                     + \App\Support\WorkshopFunctions::rules() + \App\Support\WorkshopFunctions::rules('file_plans.*.'));
                 $batch = $request->hasFile('files');
                 $uploads = $batch ? array_values($request->file('files')) : [$request->file('file')];
@@ -95,7 +96,7 @@ class PmpFilesController extends Controller
                 $pmp = Pmp::findOrFail($validated['pmp_id']);
                 $remote = RemoteNumber::findOrFail($validated['remote_number_id']);
                 if ((int) $remote->pmp_id !== (int) $pmp->id) return response()->json(['error' => 'Ընտրված հեռակա համարը չի պատկանում այս նախագծին։'], 422);
-                $names = []; $plans = []; $functionIds = [];
+                $names = []; $plans = []; $functionIds = []; $instructions = [];
                 $fallback = $category ? $category->defaultWorkshop : $factory;
                 foreach ($uploads as $index => $file) {
                     $name = basename(str_replace('\\', '/', $file->getClientOriginalName()));
@@ -116,6 +117,7 @@ class PmpFilesController extends Controller
                     $path = array_key_exists('production_factory_ids', $plans[$index]) && $plans[$index]['production_factory_ids'] !== null
                         ? array_map('intval', $plans[$index]['production_factory_ids'])
                         : (!$reference && $fallback && $fallback->is_workshop && $fallback->is_active !== false && !$fallback->is_reference ? [(int) $fallback->id] : []);
+                    $instructions[$index] = \App\Support\FileWorkshopInstructions::validated($plans[$index], $path, $batch ? 'file_plans.'.$index.'.production_instructions' : 'production_instructions');
                     $functionIds[$index] = \App\Support\WorkshopFunctions::validated($plans[$index], $path, $batch ? 'file_plans.'.$index.'.production_function_ids' : 'production_function_ids');
                 }
                 $path = 'companies/'.app(\App\Support\CompanyContext::class)->id()."/PMP_{$pmp->group}.{$remote->remote_number}/{$factory->value}";
@@ -137,6 +139,7 @@ class PmpFilesController extends Controller
                         'dimensions' => $attributes ? ($validated['dimensions'] ?? null) : null,
                         'production_factory_ids' => array_key_exists('production_factory_ids', $plan) && $plan['production_factory_ids'] !== null
                             ? array_map('intval', $plan['production_factory_ids']) : null,
+                        ...(Schema::hasColumn('pmp_files', 'production_instructions') ? ['production_instructions' => $instructions[$index]] : []),
                         'inspection_required' => (bool) ($plan['inspection_required'] ?? false),
                         ...(\App\Support\WorkshopFunctions::enabled() ? ['production_function_ids' => $functionIds[$index]] : []),
                     ]);
@@ -151,6 +154,27 @@ class PmpFilesController extends Controller
             Log::error('Project file upload failed', ['user_id' => $request->user()?->id, 'pmp_id' => $request->input('pmp_id'), 'exception' => $e]);
             return response()->json(['error' => 'Ֆայլի վերբեռնման ընթացքում սխալ է տեղի ունեցել։'], 500);
         }
+    }
+
+    public function updateInstructions(Request $request, PmpFiles $file): JsonResponse
+    {
+        abort_unless(in_array($request->user()->role?->name, ['admin', 'manager', 'engineer'], true), 403);
+        $data = $request->validate(array_replace(\App\Support\FileWorkshopInstructions::rules(), [
+            'production_instructions' => 'present|array|max:100',
+            'previous_instructions' => 'present|array|max:100',
+            'previous_instructions.*' => 'array:factory_id,text',
+            'previous_instructions.*.factory_id' => 'required|integer',
+            'previous_instructions.*.text' => 'nullable|string|max:1000',
+        ]));
+        return DB::transaction(function () use ($request, $file, $data) {
+            $file = PmpFiles::whereKey($file->id)->lockForUpdate()->firstOrFail();
+            abort_unless(\App\Support\TaskAccess::canDownloadPmp($request->user(), $file), 403);
+            abort_unless(\App\Support\FileWorkshopInstructions::snapshot($file->production_instructions ?? []) === \App\Support\FileWorkshopInstructions::snapshot($data['previous_instructions']), 409, 'Հանձնարարություններն արդեն փոխվել են։ Թարմացրեք ֆայլը։');
+            $rows = \App\Support\FileWorkshopInstructions::validated($data, $file->is_reference_file ? [] : $file->routing_factory_ids);
+            abort_unless(Schema::hasColumn('pmp_files', 'production_instructions'), 422, 'Թարմացրեք համակարգի տվյալների բազան։');
+            $file->update(['production_instructions' => $rows]);
+            return response()->json(['details' => \App\Support\FileProductionDetails::forFile($request->user(), $file->fresh(), [])]);
+        });
     }
 
     public function destroy($id): JsonResponse
