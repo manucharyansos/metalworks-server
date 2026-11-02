@@ -68,6 +68,9 @@ final class FileProductionDetails
             'quantity' => $pivot ? $attribute('quantity') : ($selected?->quantity ?? $file->quantity),
             'material_type' => $attribute('material_type'), 'thickness' => $attribute('thickness'),
             'dimensions' => $attribute('dimensions'), 'inspection_required' => (bool) $attribute('inspection_required'),
+            'production_instructions' => $order ? null : ($file->production_instructions ?? []),
+            'can_edit_instructions' => !$order && !$file->is_reference_file && in_array($user->role?->name, ['admin', 'manager', 'engineer'], true)
+                && (in_array($user->role?->name, ['admin', 'manager'], true) || $user->hasPermission('pmp_files.upload')),
             'workshops' => $workshops];
     }
 

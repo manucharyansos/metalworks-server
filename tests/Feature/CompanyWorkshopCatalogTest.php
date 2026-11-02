@@ -500,6 +500,36 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->getJson('/api/engineers/pmp-file-options', $this->headers())->assertForbidden();
     }
 
+    public function test_file_only_instructions_are_scoped_editable_and_snapshotted_for_operators(): void
+    {
+        $laser = $this->factories['DXF']; $bend = $this->factories['DLD'];
+        $this->as($this->engineer);
+        $upload = fn (array $rows) => $this->post('/api/engineers/uploadPmpFile', [
+            'pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'factory_id' => $laser->id,
+            'file' => UploadedFile::fake()->createWithContent('instructions-'.uniqid().'.dxf', 'DXF fixture'),
+            'quantity' => 2, 'material_type' => 'Steel', 'thickness' => 2,
+            'production_factory_ids' => json_encode([$laser->id]), 'production_instructions' => json_encode($rows),
+        ], $this->headers());
+        $upload([['factory_id' => $bend->id, 'text' => 'Wrong stage']])->assertUnprocessable();
+        $upload([['factory_id' => $laser->id, 'text' => str_repeat('a', 1001)]])->assertUnprocessable();
+        $rows = [['factory_id' => $laser->id, 'text' => 'Mark part 12']];
+        $file = $upload($rows)->assertCreated()->assertJsonPath('file.production_instructions', $rows)->json('file');
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file['id']]), $this->headers())->assertCreated()->json('order');
+        $step = $this->in(fn () => Order::findOrFail($order['id'])->factoryOrders()->with('files')->first());
+        $this->assertSame('Mark part 12', $step->files->first()->pivot->production_functions[0]['name']);
+        $this->as($this->manager);
+        $url = '/api/project-files/'.$file['id'].'/instructions';
+        $new = [['factory_id' => $laser->id, 'text' => 'Mark part 13']];
+        $this->putJson($url, ['production_instructions' => $new, 'previous_instructions' => $rows], $this->headers())->assertOk()->assertJsonPath('details.production_instructions', $new);
+        $this->putJson($url, ['production_instructions' => [], 'previous_instructions' => $rows], $this->headers())->assertConflict();
+        $this->assertSame('Mark part 12', $this->in(fn () => $step->fresh()->files->first()->pivot->production_functions[0]['name']));
+        $this->as($this->engineer);
+        $this->putJson($url, ['production_instructions' => [], 'previous_instructions' => $new], $this->headers())->assertOk()->assertJsonPath('details.production_instructions', []);
+        $this->as($this->account('operator', $laser->id));
+        $this->putJson($url, ['production_instructions' => [], 'previous_instructions' => []], $this->headers())->assertForbidden();
+        $this->getJson('/api/secure-files/pmp/'.$file['id'].'/details?factory_order_id='.$step->id, $this->headers())->assertOk()->assertJsonPath('details.workshops.0.functions.0.name', 'Mark part 12');
+    }
+
     private function file(int $factory, string $name): PmpFiles { return $this->in(function () use ($factory, $name) { $path = 'companies/'.$this->company->id.'/qa/'.$name; Storage::disk('private')->put($path, 'private bytes'); return PmpFiles::create(['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'factory_id' => $factory, 'original_name' => $name, 'path' => $path]); }); }
     public function test_legacy_non_workshop_steps_do_not_block_real_production_completion(): void
     {

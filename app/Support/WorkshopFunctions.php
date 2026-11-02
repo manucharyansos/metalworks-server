@@ -47,10 +47,15 @@ final class WorkshopFunctions
         if (!self::enabled()) return [];
         $files = collect($files);
         $ids = $files->flatMap(fn ($file) => array_map('intval', $file->production_function_ids ?? []))->unique()->values()->all();
-        if (!$ids) return [];
         $catalog = WorkshopFunction::whereIn('id', $ids)->get(['id', 'factory_id', 'name'])->keyBy('id');
         $chosen = [];
         foreach ($files as $file) {
+            foreach ($file->production_instructions ?? [] as $instruction) {
+                $factoryId = (int) $instruction['factory_id'];
+                if (in_array($factoryId, $file->routing_factory_ids, true)) {
+                    $chosen[(int) $file->id][$factoryId][] = ['id' => 0, 'name' => $instruction['text'], 'kind' => 'instruction'];
+                }
+            }
             foreach (array_map('intval', $file->production_function_ids ?? []) as $id) {
                 $function = $catalog->get($id);
                 if ($function) $chosen[(int) $file->id][(int) $function->factory_id][] = ['id' => $id, 'name' => $function->name];
