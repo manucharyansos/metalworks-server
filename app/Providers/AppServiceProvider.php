@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Models\Worker;
 use App\Observers\ActivityObserver;
 use Illuminate\Auth\Notifications\ResetPassword;
+use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -64,11 +65,36 @@ class AppServiceProvider extends ServiceProvider
             $model::observe(ActivityObserver::class);
         }
 
-        ResetPassword::createUrlUsing(function (object $notifiable, string $token): string {
+        // The frontend uses Nuxt's prefix_except_default language routes.
+        $resetUrl = static function (object $notifiable, string $token): string {
             $frontendUrl = rtrim((string) config('frontend.password_reset_url'), '/');
-            $email = urlencode($notifiable->getEmailForPasswordReset());
+            $locale = app()->getLocale();
+            $languagePrefix = in_array($locale, ['ru', 'en'], true) ? '/' . $locale : '';
+            $email = rawurlencode($notifiable->getEmailForPasswordReset());
 
-            return "{$frontendUrl}/reset-password?token=" . urlencode($token) . "&email={$email}";
+            return "{$frontendUrl}{$languagePrefix}/reset-password?token="
+                . rawurlencode($token) . "&email={$email}";
+        };
+
+        ResetPassword::createUrlUsing($resetUrl);
+
+        ResetPassword::toMailUsing(static function (object $notifiable, string $token) use ($resetUrl): MailMessage {
+            $locale = app()->getLocale();
+            $locale = in_array($locale, ['hy', 'ru', 'en'], true) ? $locale : 'hy';
+
+            $subjects = [
+                'hy' => 'Metalworks — Գաղտնաբառի վերականգնում',
+                'ru' => 'Metalworks — Восстановление пароля',
+                'en' => 'Metalworks — Reset your password',
+            ];
+
+            return (new MailMessage())
+                ->subject($subjects[$locale])
+                ->view('emails.password-reset', [
+                    'resetUrl' => $resetUrl($notifiable, $token),
+                    'locale' => $locale,
+                    'expires' => (int) config('auth.passwords.users.expire', 60),
+                ]);
         });
     }
 }

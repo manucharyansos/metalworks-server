@@ -161,12 +161,15 @@ class PmpFilesController extends Controller
         abort_unless(in_array($request->user()->role?->name, ['admin', 'manager', 'engineer'], true), 403);
         $data = $request->validate(array_replace(\App\Support\FileWorkshopInstructions::rules(), [
             'production_instructions' => 'present|array|max:100',
-            'previous_instructions' => 'present|array',
+            'previous_instructions' => 'present|array|max:100',
+            'previous_instructions.*' => 'array:factory_id,text',
+            'previous_instructions.*.factory_id' => 'required|integer',
+            'previous_instructions.*.text' => 'nullable|string|max:1000',
         ]));
         return DB::transaction(function () use ($request, $file, $data) {
             $file = PmpFiles::whereKey($file->id)->lockForUpdate()->firstOrFail();
             abort_unless(\App\Support\TaskAccess::canDownloadPmp($request->user(), $file), 403);
-            abort_unless(($file->production_instructions ?? []) === $data['previous_instructions'], 409, 'Հանձնարարություններն արդեն փոխվել են։ Թարմացրեք ֆայլը։');
+            abort_unless(\App\Support\FileWorkshopInstructions::snapshot($file->production_instructions ?? []) === \App\Support\FileWorkshopInstructions::snapshot($data['previous_instructions']), 409, 'Հանձնարարություններն արդեն փոխվել են։ Թարմացրեք ֆայլը։');
             $rows = \App\Support\FileWorkshopInstructions::validated($data, $file->is_reference_file ? [] : $file->routing_factory_ids);
             abort_unless(Schema::hasColumn('pmp_files', 'production_instructions'), 422, 'Թարմացրեք համակարգի տվյալների բազան։');
             $file->update(['production_instructions' => $rows]);

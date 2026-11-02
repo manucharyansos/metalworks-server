@@ -17,6 +17,14 @@ final class FileWorkshopInstructions
         ];
     }
 
+    /** MySQL may reorder JSON object keys; compare canonical values, not PHP key order. */
+    public static function snapshot(array $rows): array
+    {
+        $result = array_map(fn ($row) => ['factory_id' => (int) $row['factory_id'], 'text' => (string) ($row['text'] ?? '')], $rows);
+        usort($result, fn ($a, $b) => $a['factory_id'] <=> $b['factory_id']);
+        return $result;
+    }
+
     public static function validated(array $plan, array $path, string $field = 'production_instructions'): array
     {
         $rows = []; $seen = [];
