@@ -814,7 +814,7 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->assertCount(2, $listed[$bend->id]['functions'], 'managers still see archived functions');
 
         $this->as($this->engineer);
-        $this->postJson('/api/workshops/'.$laser->id.'/functions', ['name' => 'Not allowed'], $this->headers())->assertForbidden();
+        $this->postJson('/api/workshops/'.$laser->id.'/functions', ['name' => 'Engineer function'], $this->headers())->assertCreated();
         $options = collect($this->getJson('/api/engineers/pmp-file-options', $this->headers())->assertOk()->json('workshops'))->keyBy('id');
         $this->assertSame(['Flange'], array_column($options[$bend->id]['functions'], 'name'), 'archived functions are not offered');
         $upload = fn (array $functions, array $path) => $this->post('/api/engineers/uploadPmpFile', [
@@ -865,6 +865,66 @@ class CompanyWorkshopCatalogTest extends TestCase
             'production_factory_ids' => json_encode([$this->factories['DXF']->id]), 'production_function_ids' => json_encode([$foreign->id]),
         ], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('production_function_ids');
         $this->assertSame('Secret', app(CompanyContext::class)->run($this->other, fn () => $foreign->fresh()->name));
+    }
+
+    public function test_saved_file_plan_is_editable_for_all_formats_and_conflict_safe(): void
+    {
+        $laser = $this->factories['DXF']; $bend = $this->factories['DLD'];
+        $file = $this->file($this->factories['INFO']->id, 'notes.pdf');
+        $this->as($this->engineer);
+        $details = $this->getJson('/api/secure-files/pmp/'.$file->id.'/details', $this->headers())->assertOk()->assertJsonPath('details.can_edit_plan', true)->json('details');
+        $fn = $this->postJson('/api/workshops/'.$laser->id.'/functions', ['name' => 'Marking'], $this->headers())->assertCreated()->json('function');
+        $plan = ['production_factory_ids' => [$laser->id], 'production_function_ids' => [$fn['id']],
+            'production_instructions' => [['factory_id' => $laser->id, 'text' => 'Read note']], 'inspection_required' => false, 'plan_version' => $details['plan_version']];
+        $url = '/api/project-files/'.$file->id.'/production-plan';
+        $saved = $this->putJson($url, $plan, $this->headers())->assertOk()->assertJsonPath('details.is_reference_file', false)->assertJsonPath('details.workshops.0.id', $laser->id)->json('details');
+        $this->putJson($url, $plan, $this->headers())->assertConflict();
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+        $plan['plan_version'] = $saved['plan_version']; $plan['production_factory_ids'] = [$bend->id];
+        $this->putJson($url, $plan, $this->headers())->assertUnprocessable();
+        $plan['production_function_ids'] = []; $plan['production_instructions'] = [];
+        $this->putJson($url, $plan, $this->headers())->assertOk();
+        $step = $this->in(fn () => Order::findOrFail($order['id'])->factoryOrders()->forWorkshops()->with('files')->first());
+        $this->assertSame($laser->id, $step->factory_id);
+        $this->assertContains('Read note', array_column($step->files->first()->pivot->production_functions, 'name'));
+        $this->as($this->account('operator', $laser->id));
+        $this->putJson($url, $plan, $this->headers())->assertForbidden();
+        $this->postJson('/api/workshops/'.$laser->id.'/functions', ['name' => 'Forbidden'], $this->headers())->assertForbidden();
+    }
+
+    public function test_operator_calendar_reserves_shifts_rejects_conflicts_and_preserves_scope(): void
+    {
+        $laser = $this->factories['DXF']; $operator = $this->account('operator', $laser->id);
+        $file = $this->file($laser->id, 'calendar.dxf');
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+        $step = $this->in(fn () => Order::findOrFail($order['id'])->factoryOrders()->forWorkshops()->first());
+        $this->in(fn () => $step->update(['operator_id' => $operator->id]));
+        $range = '/api/operator-calendar?from=2098-01-06&to=2098-01-12';
+        $this->getJson($range, $this->headers())->assertOk()->assertJsonPath('can_manage_shifts', false)->assertJsonPath('tasks.0.planned', false);
+        $shift = ['operator_id' => $operator->id, 'dates' => ['2098-01-06'], 'start' => '09:00', 'end' => '18:00'];
+        $this->postJson('/api/operator-calendar/shifts', $shift, $this->headers())->assertForbidden();
+        $this->as($this->manager);
+        $this->postJson('/api/operator-calendar/shifts', $shift, $this->headers())->assertCreated();
+        $this->postJson('/api/operator-calendar/shifts', $shift, $this->headers())->assertConflict();
+        $interval = $this->getJson($range, $this->headers())->assertOk()->json('shifts.0.id');
+        $this->as($this->engineer);
+        $booking = ['operator_id' => $operator->id, 'factory_order_id' => $step->id, 'starts_at' => '2098-01-06 10:00', 'ends_at' => '2098-01-06 12:00'];
+        $id = $this->postJson('/api/operator-calendar/bookings', $booking, $this->headers())->assertCreated()->json('booking.id');
+        $this->postJson('/api/operator-calendar/bookings', $booking, $this->headers())->assertConflict();
+        $this->postJson('/api/operator-calendar/bookings', array_replace($booking, ['starts_at' => '2098-01-06 08:00', 'ends_at' => '2098-01-06 09:00']), $this->headers())->assertUnprocessable();
+        $this->getJson($range, $this->headers())->assertOk()->assertJsonPath('tasks.0.planned', true)->assertJsonCount(1, 'bookings');
+        $otherEngineer = $this->account('engineer'); $this->as($otherEngineer);
+        $this->getJson($range, $this->headers())->assertOk()->assertJsonPath('bookings.0.can_edit', false);
+        $this->deleteJson('/api/operator-calendar/bookings/'.$id, [], $this->headers())->assertForbidden();
+        $this->postJson('/api/operator-calendar/bookings', $booking, $this->headers())->assertForbidden();
+        $this->getJson($range, ['X-Company-ID' => $this->other->id])->assertForbidden();
+        $this->as($operator); $this->getJson($range, $this->headers())->assertForbidden();
+        $this->as($this->manager);
+        $this->deleteJson('/api/operator-calendar/shifts/'.$interval, [], $this->headers())->assertConflict();
+        $this->deleteJson('/api/operator-calendar/bookings/'.$id, [], $this->headers())->assertOk();
+        $this->deleteJson('/api/operator-calendar/shifts/'.$interval, [], $this->headers())->assertOk();
+        $this->getJson($range, $this->headers())->assertOk()->assertJsonCount(0, 'shifts')->assertJsonCount(0, 'bookings')->assertJsonPath('tasks.0.planned', false);
     }
 
     private function in(callable $callback): mixed { return app(CompanyContext::class)->run($this->company, $callback); }

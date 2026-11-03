@@ -46,7 +46,7 @@ class PmpFiles extends Model
     }
 
     public function category(): BelongsTo { return $this->belongsTo(FileCategory::class, 'file_category_id'); }
-    public function getIsReferenceFileAttribute(): bool { return $this->category ? $this->category->is_reference : (bool) $this->factory?->is_reference; }
+    public function getIsReferenceFileAttribute(): bool { if ($this->production_factory_ids) return false; return $this->category ? $this->category->is_reference : (bool) $this->factory?->is_reference; }
     public function getRoutingFactoryIdAttribute(): ?int
     {
         if ($this->production_factory_ids !== null) return $this->production_factory_ids[0] ?? null;

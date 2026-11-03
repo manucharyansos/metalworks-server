@@ -156,6 +156,34 @@ class PmpFilesController extends Controller
         }
     }
 
+    public function updatePlan(Request $request, PmpFiles $file): JsonResponse
+    {
+        abort_unless(in_array($request->user()->role?->name, ['admin', 'manager', 'engineer'], true), 403);
+        $data = $request->validate(array_replace(\App\Support\ProjectFilePlan::rules(),
+            \App\Support\WorkshopFunctions::rules(), \App\Support\FileWorkshopInstructions::rules(), [
+            'production_factory_ids' => 'present|array|max:100',
+            'production_function_ids' => 'present|array|max:200',
+            'production_instructions' => 'present|array|max:100',
+            'inspection_required' => 'required|boolean',
+            'plan_version' => 'required|string|size:64',
+        ]));
+        return DB::transaction(function () use ($request, $file, $data) {
+            $file = PmpFiles::whereKey($file->id)->lockForUpdate()->firstOrFail();
+            abort_unless(\App\Support\TaskAccess::canDownloadPmp($request->user(), $file), 403);
+            abort_unless(hash_equals(\App\Support\FileProductionDetails::planVersion($file), $data['plan_version']), 409,
+                'Ֆայլի արտադրական ուղին արդեն փոխվել է։ Թարմացրեք ֆայլը։');
+            abort_unless(\App\Support\WorkshopFunctions::enabled() && Schema::hasColumn('pmp_files', 'production_instructions'), 422,
+                'Թարմացրեք համակարգի տվյալների բազան։');
+            \App\Support\ProjectFilePlan::validate($data, false);
+            $ids = array_map('intval', $data['production_factory_ids']);
+            $functions = \App\Support\WorkshopFunctions::validated($data, $ids);
+            $instructions = \App\Support\FileWorkshopInstructions::validated($data, $ids);
+            $file->update(['production_factory_ids' => $ids, 'production_function_ids' => $functions,
+                'production_instructions' => $instructions, 'inspection_required' => $data['inspection_required']]);
+            return response()->json(['details' => \App\Support\FileProductionDetails::forFile($request->user(), $file->fresh(), [])]);
+        });
+    }
+
     public function updateInstructions(Request $request, PmpFiles $file): JsonResponse
     {
         abort_unless(in_array($request->user()->role?->name, ['admin', 'manager', 'engineer'], true), 403);

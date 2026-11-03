@@ -12,7 +12,8 @@ class WorkshopFunctionController extends Controller
 {
     public function store(Request $request, Factory $workshop)
     {
-        abort_unless($workshop->is_workshop && \App\Support\WorkshopFunctions::enabled(), 404);
+        abort_unless(in_array($request->user()->role?->name, ['admin', 'manager', 'engineer'], true), 403);
+        abort_unless($workshop->is_active && $workshop->is_workshop && \App\Support\WorkshopFunctions::enabled(), 404);
         $data = $this->validated($request, $workshop);
         $function = WorkshopFunction::create($data + ['factory_id' => $workshop->id, 'is_active' => true,
             'position' => (int) WorkshopFunction::where('factory_id', $workshop->id)->max('position') + 1]);

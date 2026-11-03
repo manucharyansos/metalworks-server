@@ -17,6 +17,9 @@ Route::middleware([
     Route::get('factory-file-policies', [FactoryFileExtensionController::class, 'index'])
         ->middleware('permission:pmp_files.view');
 
+    Route::put('project-files/{file}/production-plan', [\App\Http\Controllers\Api\PMP\PmpFilesController::class, 'updatePlan'])
+        ->whereNumber('file')->middleware('permission:pmp_files.upload');
+
     Route::put('project-files/{file}/instructions', [\App\Http\Controllers\Api\PMP\PmpFilesController::class, 'updateInstructions'])
         ->whereNumber('file')->middleware('permission:pmp_files.upload');
 
