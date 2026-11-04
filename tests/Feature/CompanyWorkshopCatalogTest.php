@@ -947,6 +947,29 @@ class CompanyWorkshopCatalogTest extends TestCase
             ->assertJsonPath('tasks.0.operator_name', $operator->name)->assertJsonPath('bookings.0.ends_at', '2098-01-06 11:00:00');
     }
 
+    public function test_planning_an_existing_unassigned_stage_and_filtering_my_tasks(): void
+    {
+        $laser = $this->factories['DXF'];
+        $operator = $this->account('operator', $laser->id);
+        $file = $this->file($laser->id, 'existing.dxf');
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+        $step = $this->in(fn () => Order::findOrFail($order['id'])->factoryOrders()->forWorkshops()->firstOrFail());
+        $slot = ['factory_order_id' => $step->id, 'operator_id' => $operator->id, 'assign_if_unassigned' => true,
+            'starts_at' => '2098-01-06 10:00', 'ends_at' => '2098-01-06 11:00'];
+        $this->postJson('/api/operator-calendar/bookings', $slot, $this->headers())->assertUnprocessable();
+        $this->assertNull($this->in(fn () => $step->fresh()->operator_id));
+        $this->as($this->manager);
+        $this->postJson('/api/operator-calendar/shifts', ['operator_id' => $operator->id, 'dates' => ['2098-01-06'], 'start' => '09:00', 'end' => '12:00'], $this->headers())->assertCreated();
+        $this->as($this->engineer);
+        $this->postJson('/api/operator-calendar/bookings', $slot, $this->headers())->assertCreated();
+        $url = '/api/engineers/engineer?filter_options=1&operator_id='.$operator->id;
+        $this->getJson($url.'&factory_id='.$laser->id.'&due_from=2099-01-01&due_to=2099-01-01', $this->headers())
+            ->assertOk()->assertJsonPath('pagination.total', 1)->assertJsonPath('filter_options.operators.0.id', $operator->id);
+        $this->getJson($url.'&factory_id='.$this->factories['DLD']->id, $this->headers())->assertOk()->assertJsonPath('pagination.total', 0);
+        $this->getJson($url.'&due_to=2098-12-31', $this->headers())->assertOk()->assertJsonPath('pagination.total', 0);
+    }
+
     private function in(callable $callback): mixed { return app(CompanyContext::class)->run($this->company, $callback); }
     private function account(string $role, ?int $factory = null): User { return $this->in(function () use ($role, $factory) { $user = User::create(['name' => $role, 'email' => $role.'-'.uniqid().'@example.invalid', 'password' => 'test-password', 'role_id' => Role::where('name', $role)->value('id'), 'factory_id' => $factory]); $m = CompanyMembership::where('user_id', $user->id)->first(); $m->permissions()->sync(Permission::whereIn('slug', ['orders.view', 'orders.create', 'orders.update', 'factory.view', 'factory.download', 'factory.order_update', 'pmp.view', 'pmp_files.view', 'pmp_files.upload'])->pluck('id')->mapWithKeys(fn ($id) => [$id => ['allowed' => true]])->all()); return $user; }); }
     private function as(User $user): void { app(CompanyContext::class)->set(null); $user->unsetRelation('role')->unsetRelation('factory'); Sanctum::actingAs($user); }
