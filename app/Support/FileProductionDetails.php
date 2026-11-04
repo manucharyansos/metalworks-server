@@ -68,10 +68,29 @@ final class FileProductionDetails
             'quantity' => $pivot ? $attribute('quantity') : ($selected?->quantity ?? $file->quantity),
             'material_type' => $attribute('material_type'), 'thickness' => $attribute('thickness'),
             'dimensions' => $attribute('dimensions'), 'inspection_required' => (bool) $attribute('inspection_required'),
+            'production_plan' => $order ? null : self::plan($file),
+            'plan_version' => $order ? null : self::planVersion($file),
+            'can_edit_plan' => !$order && in_array($user->role?->name, ['admin', 'manager', 'engineer'], true)
+                && (in_array($user->role?->name, ['admin', 'manager'], true) || $user->hasPermission('pmp_files.upload')),
             'production_instructions' => $order ? null : ($file->production_instructions ?? []),
             'can_edit_instructions' => !$order && !$file->is_reference_file && in_array($user->role?->name, ['admin', 'manager', 'engineer'], true)
                 && (in_array($user->role?->name, ['admin', 'manager'], true) || $user->hasPermission('pmp_files.upload')),
             'workshops' => $workshops];
+    }
+
+    public static function plan(PmpFiles $file): array
+    {
+        return ['production_factory_ids' => $file->is_reference_file ? [] : $file->routing_factory_ids,
+            'production_function_ids' => array_map('intval', $file->production_function_ids ?? []),
+            'production_instructions' => $file->production_instructions ?? [],
+            'inspection_required' => (bool) $file->inspection_required];
+    }
+
+    public static function planVersion(PmpFiles $file): string
+    {
+        $plan = self::plan($file);
+        $plan['production_instructions'] = FileWorkshopInstructions::snapshot($plan['production_instructions']);
+        return hash('sha256', json_encode($plan));
     }
 
     /** [['id' => …, 'name' => …], …] from a stored list; anything else is dropped. */
