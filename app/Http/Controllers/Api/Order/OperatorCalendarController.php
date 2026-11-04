@@ -81,12 +81,16 @@ class OperatorCalendarController extends Controller
     }
     public function book(Request $request) {
         $this->authorizeRead($request);
-        $data = $request->validate(['factory_order_id' => 'required|integer', 'operator_id' => 'required|integer']);
+        $data = $request->validate(['factory_order_id' => 'required|integer', 'operator_id' => 'required|integer', 'assign_if_unassigned' => 'sometimes|boolean']);
         [$start, $end] = $this->times($request);
         abort_if($start < CarbonImmutable::now('Asia/Yerevan')->format('Y-m-d H:i:s'), 422, 'Ընտրեք ապագա ժամանակ։');
         $booking = DB::transaction(function () use ($request, $data, $start, $end) {
             $step = FactoryOrder::whereKey($data['factory_order_id'])->lockForUpdate()->firstOrFail();
             TaskRouting::authorize($request->user(), $step->order);
+            if (!$step->operator_id && !empty($data['assign_if_unassigned'])) {
+                $step = TaskRouting::assign($request->user(), $step, (int) $data['operator_id']);
+                DB::afterCommit(fn () => \App\Support\TaskNotifier::operatorChanged($request->user(), $step->order, $step, null));
+            }
             abort_unless($step->factory->is_workshop && (int) $step->operator_id === (int) $data['operator_id'], 409, 'Աշխատանքի կատարողը փոխվել է կամ նշանակված չէ։');
             abort_if($step->isWorkCompleted() || $step->awaiting_engineer_confirmation || in_array($step->status, ['canceled', 'cancelled'], true) || in_array($step->order->status, ['canceled', 'cancelled'], true), 422);
             return \App\Support\StageReservation::reserve($request->user(), $step, $start, $end);

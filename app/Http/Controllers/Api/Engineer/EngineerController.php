@@ -25,7 +25,10 @@ class EngineerController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $request->validate(['stage' => 'nullable|in:'.implode(',', TaskStages::STAGES)]);
+        $request->validate(['stage' => 'nullable|in:'.implode(',', TaskStages::STAGES),
+            'factory_id' => 'nullable|integer|min:1', 'operator_id' => 'nullable|integer|min:1',
+            'due_from' => 'nullable|date_format:Y-m-d', 'due_to' => 'nullable|date_format:Y-m-d',
+            'filter_options' => 'sometimes|boolean']);
         try {
             $perPage = max(1, min((int) $request->query('per_page', 10), 100));
             $search = trim((string) $request->query('search', ''));
@@ -45,6 +48,24 @@ class EngineerController extends Controller
                 'logs.user:id,name',
             ])->where('creator_id', $user->id);
 
+            $options = null;
+            if ($request->boolean('filter_options')) {
+                $steps = FactoryOrder::forWorkshops()->whereHas('order', fn ($q) => $q->where('creator_id', $user->id))
+                    ->select('factory_id', 'operator_id')->distinct()->with('factory:id,name', 'operator:id,name')->get();
+                $pairs = fn ($relation) => $steps->pluck($relation)->filter()->unique('id')->sortBy('name')->values()
+                    ->map(fn ($row) => ['id' => $row->id, 'name' => $row->name]);
+                $options = ['factories' => $pairs('factory'), 'operators' => $pairs('operator')];
+            }
+            if ($request->filled('factory_id') || $request->filled('operator_id')) {
+                $query->whereHas('factoryOrders', fn ($q) => $q->forWorkshops()
+                    ->when($request->integer('factory_id'), fn ($q, $id) => $q->where('factory_id', $id))
+                    ->when($request->integer('operator_id'), fn ($q, $id) => $q->where('operator_id', $id)));
+            }
+            if ($request->filled('due_from') || $request->filled('due_to')) {
+                $query->whereHas('dates', fn ($q) => $q
+                    ->when($request->query('due_from'), fn ($q, $day) => $q->whereDate('finish_date', '>=', $day))
+                    ->when($request->query('due_to'), fn ($q, $day) => $q->whereDate('finish_date', '<=', $day)));
+            }
             if ($search !== '') {
                 $query->where(function ($q) use ($search) {
                     $q->where('name', 'like', "%{$search}%")
@@ -66,6 +87,7 @@ class EngineerController extends Controller
 
             return response()->json([
                 'orders' => $page->items(),
+                'filter_options' => $options,
                 'stage_counts' => array_replace(array_fill_keys(TaskStages::STAGES, 0), $counts->all()),
                 'pagination' => [
                     'current_page' => $page->currentPage(),
