@@ -137,6 +137,11 @@ class EngineerController extends Controller
                 'selected_files' => 'sometimes|array',
                 'selected_files.*.id' => 'required_with:selected_files|exists:pmp_files,id',
                 'selected_files.*.quantity' => 'required_with:selected_files|integer|min:1',
+                'stage_schedule' => 'sometimes|array|max:100',
+                'stage_schedule.*.factory_id' => 'required|integer|distinct',
+                'stage_schedule.*.operator_id' => 'required|integer',
+                'stage_schedule.*.estimated_minutes' => 'required|integer|min:1|max:10080',
+                'stage_schedule.*.starts_at' => 'nullable|date_format:Y-m-d H:i',
                 'factory_operators' => 'nullable|array',
                 'factory_operators.*.factory_id' => 'required|exists:factories,id',
                 'factory_operators.*.user_id' => 'required|exists:users,id',
@@ -183,6 +188,19 @@ class EngineerController extends Controller
                 if ($plan) ProductionRoute::apply($order, $plan);
                 else ProductionRoute::refreshReadiness($order, null);
 
+                // Earlier confirmed reservations must exist before dependent stages are checked.
+                $schedule = collect($validatedData['stage_schedule'] ?? [])->sortBy('starts_at');
+                foreach ($schedule as $entry) {
+                    $step = $order->factoryOrders()->where('factory_id', $entry['factory_id'])->first();
+                    abort_unless($step && (int) $step->operator_id === (int) $entry['operator_id'], 422, 'Ստուգեք քայլի արտադրամասն ու կատարողին։');
+                    $step->estimated_minutes = $entry['estimated_minutes'];
+                    $step->save();
+                    if (!empty($entry['starts_at'])) {
+                        $start = \Carbon\CarbonImmutable::createFromFormat('Y-m-d H:i', $entry['starts_at'], 'Asia/Yerevan')->second(0);
+                        \App\Support\StageReservation::reserve($request->user(), $step, $start->format('Y-m-d H:i:s'),
+                            $start->addMinutes($entry['estimated_minutes'])->format('Y-m-d H:i:s'));
+                    }
+                }
                 return $order;
             });
 

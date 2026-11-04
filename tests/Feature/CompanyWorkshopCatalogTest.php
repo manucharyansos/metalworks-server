@@ -927,6 +927,26 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->getJson($range, $this->headers())->assertOk()->assertJsonCount(0, 'shifts')->assertJsonCount(0, 'bookings')->assertJsonPath('tasks.0.planned', false);
     }
 
+    public function test_creating_a_task_can_reserve_the_selected_stage_atomically(): void
+    {
+        $laser = $this->factories['DXF'];
+        $operator = $this->account('operator', $laser->id);
+        $file = $this->file($laser->id, 'estimate.dxf');
+        $this->as($this->manager);
+        $this->postJson('/api/operator-calendar/shifts', ['operator_id' => $operator->id, 'dates' => ['2098-01-06'], 'start' => '09:00', 'end' => '12:00'], $this->headers())->assertCreated();
+        $this->as($this->engineer);
+        $payload = $this->payload([$file->id]) + [
+            'factory_operators' => [['factory_id' => $laser->id, 'user_id' => $operator->id]],
+            'stage_schedule' => [['factory_id' => $laser->id, 'operator_id' => $operator->id, 'estimated_minutes' => 90, 'starts_at' => '2098-01-06 09:30']],
+        ];
+        $this->postJson('/api/engineers/engineer', $payload, $this->headers())->assertCreated();
+        $this->postJson('/api/engineers/engineer', $payload, $this->headers())->assertConflict();
+        $calendar = $this->getJson('/api/operator-calendar?from=2098-01-06&to=2098-01-12', $this->headers())->assertOk();
+        $calendar->assertJsonCount(1, 'tasks')->assertJsonCount(1, 'bookings')
+            ->assertJsonPath('tasks.0.estimated_minutes', 90)->assertJsonPath('tasks.0.due_date', '2099-01-01')
+            ->assertJsonPath('tasks.0.operator_name', $operator->name)->assertJsonPath('bookings.0.ends_at', '2098-01-06 11:00:00');
+    }
+
     private function in(callable $callback): mixed { return app(CompanyContext::class)->run($this->company, $callback); }
     private function account(string $role, ?int $factory = null): User { return $this->in(function () use ($role, $factory) { $user = User::create(['name' => $role, 'email' => $role.'-'.uniqid().'@example.invalid', 'password' => 'test-password', 'role_id' => Role::where('name', $role)->value('id'), 'factory_id' => $factory]); $m = CompanyMembership::where('user_id', $user->id)->first(); $m->permissions()->sync(Permission::whereIn('slug', ['orders.view', 'orders.create', 'orders.update', 'factory.view', 'factory.download', 'factory.order_update', 'pmp.view', 'pmp_files.view', 'pmp_files.upload'])->pluck('id')->mapWithKeys(fn ($id) => [$id => ['allowed' => true]])->all()); return $user; }); }
     private function as(User $user): void { app(CompanyContext::class)->set(null); $user->unsetRelation('role')->unsetRelation('factory'); Sanctum::actingAs($user); }
