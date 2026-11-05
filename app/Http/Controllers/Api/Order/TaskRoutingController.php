@@ -67,6 +67,16 @@ class TaskRoutingController extends Controller
         return response()->json(TaskRouting::workload());
     }
 
+    public function team(Request $request, Order $order, FactoryOrder $factoryOrder)
+    {
+        TaskRouting::authorize($request->user(), $order);
+        abort_unless((int) $factoryOrder->order_id === (int) $order->id, 404);
+        $data = $request->validate(['operator_id' => 'required|integer', 'helper_ids' => 'present|array|max:30',
+            'helper_ids.*' => 'required|integer|distinct', 'team_version' => 'required|string|size:64']);
+        \App\Support\TaskTeam::save($request->user(), $factoryOrder, $data);
+        return response()->json(['order' => TaskRouting::order($order)]);
+    }
+
     public function assign(Request $request, Order $order, FactoryOrder $factoryOrder)
     {
         TaskRouting::authorize($request->user(), $order);

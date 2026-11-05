@@ -35,7 +35,8 @@ class OperatorCalendarController extends Controller
                 'starts_at' => $b->starts_at, 'ends_at' => $b->ends_at,
                 'task' => $b->step->order->name, 'order_id' => $b->step->order_id, 'workshop' => $b->step->factory->name,
                 'engineer' => $b->step->order->creator?->name, 'blocked' => $b->step->is_blocked,
-                'assignment_changed' => (int) $b->step->operator_id !== (int) $b->operator_id,
+                'is_helper' => (bool) $b->primary_booking_id,
+                'assignment_changed' => $b->primary_booking_id ? !$b->step->helpers->contains('id', $b->operator_id) : (int) $b->step->operator_id !== (int) $b->operator_id,
                 'can_edit' => $this->editable($request->user(), $b->step->order),
             ]);
         $steps = FactoryOrder::forWorkshops()->whereNull('completed_at')
@@ -45,7 +46,9 @@ class OperatorCalendarController extends Controller
         $future = OperatorBooking::active()->where('ends_at', '>', CarbonImmutable::now('Asia/Yerevan')->format('Y-m-d H:i:s'))->get();
         return response()->json(['timezone' => 'Asia/Yerevan', 'factories' => $workload['factories'], 'shifts' => $shifts, 'bookings' => $bookings,
             'can_manage_shifts' => in_array($request->user()->role?->name, ['admin', 'manager'], true),
+            'workers' => \App\Support\TaskTeam::workers()->orderBy('name')->get(['users.id', 'users.name']),
             'tasks' => $steps->map(fn ($s) => ['id' => $s->id, 'operator_id' => $s->operator_id, 'factory_id' => $s->factory_id,
+                'helper_ids' => $s->helpers->pluck('id')->values(), 'helpers' => $s->helpers, 'team_version' => \App\Support\TaskTeam::version($s),
                 'order_id' => $s->order_id, 'operator_name' => $s->operator?->name,
                 'due_date' => substr((string) ($s->deadline ?: $s->order->dates?->finish_date), 0, 10) ?: null,
                 'deadline_source' => $s->deadline ? 'stage' : ($s->order->dates?->finish_date ? 'order' : null),
@@ -100,7 +103,10 @@ class OperatorCalendarController extends Controller
     public function cancel(Request $request, OperatorBooking $booking) {
         $this->authorizeRead($request); TaskRouting::authorize($request->user(), $booking->step->order);
         DB::transaction(function () use ($booking, $request) {
-            \App\Support\StageReservation::lockOperator($booking->operator_id);
+            $booking = OperatorBooking::findOrFail($booking->primary_booking_id ?: $booking->id);
+            FactoryOrder::whereKey($booking->factory_order_id)->lockForUpdate()->firstOrFail();
+            $ids = OperatorBooking::where(fn ($q) => $q->whereKey($booking->id)->orWhere('primary_booking_id', $booking->id))->pluck('operator_id')->sort()->unique();
+            foreach ($ids as $id) \App\Support\StageReservation::lockOperator((int) $id);
             OrderLog::create(['order_id' => $booking->step->order_id, 'user_id' => $request->user()->id, 'action' => 'calendar.unbooked', 'message' => 'Պլանավորված միջակայքը հանվել է՝ '.$booking->starts_at.' — '.$booking->ends_at]);
             $booking->delete();
         });

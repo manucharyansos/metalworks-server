@@ -40,7 +40,7 @@ final class TaskRouting
                 || in_array($order->status, ['canceled', 'cancelled'], true)) {
                 throw ValidationException::withMessages(['operator_id' => ['Ավարտված կամ չեղարկված աշխատանքի կատարողին փոխել հնարավոր չէ։']]);
             }
-            $operator = self::operator($operatorId, (int) $locked->factory_id);
+            $operator = $locked->task_scoped_operator && $operatorId ? TaskTeam::worker($operatorId) : self::operator($operatorId, (int) $locked->factory_id);
             if ((int) $locked->operator_id === (int) $operator?->id) return $locked;
             $previous = $locked->operator;
             $locked->update(['operator_id' => $operator?->id]);
@@ -146,6 +146,6 @@ final class TaskRouting
                             'overdue_tasks' => (int) ($row?->overdue_tasks ?? 0), 'due_today' => (int) ($row?->due_today ?? 0), 'urgent_tasks' => (int) ($row?->urgent_tasks ?? 0), 'awaiting_review' => (int) ($row?->awaiting_review ?? 0)];
                     })->sortBy('active_tasks')->values()->all()];
             })->values()->all();
-        return ['company_id' => app(CompanyContext::class)->id(), 'generated_at' => now()->toIso8601String(), 'factories' => $factories];
+        return ['workers' => TaskTeam::workers()->orderBy('name')->get(['users.id', 'users.name']), 'company_id' => app(CompanyContext::class)->id(), 'generated_at' => now()->toIso8601String(), 'factories' => $factories];
     }
 }

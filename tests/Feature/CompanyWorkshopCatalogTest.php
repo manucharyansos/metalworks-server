@@ -1009,6 +1009,59 @@ class CompanyWorkshopCatalogTest extends TestCase
         }
     }
 
+    public function test_task_team_cross_workshop_access_and_atomic_helper_reservations(): void
+    {
+        $laser = $this->factories['DXF'];
+        $bend = $this->factories['DLD'];
+        $primary = $this->account('operator', $bend->id);
+        $helper = $this->account('operator', $bend->id);
+        $file = $this->file($laser->id, 'team.dxf');
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+        $unrelated = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+        $step = $this->in(fn () => Order::findOrFail($order['id'])->factoryOrders()->forWorkshops()->firstOrFail());
+        $url = '/api/tasks/'.$order['id'].'/workshops/'.$step->id.'/team';
+        $team = ['operator_id' => $primary->id, 'helper_ids' => [$helper->id], 'team_version' => $step->team_version];
+        $this->putJson($url, array_replace($team, ['helper_ids' => [$this->engineer->id]]), $this->headers())->assertUnprocessable();
+        $this->putJson($url, array_replace($team, ['operator_id' => $this->manager->id]), $this->headers())->assertUnprocessable();
+        $foreign = app(CompanyContext::class)->run($this->other, fn () => User::create(['name' => 'Other', 'email' => 'other-team@example.invalid', 'password' => 'test-password', 'role_id' => Role::where('name', 'operator')->value('id')]));
+        $this->putJson($url, array_replace($team, ['helper_ids' => [$foreign->id]]), $this->headers())->assertUnprocessable();
+        $this->putJson($url, $team, $this->headers())->assertOk()->assertJsonPath('order.factory_orders.0.helpers.0.id', $helper->id);
+        $this->putJson($url, $team, $this->headers())->assertConflict();
+        $step = $this->in(fn () => $step->fresh());
+        $this->assertTrue($step->task_scoped_operator);
+        $this->assertSame($bend->id, $this->in(fn () => $primary->fresh()->factory_id));
+        $calendar = $this->getJson('/api/operator-calendar?from=2098-01-06&to=2098-01-12', $this->headers())->assertOk();
+        $this->assertContains($helper->id, array_column($calendar->json('workers'), 'id'));
+        $this->assertNotContains($this->engineer->id, array_column($calendar->json('workers'), 'id'));
+        $slot = ['factory_order_id' => $step->id, 'operator_id' => $primary->id, 'allow_without_shift' => true, 'starts_at' => '2098-01-06 10:00', 'ends_at' => '2098-01-06 11:00'];
+        $booking = $this->postJson('/api/operator-calendar/bookings', $slot, $this->headers())->assertCreated()->json('booking.id');
+        $this->assertSame(2, $this->in(fn () => \App\Models\OperatorBooking::count()));
+        $team['team_version'] = $step->team_version;
+        $this->putJson($url, array_replace($team, ['helper_ids' => []]), $this->headers())->assertConflict();
+        // The same helper cannot be booked concurrently on a different task.
+        $otherStep = $this->in(fn () => Order::findOrFail($unrelated['id'])->factoryOrders()->forWorkshops()->firstOrFail());
+        $this->putJson('/api/tasks/'.$unrelated['id'].'/workshops/'.$otherStep->id.'/team', ['operator_id' => $helper->id, 'helper_ids' => [], 'team_version' => $otherStep->team_version], $this->headers())->assertOk();
+        $this->postJson('/api/operator-calendar/bookings', array_replace($slot, ['factory_order_id' => $otherStep->id, 'operator_id' => $helper->id]), $this->headers())->assertConflict();
+        $this->assertSame(2, $this->in(fn () => \App\Models\OperatorBooking::count()));
+        $this->as($helper);
+        $board = $this->getJson('/api/factories/factory/'.$laser->id, $this->headers())->assertOk();
+        $this->assertCount(2, $board->json('orders'));
+        $this->postJson('/api/factories/updateOrder/'.$order['id'], ['factory_id' => $laser->id, 'factory_order' => ['status' => 'accepted']], $this->headers())->assertForbidden();
+        $this->in(function () use ($helper, $file) { $this->assertTrue(\App\Support\TaskAccess::canDownloadPmp($helper, $file)); });
+        $this->as($primary);
+        $this->getJson('/api/factories/factory/'.$laser->id, $this->headers())->assertOk()->assertJsonCount(1, 'orders')->assertJsonPath('orders.0.id', $order['id']);
+        $this->postJson('/api/factories/updateOrder/'.$order['id'], ['factory_id' => $laser->id, 'factory_order' => ['status' => 'accepted']], $this->headers())->assertOk();
+        $this->as($this->engineer);
+        $child = $this->in(fn () => \App\Models\OperatorBooking::where('primary_booking_id', $booking)->firstOrFail());
+        $this->deleteJson('/api/operator-calendar/bookings/'.$child->id, [], $this->headers())->assertOk();
+        $this->assertSame(0, $this->in(fn () => \App\Models\OperatorBooking::count()));
+        $this->putJson($url, array_replace($team, ['helper_ids' => []]), $this->headers())->assertOk();
+        $this->as($helper);
+        $board = $this->getJson('/api/factories/factory/'.$laser->id, $this->headers())->assertOk();
+        $this->assertSame([$unrelated['id']], array_column($board->json('orders'), 'id'));
+    }
+
     private function in(callable $callback): mixed { return app(CompanyContext::class)->run($this->company, $callback); }
     private function account(string $role, ?int $factory = null): User { return $this->in(function () use ($role, $factory) { $user = User::create(['name' => $role, 'email' => $role.'-'.uniqid().'@example.invalid', 'password' => 'test-password', 'role_id' => Role::where('name', $role)->value('id'), 'factory_id' => $factory]); $m = CompanyMembership::where('user_id', $user->id)->first(); $m->permissions()->sync(Permission::whereIn('slug', ['orders.view', 'orders.create', 'orders.update', 'factory.view', 'factory.download', 'factory.order_update', 'pmp.view', 'pmp_files.view', 'pmp_files.upload'])->pluck('id')->mapWithKeys(fn ($id) => [$id => ['allowed' => true]])->all()); return $user; }); }
     private function as(User $user): void { app(CompanyContext::class)->set(null); $user->unsetRelation('role')->unsetRelation('factory'); Sanctum::actingAs($user); }

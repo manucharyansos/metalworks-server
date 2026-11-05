@@ -8,7 +8,16 @@ final class TaskAccess
 {
     public static function operatorSteps($query, User $user)
     {
-        return $query->forWorkshops()->where('factory_id', $user->factory_id)->where(fn ($q) => $q->whereNull('operator_id')->orWhere('operator_id', $user->id));
+        return $query->forWorkshops()->where(function ($q) use ($user) {
+            $q->where(fn ($own) => $own->where('factory_id', $user->factory_id)->where(fn ($s) => $s->whereNull('operator_id')->orWhere('operator_id', $user->id)))
+                ->orWhere(fn ($assigned) => $assigned->where('task_scoped_operator', true)->where('operator_id', $user->id))
+                ->orWhereHas('helpers', fn ($helpers) => $helpers->where('users.id', $user->id));
+        });
+    }
+
+    public static function canOperate(User $user, FactoryOrder $step): bool {
+        return (!$step->operator_id && (int) $step->factory_id === (int) $user->factory_id)
+            || ((int) $step->operator_id === (int) $user->id && ($step->task_scoped_operator || (int) $step->factory_id === (int) $user->factory_id));
     }
 
     public static function canView(User $user, Order $order): bool
@@ -32,7 +41,8 @@ final class TaskAccess
     public static function restrictOperatorRelations(Order $order, User $user): Order
     {
         if (!$user->factory_id || in_array($user->role?->name, ['admin', 'manager'], true)) return $order;
-        $steps = $order->factoryOrders->filter(fn ($s) => (int) $s->factory_id === (int) $user->factory_id && (!$s->operator_id || (int) $s->operator_id === (int) $user->id))->values();
+        $allowed = self::operatorSteps($order->factoryOrders(), $user)->pluck('factory_orders.id');
+        $steps = $order->factoryOrders->whereIn('id', $allowed)->values();
         $order->setRelation('factoryOrders', $steps);
         $order->unsetRelation('factories')->unsetRelation('selectedFiles')->unsetRelation('logs');
         $order->makeHidden('reference_file_visibility');

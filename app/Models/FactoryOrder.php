@@ -15,6 +15,12 @@ class FactoryOrder extends Model
 {
     use HasFactory, \App\Models\Concerns\BelongsToCompany;
 
+    protected $with = ['helpers:id,name'];
+
+    public function helpers(): BelongsToMany {
+        return $this->belongsToMany(User::class, 'factory_order_helpers')->using(CompanyPivot::class)->withTimestamps();
+    }
+
     protected $fillable = [
         'order_id',
         'factory_id',
@@ -32,10 +38,12 @@ class FactoryOrder extends Model
 
     // Timestamps written with now() are serialized with their timezone
     // (ISO 8601), so browsers show the local time instead of raw UTC text.
-    protected $casts = ['confirmation_required' => 'boolean', 'predecessor_ids' => 'array', 'route_position' => 'integer',
+    protected $casts = ['task_scoped_operator' => 'boolean', 'confirmation_required' => 'boolean', 'predecessor_ids' => 'array', 'route_position' => 'integer',
         'completed_at' => 'datetime', 'engineer_confirmation_at' => 'datetime', 'ready_at' => 'datetime'];
     protected $hidden = ['evidence_photo_path', 'dependsOn'];
-    protected $appends = ['awaiting_engineer_confirmation', 'has_evidence_photo', 'is_blocked', 'waiting_for'];
+    protected $appends = ['team_version', 'awaiting_engineer_confirmation', 'has_evidence_photo', 'is_blocked', 'waiting_for'];
+
+    public function getTeamVersionAttribute(): string { return \App\Support\TaskTeam::version($this); }
 
     public function dependsOn(): BelongsTo
     {
@@ -134,7 +142,9 @@ class FactoryOrder extends Model
                 $factoryOrder->operator_id &&
                 (!$factoryOrder->exists || $factoryOrder->isDirty('operator_id') || $factoryOrder->isDirty('factory_id'))
             ) {
-                $operatorMatchesFactory = User::query()
+                $operatorMatchesFactory = $factoryOrder->task_scoped_operator
+                    ? (bool) \App\Support\TaskTeam::worker((int) $factoryOrder->operator_id)
+                    : User::query()
                     ->whereKey($factoryOrder->operator_id)
                     ->assignedToFactory((int) $factoryOrder->factory_id)
                     ->exists();
