@@ -84,12 +84,13 @@ class OperatorCalendarController extends Controller
     }
     public function book(Request $request) {
         $this->authorizeRead($request);
-        $data = $request->validate(['factory_order_id' => 'required|integer', 'operator_id' => 'required|integer', 'assign_if_unassigned' => 'sometimes|boolean', 'allow_without_shift' => 'sometimes|boolean']);
+        $data = $request->validate(['factory_order_id' => 'required|integer', 'operator_id' => 'required|integer', 'assign_if_unassigned' => 'sometimes|boolean', 'allow_without_shift' => 'sometimes|boolean', 'team_version' => 'sometimes|string|size:64']);
         [$start, $end] = $this->times($request);
         abort_if($start < CarbonImmutable::now('Asia/Yerevan')->format('Y-m-d H:i:s'), 422, 'Ընտրեք ապագա ժամանակ։');
         $booking = DB::transaction(function () use ($request, $data, $start, $end) {
             $step = FactoryOrder::whereKey($data['factory_order_id'])->lockForUpdate()->firstOrFail();
             TaskRouting::authorize($request->user(), $step->order);
+            if (isset($data['team_version'])) abort_unless(hash_equals(\App\Support\TaskTeam::version($step), $data['team_version']), 409, 'Աշխատանքի կազմը փոխվել է։ Թարմացրեք էջը։');
             if (!$step->operator_id && !empty($data['assign_if_unassigned'])) {
                 $step = TaskRouting::assign($request->user(), $step, (int) $data['operator_id']);
                 DB::afterCommit(fn () => \App\Support\TaskNotifier::operatorChanged($request->user(), $step->order, $step, null));
