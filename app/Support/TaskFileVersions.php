@@ -13,20 +13,20 @@ final class TaskFileVersions
     public static function authorizeRead(User $user, Order $order): void
     {
         abort_unless($user->role?->name !== 'authenticatedUser' && TaskAccess::canView($user, $order)
-            && ($user->role?->name === 'admin' || $user->hasPermission($user->factory_id ? 'factory.download' : 'pmp_files.view')), 403);
+            && ($user->role?->name === 'admin' || $user->hasPermission(TaskAccess::isOperator($user) ? 'factory.download' : 'pmp_files.view')), 403);
     }
 
     public static function files(User $user, Order $order)
     {
         self::authorizeRead($user, $order);
-        $steps = $order->factoryOrders()->with('files')->when($user->factory_id && !in_array($user->role?->name, ['admin', 'manager'], true), fn ($q) => TaskAccess::operatorSteps($q, $user))->get();
+        $steps = $order->factoryOrders()->with('files')->when(TaskAccess::isOperator($user), fn ($q) => TaskAccess::operatorSteps($q, $user))->get();
         $files = $steps->flatMap(fn ($step) => $step->files)->unique('id');
         $selected = $order->selectedFiles()->get()->keyBy('pmp_file_id');
         $revisions = TaskFileRevision::with('user:id,name')->where('order_id', $order->id)->whereIn('pmp_file_id', $files->pluck('id'))->orderByDesc('version')->get()->groupBy('pmp_file_id');
         return $files->map(function ($file) use ($selected, $revisions, $steps, $user) {
             // Operators see the exact version attached to their own workshop,
             // including an old version retained on an already finished job.
-            $operatorView = $user->factory_id && !in_array($user->role?->name, ['admin', 'manager'], true);
+            $operatorView = TaskAccess::isOperator($user);
             $current = $operatorView ? $file->pivot?->task_file_revision_id : $selected->get($file->id)?->task_file_revision_id;
             return ['id' => $file->id, 'original_name' => $file->original_name, 'path' => $file->path,
                 'task_file_revision_id' => $current,

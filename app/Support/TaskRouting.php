@@ -40,8 +40,13 @@ final class TaskRouting
                 || in_array($order->status, ['canceled', 'cancelled'], true)) {
                 throw ValidationException::withMessages(['operator_id' => ['Ավարտված կամ չեղարկված աշխատանքի կատարողին փոխել հնարավոր չէ։']]);
             }
-            $operator = self::operator($operatorId, (int) $locked->factory_id);
+            $operator = $locked->task_scoped_operator && $operatorId ? TaskTeam::worker($operatorId) : self::operator($operatorId, (int) $locked->factory_id);
             if ((int) $locked->operator_id === (int) $operator?->id) return $locked;
+            if ($locked->task_scoped_operator || $locked->helpers->isNotEmpty()) {
+                abort_if(\App\Models\OperatorBooking::active()->where('factory_order_id', $locked->id)->where('ends_at', '>', now('Asia/Yerevan')->format('Y-m-d H:i:s'))->lockForUpdate()->first(), 409, 'Նախ հանեք աշխատանքի ապագա ամրագրումները։');
+                abort_if(!$operator && $locked->helpers->isNotEmpty(), 422, 'Օգնականներով աշխատանքի համար նշեք հիմնական կատարողին։');
+                if ($operator) $locked->helpers()->detach($operator->id);
+            }
             $previous = $locked->operator;
             $locked->update(['operator_id' => $operator?->id]);
             // A request made by the previous operator no longer applies.
@@ -146,6 +151,6 @@ final class TaskRouting
                             'overdue_tasks' => (int) ($row?->overdue_tasks ?? 0), 'due_today' => (int) ($row?->due_today ?? 0), 'urgent_tasks' => (int) ($row?->urgent_tasks ?? 0), 'awaiting_review' => (int) ($row?->awaiting_review ?? 0)];
                     })->sortBy('active_tasks')->values()->all()];
             })->values()->all();
-        return ['company_id' => app(CompanyContext::class)->id(), 'generated_at' => now()->toIso8601String(), 'factories' => $factories];
+        return ['workers' => TaskTeam::workers()->orderBy('name')->get(['users.id', 'users.name']), 'company_id' => app(CompanyContext::class)->id(), 'generated_at' => now()->toIso8601String(), 'factories' => $factories];
     }
 }

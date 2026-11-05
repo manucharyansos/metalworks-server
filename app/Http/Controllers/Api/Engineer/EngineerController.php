@@ -51,15 +51,16 @@ class EngineerController extends Controller
             $options = null;
             if ($request->boolean('filter_options')) {
                 $steps = FactoryOrder::forWorkshops()->whereHas('order', fn ($q) => $q->where('creator_id', $user->id))
-                    ->select('factory_id', 'operator_id')->distinct()->with('factory:id,name', 'operator:id,name')->get();
+                    ->select('id', 'factory_id', 'operator_id')->with('factory:id,name', 'operator:id,name')->get();
                 $pairs = fn ($relation) => $steps->pluck($relation)->filter()->unique('id')->sortBy('name')->values()
                     ->map(fn ($row) => ['id' => $row->id, 'name' => $row->name]);
-                $options = ['factories' => $pairs('factory'), 'operators' => $pairs('operator')];
+                $people = $steps->pluck('operator')->filter()->merge($steps->flatMap(fn ($s) => $s->helpers))->unique('id')->sortBy('name')->values()->map(fn ($u) => ['id' => $u->id, 'name' => $u->name]);
+                $options = ['factories' => $pairs('factory'), 'operators' => $people];
             }
             if ($request->filled('factory_id') || $request->filled('operator_id')) {
                 $query->whereHas('factoryOrders', fn ($q) => $q->forWorkshops()
                     ->when($request->integer('factory_id'), fn ($q, $id) => $q->where('factory_id', $id))
-                    ->when($request->integer('operator_id'), fn ($q, $id) => $q->where('operator_id', $id)));
+                    ->when($request->integer('operator_id'), fn ($q, $id) => $q->where(fn ($people) => $people->where('operator_id', $id)->orWhereHas('helpers', fn ($h) => $h->where('users.id', $id)))));
             }
             if ($request->filled('due_from') || $request->filled('due_to')) {
                 $query->whereHas('dates', fn ($q) => $q

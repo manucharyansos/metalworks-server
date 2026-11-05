@@ -228,7 +228,9 @@ class EngineerOrderFilesTest extends TestCase
                 $t->boolean('confirmation_required')->default(false); $t->string('confirmation_method')->nullable(); $t->json('reference_file_visibility')->nullable();
             },
             'selected_files' => function (Blueprint $t) { $t->unsignedBigInteger('order_id'); $t->unsignedBigInteger('pmp_file_id'); $t->integer('quantity'); },
+            'factory_order_helpers' => function (Blueprint $t) { $t->unsignedBigInteger('factory_order_id'); $t->unsignedBigInteger('user_id'); $t->unsignedBigInteger('company_id')->nullable(); },
             'factory_orders' => function (Blueprint $t) {
+                $t->boolean('task_scoped_operator')->default(false);
                 $t->unsignedBigInteger('order_id'); $t->unsignedBigInteger('factory_id'); $t->unsignedBigInteger('operator_id')->nullable();
                 $t->string('status'); $t->boolean('canceling')->default(false);
                 $t->boolean('confirmation_required')->default(false); $t->string('confirmation_method')->nullable();

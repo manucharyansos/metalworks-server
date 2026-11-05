@@ -33,8 +33,8 @@ class FactoryController extends Controller
         $user = $request->user();
         $query = Factory::activeWorkshops()->with('operators:users.id,users.name,users.factory_id');
 
-        if ($user?->factory_id && $user->role?->name !== 'admin') {
-            $query->whereKey($user->factory_id);
+        if (TaskAccess::isOperator($user)) {
+            $query->where(fn ($q) => $q->whereKey($user->factory_id)->orWhereIn('id', TaskAccess::operatorSteps(\App\Models\FactoryOrder::query(), $user)->select('factory_id')));
         }
 
         return response()->json($query->get());
@@ -64,7 +64,7 @@ class FactoryController extends Controller
     {
         $user = $request->user();
 
-        if ($user?->factory_id && (int) $user->factory_id !== (int) $id && $user->role?->name !== 'admin') {
+        if (TaskAccess::isOperator($user) && (int) $user->factory_id !== (int) $id && !TaskAccess::operatorSteps(\App\Models\FactoryOrder::query(), $user)->where('factory_id', $id)->exists()) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -74,11 +74,8 @@ class FactoryController extends Controller
                 $q->where('factory_id', $id)
                     ->visibleOnBoard();
 
-                if ($user?->factory_id && $user->role?->name !== 'admin') {
-                    $q->where(function ($sub) use ($user) {
-                        $sub->whereNull('operator_id')
-                            ->orWhere('operator_id', $user->id);
-                    });
+                if (TaskAccess::isOperator($user)) {
+                    TaskAccess::operatorSteps($q, $user);
                 }
             })
                 ->with([
@@ -86,11 +83,8 @@ class FactoryController extends Controller
                         $q->where('factory_id', $id)
                             ->visibleOnBoard();
 
-                        if ($user?->factory_id && $user->role?->name !== 'admin') {
-                            $q->where(function ($sub) use ($user) {
-                                $sub->whereNull('operator_id')
-                                    ->orWhere('operator_id', $user->id);
-                            });
+                        if (TaskAccess::isOperator($user)) {
+                            TaskAccess::operatorSteps($q, $user);
                         }
 
                         $q->with([
@@ -163,7 +157,7 @@ class FactoryController extends Controller
         $user = $request->user();
         $factoryId = (int) $data['factory_id'];
         $management = in_array($user->role?->name, ['admin', 'manager'], true);
-        abort_unless($management || ($user->factory_id && (int) $user->factory_id === $factoryId), 403);
+        abort_unless($management || TaskAccess::isOperator($user), 403);
         // The board's Created column has no action status; persist the database's pending value.
         $status = $data['factory_order']['status'] ?? 'pending';
         if ($status === 'waiting') $status = 'pending';
@@ -174,7 +168,7 @@ class FactoryController extends Controller
             [$order, $step, $previous, $changeRequest] = DB::transaction(function () use ($request, $data, $id, $factoryId, $status, $user, $management, &$storedPath) {
                 $order = Order::whereKey($id)->lockForUpdate()->firstOrFail();
                 $step = $order->factoryOrders()->where('factory_id', $factoryId)->lockForUpdate()->firstOrFail();
-                abort_unless($management || !$step->operator_id || (int) $step->operator_id === (int) $user->id, 403);
+                abort_unless($management || TaskAccess::canOperate($user, $step), 403);
                 if (!$management && in_array($step->status, ['canceled', 'cancelled'], true)) {
                     if (!in_array($status, [null, 'pending', 'waiting', 'accepted', 'confirmed'], true)) {
                         throw ValidationException::withMessages(['factory_order.status' => ['Ընտրեք՝ ստեղծված, ընդունված կամ կատարվող աշխատանք։ Վերաբացման հարցումը պետք է հաստատի ստեղծող ինժեները։']]);
@@ -190,7 +184,7 @@ class FactoryController extends Controller
                     throw ValidationException::withMessages(['factory_order.status' => ['Աշխատանքն արդեն ավարտված է կամ սպասում է ինժեների հաստատմանը։']]);
                 }
                 if ($status === 'finished') {
-                    abort_unless((int) $user->factory_id === $factoryId && (!$step->operator_id || (int) $step->operator_id === (int) $user->id), 403, 'Ավարտը կարող է ուղարկել միայն այս արտադրամասի կատարողը։');
+                    abort_unless(TaskAccess::canOperate($user, $step), 403, 'Ավարտը կարող է ուղարկել միայն այս արտադրամասի կատարողը։');
                     $versionsChanged = false;
                     if (isset($data['factory_order']['expected_file_versions'])) {
                         $expected = json_decode($data['factory_order']['expected_file_versions'], true);
@@ -308,9 +302,9 @@ class FactoryController extends Controller
             return response()->json(['message' => 'Invalid factory IDs'], 400);
         }
 
-        if ($user->factory_id && $user->role?->name !== 'admin') {
+        if (TaskAccess::isOperator($user)) {
             foreach ($factoryIdsArray as $factoryId) {
-                if ((int) $user->factory_id !== $factoryId) {
+                if ((int) $user->factory_id !== $factoryId && !TaskAccess::operatorSteps(\App\Models\FactoryOrder::query(), $user)->where('factory_id', $factoryId)->exists()) {
                     return response()->json(['message' => 'Forbidden'], 403);
                 }
             }
@@ -318,7 +312,7 @@ class FactoryController extends Controller
 
         $orders = Order::whereHas('factoryOrders', function ($query) use ($factoryIdsArray, $user) {
             $query->whereIn('factory_id', $factoryIdsArray);
-            if ($user->factory_id && !in_array($user->role?->name, ['admin', 'manager'], true)) TaskAccess::operatorSteps($query, $user);
+            if (TaskAccess::isOperator($user)) TaskAccess::operatorSteps($query, $user);
         })->when($user->role?->name === 'engineer', fn ($q) => $q->where('creator_id', $user->id))->with('orderNumber', 'prefixCode', 'dates', 'factoryOrders.factory', 'factoryOrders.files', 'factoryOrders.pendingRequest', 'creator:id,name')->get()
             ->map(fn ($order) => TaskAccess::restrictOperatorRelations($order, $user));
 
@@ -385,18 +379,12 @@ class FactoryController extends Controller
             ->first();
 
         if ($directFactoryFile) {
-            if (!$user->factory_id) {
+            if (!TaskAccess::isOperator($user)) {
                 return $directFactoryFile->factoryOrder?->order && TaskAccess::canView($user, $directFactoryFile->factoryOrder->order) ? $decodedPath : null;
             }
 
             $factoryOrder = $directFactoryFile->factoryOrder;
-            if (!$factoryOrder || (int) $user->factory_id !== (int) $factoryOrder->factory_id) {
-                return null;
-            }
-
-            if ($factoryOrder->operator_id && (int) $factoryOrder->operator_id !== (int) $user->id) {
-                return null;
-            }
+            if (!$factoryOrder || !TaskAccess::operatorSteps(\App\Models\FactoryOrder::query(), $user)->whereKey($factoryOrder->id)->exists()) return null;
 
             return $decodedPath;
         }
