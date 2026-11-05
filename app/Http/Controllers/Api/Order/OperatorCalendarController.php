@@ -108,6 +108,7 @@ class OperatorCalendarController extends Controller
             $ids = OperatorBooking::where(fn ($q) => $q->whereKey($booking->id)->orWhere('primary_booking_id', $booking->id))->pluck('operator_id')->sort()->unique();
             foreach ($ids as $id) \App\Support\StageReservation::lockOperator((int) $id);
             OrderLog::create(['order_id' => $booking->step->order_id, 'user_id' => $request->user()->id, 'action' => 'calendar.unbooked', 'message' => 'Պլանավորված միջակայքը հանվել է՝ '.$booking->starts_at.' — '.$booking->ends_at]);
+            OperatorBooking::where('primary_booking_id', $booking->id)->delete();
             $booking->delete();
         });
         return response()->json(['deleted' => true]);

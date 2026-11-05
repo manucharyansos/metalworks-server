@@ -1030,6 +1030,7 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->putJson($url, $team, $this->headers())->assertConflict();
         $step = $this->in(fn () => $step->fresh());
         $this->assertTrue($step->task_scoped_operator);
+        $this->getJson('/api/engineers/engineer?filter_options=1&operator_id='.$helper->id, $this->headers())->assertOk()->assertJsonCount(1, 'orders')->assertJsonPath('orders.0.id', $order['id']);
         $this->assertSame($bend->id, $this->in(fn () => $primary->fresh()->factory_id));
         $calendar = $this->getJson('/api/operator-calendar?from=2098-01-06&to=2098-01-12', $this->headers())->assertOk();
         $this->assertContains($helper->id, array_column($calendar->json('workers'), 'id'));

@@ -42,6 +42,11 @@ final class TaskRouting
             }
             $operator = $locked->task_scoped_operator && $operatorId ? TaskTeam::worker($operatorId) : self::operator($operatorId, (int) $locked->factory_id);
             if ((int) $locked->operator_id === (int) $operator?->id) return $locked;
+            if ($locked->task_scoped_operator || $locked->helpers->isNotEmpty()) {
+                abort_if(\App\Models\OperatorBooking::active()->where('factory_order_id', $locked->id)->where('ends_at', '>', now('Asia/Yerevan')->format('Y-m-d H:i:s'))->lockForUpdate()->first(), 409, 'Նախ հանեք աշխատանքի ապագա ամրագրումները։');
+                abort_if(!$operator && $locked->helpers->isNotEmpty(), 422, 'Օգնականներով աշխատանքի համար նշեք հիմնական կատարողին։');
+                if ($operator) $locked->helpers()->detach($operator->id);
+            }
             $previous = $locked->operator;
             $locked->update(['operator_id' => $operator?->id]);
             // A request made by the previous operator no longer applies.
