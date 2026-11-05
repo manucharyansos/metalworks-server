@@ -51,7 +51,7 @@ class OperatorCalendarController extends Controller
                 'deadline_source' => $s->deadline ? 'stage' : ($s->order->dates?->finish_date ? 'order' : null),
                 'estimated_minutes' => $s->estimated_minutes, 'status' => $s->status,
                 'name' => $s->order->name, 'workshop' => $s->factory->name, 'engineer' => $s->order->creator?->name,
-                'blocked' => $s->is_blocked, 'can_edit' => $this->editable($request->user(), $s->order),
+                'blocked' => $s->is_blocked, 'can_edit' => !$s->awaiting_engineer_confirmation && $this->editable($request->user(), $s->order),
                 'planned' => $future->contains(fn ($b) => (int) $b->factory_order_id === (int) $s->id && (int) $b->operator_id === (int) $s->operator_id),
             ])->values()]);
     }
@@ -81,7 +81,7 @@ class OperatorCalendarController extends Controller
     }
     public function book(Request $request) {
         $this->authorizeRead($request);
-        $data = $request->validate(['factory_order_id' => 'required|integer', 'operator_id' => 'required|integer', 'assign_if_unassigned' => 'sometimes|boolean']);
+        $data = $request->validate(['factory_order_id' => 'required|integer', 'operator_id' => 'required|integer', 'assign_if_unassigned' => 'sometimes|boolean', 'allow_without_shift' => 'sometimes|boolean']);
         [$start, $end] = $this->times($request);
         abort_if($start < CarbonImmutable::now('Asia/Yerevan')->format('Y-m-d H:i:s'), 422, 'Ընտրեք ապագա ժամանակ։');
         $booking = DB::transaction(function () use ($request, $data, $start, $end) {
@@ -93,7 +93,7 @@ class OperatorCalendarController extends Controller
             }
             abort_unless($step->factory->is_workshop && (int) $step->operator_id === (int) $data['operator_id'], 409, 'Աշխատանքի կատարողը փոխվել է կամ նշանակված չէ։');
             abort_if($step->isWorkCompleted() || $step->awaiting_engineer_confirmation || in_array($step->status, ['canceled', 'cancelled'], true) || in_array($step->order->status, ['canceled', 'cancelled'], true), 422);
-            return \App\Support\StageReservation::reserve($request->user(), $step, $start, $end);
+            return \App\Support\StageReservation::reserve($request->user(), $step, $start, $end, !empty($data['allow_without_shift']));
         }, 3);
         return response()->json(['booking' => $booking], 201);
     }

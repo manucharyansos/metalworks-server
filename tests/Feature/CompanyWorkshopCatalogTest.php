@@ -970,6 +970,45 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->getJson($url.'&due_to=2098-12-31', $this->headers())->assertOk()->assertJsonPath('pagination.total', 0);
     }
 
+    public function test_manual_booking_without_shift_still_checks_conflicts_and_configured_hours(): void
+    {
+        $laser = $this->factories['DXF'];
+        $operator = $this->account('operator', $laser->id);
+        $file = $this->file($laser->id, 'manual.dxf');
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+        $step = $this->in(fn () => Order::findOrFail($order['id'])->factoryOrders()->forWorkshops()->firstOrFail());
+        $slot = ['factory_order_id' => $step->id, 'operator_id' => $operator->id, 'assign_if_unassigned' => true,
+            'allow_without_shift' => true, 'starts_at' => '2098-01-06 10:00', 'ends_at' => '2098-01-06 11:00'];
+        $this->postJson('/api/operator-calendar/bookings', $slot, $this->headers())->assertCreated();
+        $this->postJson('/api/operator-calendar/bookings', $slot, $this->headers())->assertConflict();
+        $this->assertSame($operator->id, $this->in(fn () => $step->fresh()->operator_id));
+        $stranger = $this->account('engineer');
+        $this->as($stranger);
+        $this->postJson('/api/operator-calendar/bookings', $slot, $this->headers())->assertForbidden();
+        $this->as($this->manager);
+        $this->postJson('/api/operator-calendar/shifts', ['operator_id' => $operator->id, 'dates' => ['2098-01-07'], 'start' => '09:00', 'end' => '12:00'], $this->headers())->assertCreated();
+        $this->as($this->engineer);
+        $this->postJson('/api/operator-calendar/bookings', array_replace($slot, ['starts_at' => '2098-01-07 13:00', 'ends_at' => '2098-01-07 14:00']), $this->headers())->assertUnprocessable();
+    }
+
+    public function test_task_priority_sort_happens_before_pagination_and_completed_tasks_are_last(): void
+    {
+        $file = $this->file($this->factories['DXF']->id, 'priority.dxf');
+        $this->as($this->engineer);
+        $ids = [];
+        foreach (['urgent', 'normal', 'high', 'urgent'] as $priority) {
+            $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+            $ids[] = $order['id'];
+            $this->in(fn () => FactoryOrder::where('order_id', $order['id'])->update(['priority' => $priority]));
+        }
+        $this->in(fn () => Order::findOrFail($ids[3])->update(['status' => 'completed']));
+        $url = '/api/engineers/engineer?sort=priority&per_page=1';
+        foreach ([$ids[0], $ids[2], $ids[1], $ids[3]] as $index => $id) {
+            $this->getJson($url.'&page='.($index + 1), $this->headers())->assertOk()->assertJsonPath('orders.0.id', $id);
+        }
+    }
+
     private function in(callable $callback): mixed { return app(CompanyContext::class)->run($this->company, $callback); }
     private function account(string $role, ?int $factory = null): User { return $this->in(function () use ($role, $factory) { $user = User::create(['name' => $role, 'email' => $role.'-'.uniqid().'@example.invalid', 'password' => 'test-password', 'role_id' => Role::where('name', $role)->value('id'), 'factory_id' => $factory]); $m = CompanyMembership::where('user_id', $user->id)->first(); $m->permissions()->sync(Permission::whereIn('slug', ['orders.view', 'orders.create', 'orders.update', 'factory.view', 'factory.download', 'factory.order_update', 'pmp.view', 'pmp_files.view', 'pmp_files.upload'])->pluck('id')->mapWithKeys(fn ($id) => [$id => ['allowed' => true]])->all()); return $user; }); }
     private function as(User $user): void { app(CompanyContext::class)->set(null); $user->unsetRelation('role')->unsetRelation('factory'); Sanctum::actingAs($user); }
