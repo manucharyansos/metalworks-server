@@ -28,7 +28,7 @@ class EngineerController extends Controller
         $request->validate(['stage' => 'nullable|in:'.implode(',', TaskStages::STAGES),
             'factory_id' => 'nullable|integer|min:1', 'operator_id' => 'nullable|integer|min:1',
             'due_from' => 'nullable|date_format:Y-m-d', 'due_to' => 'nullable|date_format:Y-m-d',
-            'filter_options' => 'sometimes|boolean']);
+            'filter_options' => 'sometimes|boolean', 'sort' => 'nullable|in:priority,newest']);
         try {
             $perPage = max(1, min((int) $request->query('per_page', 10), 100));
             $search = trim((string) $request->query('search', ''));
@@ -82,8 +82,18 @@ class EngineerController extends Controller
             $classified = (clone $query)->withoutEagerLoads()->select('orders.id')->selectRaw("$stageSql AS workflow_stage");
             $counts = DB::query()->fromSub($classified, 'task_stages')->select('workflow_stage')->selectRaw('COUNT(*) AS stage_count')
                 ->groupBy('workflow_stage')->pluck('stage_count', 'workflow_stage')->map(fn ($count) => (int) $count);
-            $page = $query->when($request->query('stage'), fn ($q, $stage) => $q->whereRaw("($stageSql) = ?", [$stage]))
-                ->select('orders.*')->selectRaw("$stageSql AS workflow_stage")->orderByDesc('created_at')->orderByDesc('id')->paginate($perPage);
+            $priority = FactoryOrder::forWorkshops()->selectRaw("MAX(CASE priority WHEN 'urgent' THEN 2 WHEN 'high' THEN 1 ELSE 0 END)")
+                ->whereColumn('factory_orders.order_id', 'orders.id')->whereNull('completed_at')
+                ->where(fn ($q) => $q->whereNull('status')->orWhereNotIn('status', ['finished', 'completed', 'done', 'canceled', 'cancelled']));
+            $deadline = \App\Models\Date::selectRaw('MIN(finish_date)')->whereColumn('dates.order_id', 'orders.id');
+            $query->when($request->query('stage'), fn ($q, $stage) => $q->whereRaw("($stageSql) = ?", [$stage]))
+                ->select('orders.*')->selectRaw("$stageSql AS workflow_stage")
+                ->selectSub($priority, 'priority_rank')->selectSub($deadline, 'sort_deadline');
+            if ($request->query('sort') === 'priority') {
+                $query->orderByRaw("CASE WHEN ($stageSql) = 'completed' OR orders.status IN ('canceled', 'cancelled') THEN 1 ELSE 0 END")
+                    ->orderByRaw('COALESCE(priority_rank, 0) DESC')->orderByRaw("COALESCE(sort_deadline, '9999-12-31') ASC");
+            }
+            $page = $query->orderByDesc('created_at')->orderByDesc('id')->paginate($perPage);
 
             return response()->json([
                 'orders' => $page->items(),
