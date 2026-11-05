@@ -6,6 +6,8 @@ use App\Models\{FactoryOrder, Order, PmpFiles, User};
 
 final class TaskAccess
 {
+    public static function isOperator(User $user): bool { return in_array($user->role?->name, MembershipAssignments::OPERATORS, true); }
+
     public static function operatorSteps($query, User $user)
     {
         return $query->forWorkshops()->where(function ($q) use ($user) {
@@ -25,14 +27,14 @@ final class TaskAccess
         if (in_array($user->role?->name, ['admin', 'manager'], true)) return true;
         if ($user->role?->name === 'engineer') return (int) $order->creator_id === (int) $user->id;
         if ($user->role?->name === 'authenticatedUser') return (int) $order->user_id === (int) $user->id;
-        return $user->factory_id && $user->hasPermission('factory.view')
+        return self::isOperator($user) && $user->hasPermission('factory.view')
             && self::operatorSteps($order->factoryOrders(), $user)->exists();
     }
 
     public static function canDownloadPmp(User $user, PmpFiles $file): bool
     {
         if ($user->role?->name === 'admin' || (!$user->factory_id && in_array($user->role?->name, ['engineer', 'manager'], true) && $user->hasPermission('pmp_files.view'))) return true;
-        if (!$user->factory_id || !$user->hasPermission('factory.download')) return false;
+        if (!self::isOperator($user) || !$user->hasPermission('factory.download')) return false;
         // A file is available only through a task step in the selected workshop.
         // Routing the same drawing to another workshop explicitly adds that link.
         return self::operatorSteps(FactoryOrder::query(), $user)->whereHas('files', fn ($q) => $q->whereKey($file->id))->exists();
@@ -40,7 +42,7 @@ final class TaskAccess
 
     public static function restrictOperatorRelations(Order $order, User $user): Order
     {
-        if (!$user->factory_id || in_array($user->role?->name, ['admin', 'manager'], true)) return $order;
+        if (!self::isOperator($user)) return $order;
         $allowed = self::operatorSteps($order->factoryOrders(), $user)->pluck('factory_orders.id');
         $steps = $order->factoryOrders->whereIn('id', $allowed)->values();
         $order->setRelation('factoryOrders', $steps);

@@ -1014,7 +1014,7 @@ class CompanyWorkshopCatalogTest extends TestCase
         $laser = $this->factories['DXF'];
         $bend = $this->factories['DLD'];
         $primary = $this->account('operator', $bend->id);
-        $helper = $this->account('operator', $bend->id);
+        $helper = $this->account('operator');
         $file = $this->file($laser->id, 'team.dxf');
         $this->as($this->engineer);
         $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
@@ -1036,6 +1036,7 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->assertContains($helper->id, array_column($calendar->json('workers'), 'id'));
         $this->assertNotContains($this->engineer->id, array_column($calendar->json('workers'), 'id'));
         $slot = ['factory_order_id' => $step->id, 'operator_id' => $primary->id, 'allow_without_shift' => true, 'starts_at' => '2098-01-06 10:00', 'ends_at' => '2098-01-06 11:00'];
+        $this->postJson('/api/operator-calendar/bookings', array_replace($slot, ['team_version' => str_repeat('0', 64)]), $this->headers())->assertConflict();
         $booking = $this->postJson('/api/operator-calendar/bookings', $slot, $this->headers())->assertCreated()->json('booking.id');
         $this->assertSame(2, $this->in(fn () => \App\Models\OperatorBooking::count()));
         $team['team_version'] = $step->team_version;

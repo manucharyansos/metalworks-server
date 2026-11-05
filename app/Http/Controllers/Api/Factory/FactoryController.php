@@ -33,7 +33,7 @@ class FactoryController extends Controller
         $user = $request->user();
         $query = Factory::activeWorkshops()->with('operators:users.id,users.name,users.factory_id');
 
-        if ($user?->factory_id && $user->role?->name !== 'admin') {
+        if (TaskAccess::isOperator($user)) {
             $query->where(fn ($q) => $q->whereKey($user->factory_id)->orWhereIn('id', TaskAccess::operatorSteps(\App\Models\FactoryOrder::query(), $user)->select('factory_id')));
         }
 
@@ -64,7 +64,7 @@ class FactoryController extends Controller
     {
         $user = $request->user();
 
-        if ($user?->factory_id && (int) $user->factory_id !== (int) $id && $user->role?->name !== 'admin' && !TaskAccess::operatorSteps(\App\Models\FactoryOrder::query(), $user)->where('factory_id', $id)->exists()) {
+        if (TaskAccess::isOperator($user) && (int) $user->factory_id !== (int) $id && !TaskAccess::operatorSteps(\App\Models\FactoryOrder::query(), $user)->where('factory_id', $id)->exists()) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
@@ -74,7 +74,7 @@ class FactoryController extends Controller
                 $q->where('factory_id', $id)
                     ->visibleOnBoard();
 
-                if ($user?->factory_id && $user->role?->name !== 'admin') {
+                if (TaskAccess::isOperator($user)) {
                     TaskAccess::operatorSteps($q, $user);
                 }
             })
@@ -83,7 +83,7 @@ class FactoryController extends Controller
                         $q->where('factory_id', $id)
                             ->visibleOnBoard();
 
-                        if ($user?->factory_id && $user->role?->name !== 'admin') {
+                        if (TaskAccess::isOperator($user)) {
                             TaskAccess::operatorSteps($q, $user);
                         }
 
@@ -157,7 +157,7 @@ class FactoryController extends Controller
         $user = $request->user();
         $factoryId = (int) $data['factory_id'];
         $management = in_array($user->role?->name, ['admin', 'manager'], true);
-        abort_unless($management || $user->factory_id, 403);
+        abort_unless($management || TaskAccess::isOperator($user), 403);
         // The board's Created column has no action status; persist the database's pending value.
         $status = $data['factory_order']['status'] ?? 'pending';
         if ($status === 'waiting') $status = 'pending';
@@ -302,7 +302,7 @@ class FactoryController extends Controller
             return response()->json(['message' => 'Invalid factory IDs'], 400);
         }
 
-        if ($user->factory_id && $user->role?->name !== 'admin') {
+        if (TaskAccess::isOperator($user)) {
             foreach ($factoryIdsArray as $factoryId) {
                 if ((int) $user->factory_id !== $factoryId && !TaskAccess::operatorSteps(\App\Models\FactoryOrder::query(), $user)->where('factory_id', $factoryId)->exists()) {
                     return response()->json(['message' => 'Forbidden'], 403);
@@ -312,7 +312,7 @@ class FactoryController extends Controller
 
         $orders = Order::whereHas('factoryOrders', function ($query) use ($factoryIdsArray, $user) {
             $query->whereIn('factory_id', $factoryIdsArray);
-            if ($user->factory_id && !in_array($user->role?->name, ['admin', 'manager'], true)) TaskAccess::operatorSteps($query, $user);
+            if (TaskAccess::isOperator($user)) TaskAccess::operatorSteps($query, $user);
         })->when($user->role?->name === 'engineer', fn ($q) => $q->where('creator_id', $user->id))->with('orderNumber', 'prefixCode', 'dates', 'factoryOrders.factory', 'factoryOrders.files', 'factoryOrders.pendingRequest', 'creator:id,name')->get()
             ->map(fn ($order) => TaskAccess::restrictOperatorRelations($order, $user));
 
@@ -379,7 +379,7 @@ class FactoryController extends Controller
             ->first();
 
         if ($directFactoryFile) {
-            if (!$user->factory_id) {
+            if (!TaskAccess::isOperator($user)) {
                 return $directFactoryFile->factoryOrder?->order && TaskAccess::canView($user, $directFactoryFile->factoryOrder->order) ? $decodedPath : null;
             }
 
