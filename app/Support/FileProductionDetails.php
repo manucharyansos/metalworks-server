@@ -8,7 +8,7 @@ final class FileProductionDetails
 {
     public static function forFile(User $user, PmpFiles $file, array $context): array
     {
-        abort_unless(TaskAccess::canDownloadPmp($user, $file), 403);
+        abort_unless(TaskAccess::canViewPmp($user, $file), 403);
         $step = null;
         $order = null;
         $revision = null;

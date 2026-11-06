@@ -29,7 +29,7 @@ final class TaskFileVersions
             $operatorView = TaskAccess::isOperator($user);
             $current = $operatorView ? $file->pivot?->task_file_revision_id : $selected->get($file->id)?->task_file_revision_id;
             return ['id' => $file->id, 'original_name' => $file->original_name, 'path' => $file->path,
-                'task_file_revision_id' => $current,
+                'task_file_revision_id' => $current, 'can_download' => !$operatorView || !$file->operator_download_restricted,
                 'can_update' => !$operatorView && $steps->contains(fn ($step) => self::editable($step) && $step->files->contains('id', $file->id)),
                 'versions' => $revisions->get($file->id, collect())->values()];
         })->values();
