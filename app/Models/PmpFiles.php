@@ -31,7 +31,7 @@ class PmpFiles extends Model
     protected $casts = ['production_factory_ids' => 'array', 'production_function_ids' => 'array', 'production_instructions' => 'array', 'inspection_required' => 'boolean'];
 
     protected $with = ['category.defaultWorkshop'];
-    protected $appends = ['is_reference_file', 'routing_factory_id', 'routing_factory_ids'];
+    protected $appends = ['is_reference_file', 'routing_factory_id', 'routing_factory_ids', 'operator_download_restricted'];
 
     protected static function booted(): void
     {
@@ -46,6 +46,13 @@ class PmpFiles extends Model
     }
 
     public function category(): BelongsTo { return $this->belongsTo(FileCategory::class, 'file_category_id'); }
+    public function getOperatorDownloadRestrictedAttribute(): bool
+    {
+        return \App\Support\ProjectFilePolicy::isSolidWorksName($this->original_name)
+            || \App\Support\ProjectFilePolicy::isSolidWorksName($this->path)
+            || strtoupper((string) ($this->category?->code ?? $this->factory?->value)) === 'SW';
+    }
+
     public function getIsReferenceFileAttribute(): bool { if ($this->production_factory_ids) return false; return $this->category ? $this->category->is_reference : (bool) $this->factory?->is_reference; }
     public function getRoutingFactoryIdAttribute(): ?int
     {

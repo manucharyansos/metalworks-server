@@ -13,7 +13,7 @@ class SecureTaskFileRevisionController extends Controller
     public function show(Request $request, TaskFileRevision $taskFileRevision)
     {
         $files = TaskFileVersions::files($request->user(), $taskFileRevision->order);
-        abort_unless($files->contains('id', $taskFileRevision->pmp_file_id), 403);
+        abort_unless($files->firstWhere('id', $taskFileRevision->pmp_file_id)['can_download'] ?? false, 403);
         abort_unless(Storage::disk('private')->exists($taskFileRevision->file_path), 404);
         $headers = ['Cache-Control' => 'private, no-store, max-age=0', 'Pragma' => 'no-cache', 'X-Content-Type-Options' => 'nosniff'];
         // Client-provided extensions/content must never turn a revision into

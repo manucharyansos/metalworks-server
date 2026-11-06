@@ -530,6 +530,38 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->getJson('/api/secure-files/pmp/'.$file['id'].'/details?factory_order_id='.$step->id, $this->headers())->assertOk()->assertJsonPath('details.workshops.0.functions.0.name', 'Mark part 12');
     }
 
+    public function test_project_folder_defaults_and_explicit_sw_routing_protect_operator_downloads(): void
+    {
+        $laser = $this->factories['DXF']->id;
+        $bend = $this->factories['DLD']->id;
+        $tube = $this->factories['IQS']->id;
+        $dxf = $this->file($laser, 'sheet.dxf');
+        $dld = $this->file($bend, 'press.dld');
+        $igs = $this->file($tube, 'profile.igs');
+        $sw = $this->file($this->factories['SW']->id, 'assembly.SLDASM');
+        $this->as($this->engineer);
+        $payload = $this->payload([$dxf->id, $dld->id, $igs->id, $sw->id]);
+        $order = $this->postJson('/api/engineers/engineer', $payload, $this->headers())->assertCreated()->json('order');
+        $linked = fn ($orderId) => $this->in(fn () => Order::findOrFail($orderId)->factoryOrders()->with('files')->get()
+            ->mapWithKeys(fn ($step) => [$step->factory_id => $step->files->pluck('id')->all()]));
+        $steps = $linked($order['id']);
+        $this->assertEquals([$dxf->id], $steps[$laser]);
+        $this->assertEquals([$dld->id], $steps[$bend]);
+        $this->assertEquals([$igs->id], $steps[$tube]);
+        $marked = $this->postJson('/api/engineers/engineer', $payload + ['file_routing' => [
+            ['file_id' => $dxf->id, 'factory_ids' => [$laser, $bend]],
+            ['file_id' => $sw->id, 'factory_ids' => [$bend]],
+        ]], $this->headers())->assertCreated()->json('order');
+        $this->assertEqualsCanonicalizing([$dld->id, $sw->id, $dxf->id], $linked($marked['id'])[$bend]);
+        $url = '/api/secure-files/pmp/'.$sw->id;
+        $this->get($url.'?download=1', $this->headers())->assertOk();
+        $this->as($this->account('operator', $bend));
+        $this->get($url.'?download=1', $this->headers())->assertForbidden();
+        $this->get($url, $this->headers())->assertForbidden();
+        $this->get('/api/secure-files/path/'.$sw->path, $this->headers())->assertForbidden();
+        $this->get('/api/secure-files/pmp/'.$dxf->id.'?download=1', $this->headers())->assertOk();
+    }
+
     private function file(int $factory, string $name): PmpFiles { return $this->in(function () use ($factory, $name) { $path = 'companies/'.$this->company->id.'/qa/'.$name; Storage::disk('private')->put($path, 'private bytes'); return PmpFiles::create(['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'factory_id' => $factory, 'original_name' => $name, 'path' => $path]); }); }
     public function test_legacy_non_workshop_steps_do_not_block_real_production_completion(): void
     {

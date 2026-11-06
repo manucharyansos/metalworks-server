@@ -8,6 +8,11 @@ use Illuminate\Validation\ValidationException;
 
 final class ProjectFilePolicy
 {
+    public static function isSolidWorksName(?string $name): bool
+    {
+        return in_array(strtolower(pathinfo((string) $name, PATHINFO_EXTENSION)), ['sldprt', 'sldasm', 'slddrw', 'sw'], true);
+    }
+
     public static function needsAttributes(string $filename): bool
     {
         return in_array(strtolower(pathinfo($filename, PATHINFO_EXTENSION)), ['dxf', 'ic'], true);

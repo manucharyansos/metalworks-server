@@ -33,6 +33,11 @@ final class TaskAccess
 
     public static function canDownloadPmp(User $user, PmpFiles $file): bool
     {
+        return self::canViewPmp($user, $file) && (!self::isOperator($user) || !$file->operator_download_restricted);
+    }
+
+    public static function canViewPmp(User $user, PmpFiles $file): bool
+    {
         if ($user->role?->name === 'admin' || (!$user->factory_id && in_array($user->role?->name, ['engineer', 'manager'], true) && $user->hasPermission('pmp_files.view'))) return true;
         if (!self::isOperator($user) || !$user->hasPermission('factory.download')) return false;
         // A file is available only through a task step in the selected workshop.

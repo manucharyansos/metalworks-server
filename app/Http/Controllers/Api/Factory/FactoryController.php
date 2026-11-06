@@ -383,6 +383,8 @@ class FactoryController extends Controller
                 return $directFactoryFile->factoryOrder?->order && TaskAccess::canView($user, $directFactoryFile->factoryOrder->order) ? $decodedPath : null;
             }
 
+            abort_if(\App\Support\ProjectFilePolicy::isSolidWorksName($directFactoryFile->original_name)
+                || \App\Support\ProjectFilePolicy::isSolidWorksName($decodedPath), 403);
             $factoryOrder = $directFactoryFile->factoryOrder;
             if (!$factoryOrder || !TaskAccess::operatorSteps(\App\Models\FactoryOrder::query(), $user)->whereKey($factoryOrder->id)->exists()) return null;
 
