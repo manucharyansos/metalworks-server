@@ -28,7 +28,9 @@ class OperatorCalendarController extends Controller
                 ->filter()->max();
         }
         if (!$handoff) {
-            $since = $step->ready_at ?? $step->created_at;
+            // created_at's public accessor returns d/m/Y for display. Use the stored
+            // timestamp so legacy stages retain their date and time before conversion.
+            $since = $step->ready_at ?? $step->getRawOriginal('created_at');
             $handoff = $since ? CarbonImmutable::parse($since)->setTimezone('Asia/Yerevan')->toDateString() : null;
         }
         $planned = $step->planned_start ? substr((string) $step->planned_start, 0, 10) : null;

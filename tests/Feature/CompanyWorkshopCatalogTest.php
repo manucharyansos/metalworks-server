@@ -963,11 +963,12 @@ class CompanyWorkshopCatalogTest extends TestCase
         });
         $this->in(function () use ($cut, $bendStep, $cutter, $bender) {
             $cut->update(['operator_id' => $cutter->id, 'deadline' => '2098-01-08']);
+            // Legacy stages can have no ready_at. The stored UTC timestamp crosses midnight in Yerevan.
+            DB::table('factory_orders')->where('id', $cut->id)->update(['ready_at' => null, 'created_at' => '2026-10-29 21:30:00']);
             $bendStep->update(['operator_id' => $bender->id, 'deadline' => '2098-01-10', 'depends_on_id' => $cut->id, 'predecessor_ids' => [$cut->id]]);
         });
         $tasks = collect($this->getJson('/api/operator-calendar?from=2098-01-05&to=2098-01-11', $this->headers())->assertOk()->json('tasks'))->keyBy('id');
-        $today = \Carbon\CarbonImmutable::now('Asia/Yerevan')->toDateString();
-        $this->assertSame($today, $tasks[$cut->id]['starts_on']);
+        $this->assertSame('2026-10-30', $tasks[$cut->id]['starts_on']);
         $this->assertSame('2098-01-08', $tasks[$cut->id]['stage_due_date']);
         $this->assertTrue($tasks[$bendStep->id]['blocked']);
         // A waiting workshop starts when the workshop before it is due.
