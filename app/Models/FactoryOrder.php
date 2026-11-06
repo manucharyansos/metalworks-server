@@ -34,6 +34,7 @@ class FactoryOrder extends Model
         'confirmation_required', 'confirmation_method', 'evidence_text', 'evidence_photo_path',
         'engineer_confirmation_at', 'engineer_confirmation_user_id', 'completed_at',
         'depends_on_id', 'predecessor_ids', 'route_position', 'ready_at', 'return_note', 'returned_at', 'deadline', 'priority',
+        'planned_start',
     ];
 
     // Timestamps written with now() are serialized with their timezone

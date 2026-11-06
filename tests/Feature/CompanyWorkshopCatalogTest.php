@@ -913,7 +913,10 @@ class CompanyWorkshopCatalogTest extends TestCase
         $id = $this->postJson('/api/operator-calendar/bookings', $booking, $this->headers())->assertCreated()->json('booking.id');
         $this->postJson('/api/operator-calendar/bookings', $booking, $this->headers())->assertConflict();
         $this->postJson('/api/operator-calendar/bookings', array_replace($booking, ['starts_at' => '2098-01-06 08:00', 'ends_at' => '2098-01-06 09:00']), $this->headers())->assertUnprocessable();
-        $this->getJson($range, $this->headers())->assertOk()->assertJsonPath('tasks.0.planned', true)->assertJsonCount(1, 'bookings');
+        $number = $this->in(fn () => Order::findOrFail($order['id'])->orderNumber?->number);
+        $this->assertNotEmpty($number);
+        $this->getJson($range, $this->headers())->assertOk()->assertJsonPath('tasks.0.planned', true)->assertJsonCount(1, 'bookings')
+            ->assertJsonPath('tasks.0.order_number', $number)->assertJsonPath('bookings.0.order_number', $number);
         $otherEngineer = $this->account('engineer'); $this->as($otherEngineer);
         $this->getJson($range, $this->headers())->assertOk()->assertJsonPath('bookings.0.can_edit', false);
         $this->deleteJson('/api/operator-calendar/bookings/'.$id, [], $this->headers())->assertForbidden();
@@ -945,6 +948,84 @@ class CompanyWorkshopCatalogTest extends TestCase
         $calendar->assertJsonCount(1, 'tasks')->assertJsonCount(1, 'bookings')
             ->assertJsonPath('tasks.0.estimated_minutes', 90)->assertJsonPath('tasks.0.due_date', '2099-01-01')
             ->assertJsonPath('tasks.0.operator_name', $operator->name)->assertJsonPath('bookings.0.ends_at', '2098-01-06 11:00:00');
+    }
+
+    public function test_operator_workload_spans_each_stage_from_its_start_to_its_workshop_deadline(): void
+    {
+        $laser = $this->factories['DXF']; $bend = $this->factories['DLD'];
+        $cutter = $this->account('operator', $laser->id); $bender = $this->account('operator', $bend->id);
+        $files = [$this->file($laser->id, 'window-cut.dxf')->id, $this->file($bend->id, 'window-bend.dld')->id];
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload($files), $this->headers())->assertCreated()->json('order');
+        [$cut, $bendStep] = $this->in(function () use ($order, $laser, $bend) {
+            $steps = Order::findOrFail($order['id'])->factoryOrders()->forWorkshops()->get()->keyBy('factory_id');
+            return [$steps[$laser->id], $steps[$bend->id]];
+        });
+        $this->in(function () use ($cut, $bendStep, $cutter, $bender) {
+            $cut->update(['operator_id' => $cutter->id, 'deadline' => '2098-01-08']);
+            $bendStep->update(['operator_id' => $bender->id, 'deadline' => '2098-01-10', 'depends_on_id' => $cut->id, 'predecessor_ids' => [$cut->id]]);
+        });
+        $tasks = collect($this->getJson('/api/operator-calendar?from=2098-01-05&to=2098-01-11', $this->headers())->assertOk()->json('tasks'))->keyBy('id');
+        $today = \Carbon\CarbonImmutable::now('Asia/Yerevan')->toDateString();
+        $this->assertSame($today, $tasks[$cut->id]['starts_on']);
+        $this->assertSame('2098-01-08', $tasks[$cut->id]['stage_due_date']);
+        $this->assertTrue($tasks[$bendStep->id]['blocked']);
+        // A waiting workshop starts when the workshop before it is due.
+        $this->assertSame('2098-01-08', $tasks[$bendStep->id]['starts_on']);
+        $this->assertSame('2098-01-10', $tasks[$bendStep->id]['due_date']);
+        $this->assertSame('stage', $tasks[$bendStep->id]['deadline_source']);
+        $this->assertStringStartsWith('2099-01-01', $tasks[$bendStep->id]['order_due_at']);
+    }
+
+    public function test_an_unassigned_stage_can_be_placed_into_an_operators_free_days(): void
+    {
+        $laser = $this->factories['DXF'];
+        $operator = $this->account('operator', $laser->id);
+        $other = $this->account('operator', $laser->id);
+        $bender = $this->account('operator', $this->factories['DLD']->id);
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$this->file($laser->id, 'place.dxf')->id]), $this->headers())->assertCreated()->json('order');
+        $step = $this->in(fn () => Order::findOrFail($order['id'])->factoryOrders()->forWorkshops()->firstOrFail());
+        $slot = ['factory_order_id' => $step->id, 'operator_id' => $operator->id, 'deadline' => '2098-03-10'];
+        $this->postJson('/api/operator-calendar/place', ['deadline' => '2000-01-01'] + $slot, $this->headers())->assertUnprocessable();
+        $this->postJson('/api/operator-calendar/place', ['deadline' => '2099-02-01'] + $slot, $this->headers())->assertUnprocessable();
+        $this->postJson('/api/operator-calendar/place', ['operator_id' => $bender->id] + $slot, $this->headers())->assertUnprocessable();
+        $stranger = $this->account('engineer'); $this->as($stranger);
+        $this->postJson('/api/operator-calendar/place', $slot, $this->headers())->assertForbidden();
+        $this->as($this->engineer);
+        $this->postJson('/api/operator-calendar/place', $slot, $this->headers())->assertOk()->assertJsonPath('operator_id', $operator->id);
+        $fresh = $this->in(fn () => $step->fresh());
+        $this->assertSame($operator->id, (int) $fresh->operator_id);
+        $this->assertSame('2098-03-10', substr((string) $fresh->deadline, 0, 10));
+        $this->assertTrue($this->in(fn () => \App\Models\OrderLog::where('order_id', $order['id'])->where('action', 'factory_order.deadline_changed')->exists()));
+        // Another operator cannot silently take work that is already assigned.
+        $this->postJson('/api/operator-calendar/place', ['operator_id' => $other->id] + $slot, $this->headers())->assertConflict();
+        $this->postJson('/api/operator-calendar/place', ['deadline' => '2098-03-12'] + $slot, $this->headers())->assertOk();
+        $this->assertSame('2098-03-12', substr((string) $this->in(fn () => $step->fresh()->deadline), 0, 10));
+        // The chosen free period's first day becomes the stage's planned start.
+        $this->postJson('/api/operator-calendar/place', ['starts_on' => '2098-03-13'] + $slot, $this->headers())->assertUnprocessable();
+        $this->postJson('/api/operator-calendar/place', ['starts_on' => '2098-03-05'] + $slot, $this->headers())->assertOk();
+        $this->assertSame('2098-03-05', substr((string) $this->in(fn () => $step->fresh()->planned_start), 0, 10));
+        $task = collect($this->getJson('/api/operator-calendar?from=2098-03-02&to=2098-03-08', $this->headers())->assertOk()->json('tasks'))->firstWhere('id', $step->id);
+        $this->assertSame('2098-03-05', $task['starts_on']);
+        $this->assertSame('2098-03-05', $task['planned_start']);
+    }
+
+    public function test_a_task_created_from_free_time_keeps_the_planned_start_of_its_stage(): void
+    {
+        $laser = $this->factories['DXF'];
+        $operator = $this->account('operator', $laser->id);
+        $file = $this->file($laser->id, 'planned.dxf');
+        $this->as($this->engineer);
+        $payload = $this->payload([$file->id]) + ['factory_operators' => [['factory_id' => $laser->id, 'user_id' => $operator->id]]];
+        $this->postJson('/api/engineers/engineer', $payload + ['planned_starts' => [['factory_id' => $this->factories['DLD']->id, 'starts_on' => '2098-01-05']]], $this->headers())->assertUnprocessable();
+        $this->postJson('/api/engineers/engineer', $payload + ['planned_starts' => [['factory_id' => $laser->id, 'starts_on' => '2000-01-05']]], $this->headers())->assertUnprocessable();
+        $order = $this->postJson('/api/engineers/engineer', $payload + ['planned_starts' => [['factory_id' => $laser->id, 'starts_on' => '2098-01-05']]], $this->headers())->assertCreated()->json('order');
+        $step = $this->in(fn () => Order::findOrFail($order['id'])->factoryOrders()->forWorkshops()->firstOrFail());
+        $this->assertSame('2098-01-05', substr((string) $step->planned_start, 0, 10));
+        $this->assertSame($operator->id, (int) $step->operator_id);
+        $task = collect($this->getJson('/api/operator-calendar?from=2098-01-05&to=2098-01-11', $this->headers())->assertOk()->json('tasks'))->firstWhere('id', $step->id);
+        $this->assertSame('2098-01-05', $task['starts_on']);
     }
 
     public function test_planning_an_existing_unassigned_stage_and_filtering_my_tasks(): void

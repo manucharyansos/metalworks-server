@@ -51,7 +51,7 @@ class EngineerController extends Controller
             $options = null;
             if ($request->boolean('filter_options')) {
                 $steps = FactoryOrder::forWorkshops()->whereHas('order', fn ($q) => $q->where('creator_id', $user->id))
-                    ->select('id', 'factory_id', 'operator_id')->with('factory:id,name', 'operator:id,name')->get();
+                    ->select('id', 'factory_id', 'operator_id')->with('factory:id,name', 'operator:id,name', 'helpers')->get();
                 $pairs = fn ($relation) => $steps->pluck($relation)->filter()->unique('id')->sortBy('name')->values()
                     ->map(fn ($row) => ['id' => $row->id, 'name' => $row->name]);
                 $people = $steps->pluck('operator')->filter()->merge($steps->flatMap(fn ($s) => $s->helpers))->unique('id')->sortBy('name')->values()->map(fn ($u) => ['id' => $u->id, 'name' => $u->name]);
@@ -175,6 +175,9 @@ class EngineerController extends Controller
                 'stage_schedule.*.operator_id' => 'required|integer',
                 'stage_schedule.*.estimated_minutes' => 'required|integer|min:1|max:10080',
                 'stage_schedule.*.starts_at' => 'nullable|date_format:Y-m-d H:i',
+                'planned_starts' => 'sometimes|array|max:100',
+                'planned_starts.*.factory_id' => 'required|integer|distinct',
+                'planned_starts.*.starts_on' => 'required|date_format:Y-m-d',
                 'factory_operators' => 'nullable|array',
                 'factory_operators.*.factory_id' => 'required|exists:factories,id',
                 'factory_operators.*.user_id' => 'required|exists:users,id',
@@ -220,6 +223,16 @@ class EngineerController extends Controller
                 $plan = $validatedData['production_route'] ?? \App\Support\ProjectFilePlan::taskPlan($pmp, $selectedFiles, $validatedData['file_routing'] ?? [], $validatedData['reference_file_visibility'] ?? []);
                 if ($plan) ProductionRoute::apply($order, $plan);
                 else ProductionRoute::refreshReadiness($order, null);
+
+                // Days chosen from an operator's free time on the workload calendar.
+                $today = \Carbon\CarbonImmutable::now('Asia/Yerevan')->toDateString();
+                $finish = substr((string) $validatedData['finish_date'], 0, 10);
+                foreach ($validatedData['planned_starts'] ?? [] as $entry) {
+                    $step = $order->factoryOrders()->where('factory_id', $entry['factory_id'])->first();
+                    abort_unless($step && $step->factory?->is_workshop, 422, 'Պլանավորված սկիզբը նշված է արտադրամասի համար, որի աշխատանք այս առաջադրանքում չկա։');
+                    abort_if($entry['starts_on'] < $today || $entry['starts_on'] > $finish, 422, 'Պլանավորված սկիզբը պետք է լինի այսօրվանից մինչև ավարտի ժամկետը։');
+                    $step->update(['planned_start' => $entry['starts_on']]);
+                }
 
                 // Earlier confirmed reservations must exist before dependent stages are checked.
                 $schedule = collect($validatedData['stage_schedule'] ?? [])->sortBy('starts_at');

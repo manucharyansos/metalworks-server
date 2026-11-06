@@ -70,6 +70,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
         Route::delete('operator-calendar/shifts/{interval}', [\App\Http\Controllers\Api\Order\OperatorCalendarController::class, 'deleteShift'])->whereNumber('interval');
         Route::post('operator-calendar/bookings', [\App\Http\Controllers\Api\Order\OperatorCalendarController::class, 'book']);
         Route::delete('operator-calendar/bookings/{booking}', [\App\Http\Controllers\Api\Order\OperatorCalendarController::class, 'cancel'])->whereNumber('booking');
+        Route::post('operator-calendar/place', [\App\Http\Controllers\Api\Order\OperatorCalendarController::class, 'place'])->middleware('permission:orders.update');
         Route::get('task-workload', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'workload']);
         Route::put('tasks/{order}/production-route', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'productionRoute'])->whereNumber('order')->middleware('permission:orders.update');
         Route::put('tasks/{order}/evidence-requirements', [\App\Http\Controllers\Api\Order\TaskRoutingController::class, 'evidenceRequirements'])->whereNumber('order')->middleware('permission:orders.update');
