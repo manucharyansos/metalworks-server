@@ -107,6 +107,12 @@ class Order extends Model
         return $this->belongsTo(User::class, 'user_id');
     }
 
+    /** The project item the order code (990.01) stands for: group 990, number 01. */
+    public function remoteNumber(): BelongsTo
+    {
+        return $this->belongsTo(RemoteNumber::class);
+    }
+
     public function client(): HasOne
     {
         return $this->hasOne(Client::class, 'user_id', 'user_id');
@@ -120,6 +126,13 @@ class Order extends Model
     public function getCreatedAtAttribute($value): string
     {
         return (new DateTime($value))->format('d/m/Y');
+    }
+
+    /** The creation moment with its zone, for lists that show the hour; created_at is only the day. */
+    public function getCreatedTimeAttribute(): ?string
+    {
+        $raw = $this->attributes['created_at'] ?? null;
+        return $raw ? $this->asDateTime($raw)->toIso8601String() : null;
     }
 
     public function updateStatusIfAllFactoriesCompleted(): void

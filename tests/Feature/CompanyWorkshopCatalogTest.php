@@ -1123,6 +1123,27 @@ class CompanyWorkshopCatalogTest extends TestCase
         }
     }
 
+    public function test_my_task_list_sends_project_names_and_the_creation_hour_next_to_the_day(): void
+    {
+        $file = $this->file($this->factories['DXF']->id, 'created.dxf');
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+        DB::table('orders')->where('id', $order['id'])->update(['created_at' => '2026-10-28 06:15:00']);
+        $row = $this->getJson('/api/engineers/engineer', $this->headers())->assertOk()->json('orders.0');
+        $this->assertSame($order['id'], $row['id']);
+        $this->assertSame('28/10/2026', $row['created_at'], 'other screens keep the day format');
+        $this->assertSame(\Illuminate\Support\Carbon::parse('2026-10-28 06:15:00', config('app.timezone'))->toIso8601String(), $row['created_time']);
+        $this->assertSame('Catalog task', $row['description']);
+        // 987.01 stands for project 987 and its item 01; the list sends both names.
+        $this->assertSame('987.01', $row['name']);
+        $this->assertSame('Catalog part', $row['remote_number']['remote_number_name']);
+        $this->assertSame('Catalog QA', $row['remote_number']['pmp']['group_name']);
+        foreach (['Catalog QA', 'Catalog part'] as $term) {
+            $this->getJson('/api/engineers/engineer?search='.urlencode($term), $this->headers())->assertOk()->assertJsonCount(1, 'orders');
+        }
+        $this->getJson('/api/engineers/engineer?search=nothing-like-this', $this->headers())->assertOk()->assertJsonCount(0, 'orders');
+    }
+
     public function test_task_team_cross_workshop_access_and_atomic_helper_reservations(): void
     {
         $laser = $this->factories['DXF'];

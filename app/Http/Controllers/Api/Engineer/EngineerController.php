@@ -46,6 +46,8 @@ class EngineerController extends Controller
                 'client.user',
                 'creator:id,name',
                 'logs.user:id,name',
+                'remoteNumber:id,pmp_id,remote_number,remote_number_name',
+                'remoteNumber.pmp:id,group,group_name',
             ])->where('creator_id', $user->id);
 
             $options = null;
@@ -72,7 +74,10 @@ class EngineerController extends Controller
                     $q->where('name', 'like', "%{$search}%")
                         ->orWhere('description', 'like', "%{$search}%")
                         ->orWhereHas('orderNumber', fn ($w) => $w->where('number', 'like', "%{$search}%"))
-                        ->orWhereHas('prefixCode', fn ($w) => $w->where('code', 'like', "%{$search}%"));
+                        ->orWhereHas('prefixCode', fn ($w) => $w->where('code', 'like', "%{$search}%"))
+                        // The list shows the project and item names, so they are searchable too.
+                        ->orWhereHas('remoteNumber', fn ($w) => $w->where('remote_number_name', 'like', "%{$search}%")
+                            ->orWhereHas('pmp', fn ($p) => $p->where('group_name', 'like', "%{$search}%")));
                 });
             }
 
@@ -95,6 +100,7 @@ class EngineerController extends Controller
                     ->orderByRaw('COALESCE(priority_rank, 0) DESC')->orderByRaw("COALESCE(sort_deadline, '9999-12-31') ASC");
             }
             $page = $query->orderByDesc('created_at')->orderByDesc('id')->paginate($perPage);
+            $page->getCollection()->each->append('created_time');
 
             return response()->json([
                 'orders' => $page->items(),
