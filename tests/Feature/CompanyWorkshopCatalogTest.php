@@ -1008,6 +1008,9 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->assertSame('2098-01-10', $tasks[$bendStep->id]['due_date']);
         $this->assertSame('stage', $tasks[$bendStep->id]['deadline_source']);
         $this->assertStringStartsWith('2099-01-01', $tasks[$bendStep->id]['order_due_at']);
+        // Jobs carry the project and item names that the 987.01 code stands for.
+        $this->assertSame('987.01', $tasks[$cut->id]['name']);
+        $this->assertSame('Catalog QA · Catalog part', $tasks[$cut->id]['title']);
     }
 
     public function test_an_unassigned_stage_can_be_placed_into_an_operators_free_days(): void

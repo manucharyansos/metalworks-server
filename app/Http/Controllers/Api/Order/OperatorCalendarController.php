@@ -41,6 +41,13 @@ class OperatorCalendarController extends Controller
         abort_unless(substr($data['starts_at'], 0, 10) === substr($data['ends_at'], 0, 10), 422, 'Յուրաքանչյուր օրվա ժամերը նշեք առանձին։');
         return [$data['starts_at'].':00', $data['ends_at'].':00'];
     }
+    /** The project and item names behind an order code such as 990.01, when the order has them. */
+    private function title(\App\Models\Order $order): ?string
+    {
+        $item = $order->remoteNumber;
+        $names = array_values(array_unique(array_filter([trim((string) $item?->pmp?->group_name), trim((string) $item?->remote_number_name)])));
+        return $names ? implode(' · ', $names) : null;
+    }
     public function index(Request $request) {
         $this->authorizeRead($request);
         $data = $request->validate(['from' => 'required|date_format:Y-m-d', 'to' => 'required|date_format:Y-m-d|after_or_equal:from']);
@@ -49,10 +56,10 @@ class OperatorCalendarController extends Controller
         $workload = TaskRouting::workload();
         $shifts = OperatorWorkInterval::where('starts_at', '<', $to)->where('ends_at', '>', $from)->orderBy('starts_at')->get();
         $bookings = OperatorBooking::active()->where('starts_at', '<', $to)->where('ends_at', '>', $from)
-            ->with(['step.order.creator', 'step.order.orderNumber', 'step.factory', 'step.helpers'])->orderBy('starts_at')->get()->map(fn ($b) => [
+            ->with(['step.order.creator', 'step.order.orderNumber', 'step.order.remoteNumber.pmp', 'step.factory', 'step.helpers'])->orderBy('starts_at')->get()->map(fn ($b) => [
                 'id' => $b->id, 'operator_id' => $b->operator_id, 'factory_order_id' => $b->factory_order_id,
                 'starts_at' => $b->starts_at, 'ends_at' => $b->ends_at,
-                'task' => $b->step->order->name, 'order_id' => $b->step->order_id, 'order_number' => $b->step->order->orderNumber?->number,
+                'task' => $b->step->order->name, 'title' => $this->title($b->step->order), 'order_id' => $b->step->order_id, 'order_number' => $b->step->order->orderNumber?->number,
                 'workshop' => $b->step->factory->name,
                 'engineer' => $b->step->order->creator?->name, 'blocked' => $b->step->is_blocked,
                 'is_helper' => (bool) $b->primary_booking_id,
@@ -62,7 +69,7 @@ class OperatorCalendarController extends Controller
         $steps = FactoryOrder::forWorkshops()->whereNull('completed_at')
             ->where(fn ($q) => $q->whereNull('status')->orWhereNotIn('status', ['finished', 'completed', 'done', 'canceled', 'cancelled']))
             ->whereHas('order', fn ($q) => $q->whereNull('status')->orWhereNotIn('status', ['canceled', 'cancelled']))
-            ->with(['order.creator', 'order.dates', 'order.orderNumber', 'operator:id,name', 'factory', 'helpers'])->orderBy('id')->get();
+            ->with(['order.creator', 'order.dates', 'order.orderNumber', 'order.remoteNumber.pmp', 'operator:id,name', 'factory', 'helpers'])->orderBy('id')->get();
         $future = OperatorBooking::active()->where('ends_at', '>', CarbonImmutable::now('Asia/Yerevan')->format('Y-m-d H:i:s'))->get();
         $open = $steps->keyBy('id');
         return response()->json(['timezone' => 'Asia/Yerevan', 'factories' => $workload['factories'], 'shifts' => $shifts, 'bookings' => $bookings,
@@ -78,7 +85,7 @@ class OperatorCalendarController extends Controller
                 'due_date' => substr((string) ($s->deadline ?: $s->order->dates?->finish_date), 0, 10) ?: null,
                 'deadline_source' => $s->deadline ? 'stage' : ($s->order->dates?->finish_date ? 'order' : null),
                 'estimated_minutes' => $s->estimated_minutes, 'status' => $s->status,
-                'name' => $s->order->name, 'workshop' => $s->factory->name, 'engineer' => $s->order->creator?->name,
+                'name' => $s->order->name, 'title' => $this->title($s->order), 'workshop' => $s->factory->name, 'engineer' => $s->order->creator?->name,
                 'blocked' => $s->is_blocked, 'can_edit' => !$s->awaiting_engineer_confirmation && $this->editable($request->user(), $s->order),
                 'planned' => $future->contains(fn ($b) => (int) $b->factory_order_id === (int) $s->id && (int) $b->operator_id === (int) $s->operator_id),
             ])->values()]);
