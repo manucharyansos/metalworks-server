@@ -55,7 +55,11 @@ class OperatorCalendarController extends Controller
         $from = $data['from'].' 00:00:00'; $to = $data['to'].' 23:59:59';
         $workload = TaskRouting::workload();
         $shifts = OperatorWorkInterval::where('starts_at', '<', $to)->where('ends_at', '>', $from)->orderBy('starts_at')->get();
-        $bookings = OperatorBooking::active()->where('starts_at', '<', $to)->where('ends_at', '>', $from)
+        $now = CarbonImmutable::now('Asia/Yerevan')->format('Y-m-d H:i:s');
+        // Hours reserved later than the shown days still hold their operator, so
+        // the free days computed on the page must know about them too.
+        $bookings = OperatorBooking::active()
+            ->where(fn ($q) => $q->where(fn ($shown) => $shown->where('starts_at', '<', $to)->where('ends_at', '>', $from))->orWhere('ends_at', '>', $now))
             ->with(['step.order.creator', 'step.order.orderNumber', 'step.order.remoteNumber.pmp', 'step.factory', 'step.helpers'])->orderBy('starts_at')->get()->map(fn ($b) => [
                 'id' => $b->id, 'operator_id' => $b->operator_id, 'factory_order_id' => $b->factory_order_id,
                 'starts_at' => $b->starts_at, 'ends_at' => $b->ends_at,
@@ -70,7 +74,7 @@ class OperatorCalendarController extends Controller
             ->where(fn ($q) => $q->whereNull('status')->orWhereNotIn('status', ['finished', 'completed', 'done', 'canceled', 'cancelled']))
             ->whereHas('order', fn ($q) => $q->whereNull('status')->orWhereNotIn('status', ['canceled', 'cancelled']))
             ->with(['order.creator', 'order.dates', 'order.orderNumber', 'order.remoteNumber.pmp', 'operator:id,name', 'factory', 'helpers'])->orderBy('id')->get();
-        $future = OperatorBooking::active()->where('ends_at', '>', CarbonImmutable::now('Asia/Yerevan')->format('Y-m-d H:i:s'))->get();
+        $future = OperatorBooking::active()->where('ends_at', '>', $now)->get();
         $open = $steps->keyBy('id');
         return response()->json(['timezone' => 'Asia/Yerevan', 'factories' => $workload['factories'], 'shifts' => $shifts, 'bookings' => $bookings,
             'can_manage_shifts' => in_array($request->user()->role?->name, ['admin', 'manager'], true),
@@ -138,7 +142,8 @@ class OperatorCalendarController extends Controller
     public function place(Request $request) {
         $this->authorizeRead($request);
         $data = $request->validate(['factory_order_id' => 'required|integer', 'operator_id' => 'required|integer',
-            'deadline' => 'required|date_format:Y-m-d', 'starts_on' => 'sometimes|nullable|date_format:Y-m-d|before_or_equal:deadline']);
+            'deadline' => 'required|date_format:Y-m-d', 'starts_on' => 'sometimes|nullable|date_format:Y-m-d|before_or_equal:deadline',
+            'extend_order' => 'sometimes|boolean']);
         $today = CarbonImmutable::now('Asia/Yerevan')->toDateString();
         abort_if($data['deadline'] < $today || ($data['starts_on'] ?? $today) < $today, 422, 'Ընտրեք այսօրվա կամ ապագա օր։');
         $step = FactoryOrder::whereKey($data['factory_order_id'])->firstOrFail();
@@ -149,7 +154,16 @@ class OperatorCalendarController extends Controller
             abort_unless($locked->factory?->is_workshop, 422);
             abort_if($locked->operator_id && (int) $locked->operator_id !== (int) $data['operator_id'], 409, 'Աշխատանքն արդեն ունի կատարող։ Թարմացրեք էջը։');
             $finish = substr((string) $order->dates?->finish_date, 0, 10);
-            abort_if($finish && $data['deadline'] > $finish, 422, 'Արտադրամասի ժամկետը չի կարող լինել առաջադրանքի ընդհանուր ժամկետից հետո։');
+            if ($finish && $data['deadline'] > $finish) {
+                abort_unless(!empty($data['extend_order']), 422, 'Արտադրամասի ժամկետը չի կարող լինել առաջադրանքի ընդհանուր ժամկետից հետո։');
+                // Moving work past the task's overall deadline moves that deadline too, when asked to.
+                $was = (string) $order->dates->finish_date;
+                $now = $data['deadline'].' '.(strlen($was) > 10 ? substr($was, 11, 5) : '18:00').':00';
+                $order->dates->update(['finish_date' => $now]);
+                OrderLog::create(['order_id' => $order->id, 'user_id' => $request->user()->id, 'action' => 'order.deadline_changed',
+                    'message' => sprintf('Ընդհանուր ժամկետ «%s» → «%s»', $was, $now),
+                    'meta' => ['from' => $was, 'to' => $now, 'factory_order_id' => $locked->id]]);
+            }
             $previous = $locked->operator_id;
             $locked = TaskRouting::assign($request->user(), $locked, (int) $data['operator_id']);
             $before = $locked->deadline ? substr((string) $locked->deadline, 0, 10) : null;

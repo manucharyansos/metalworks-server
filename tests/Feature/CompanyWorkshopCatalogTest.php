@@ -962,6 +962,22 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->getJson($range, $this->headers())->assertOk()->assertJsonCount(0, 'shifts')->assertJsonCount(0, 'bookings')->assertJsonPath('tasks.0.planned', false);
     }
 
+    public function test_the_calendar_sends_hours_reserved_after_the_shown_days(): void
+    {
+        $laser = $this->factories['DXF']; $operator = $this->account('operator', $laser->id);
+        $file = $this->file($laser->id, 'later.dxf');
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+        $step = $this->in(fn () => Order::findOrFail($order['id'])->factoryOrders()->forWorkshops()->first());
+        $this->in(fn () => $step->update(['operator_id' => $operator->id]));
+        $booking = ['operator_id' => $operator->id, 'factory_order_id' => $step->id, 'starts_at' => '2098-02-10 10:00', 'ends_at' => '2098-02-10 12:00', 'allow_without_shift' => true];
+        $this->postJson('/api/operator-calendar/bookings', $booking, $this->headers())->assertCreated();
+        // A week shown before the reserved day still lists it, so that day is not offered as free.
+        $later = $this->getJson('/api/operator-calendar?from=2098-01-06&to=2098-01-12', $this->headers())->assertOk()->json('bookings');
+        $this->assertSame(['2098-02-10 10:00:00'], array_column($later, 'starts_at'));
+        $this->assertSame($step->id, $later[0]['factory_order_id']);
+    }
+
     public function test_creating_a_task_can_reserve_the_selected_stage_atomically(): void
     {
         $laser = $this->factories['DXF'];
@@ -1045,6 +1061,12 @@ class CompanyWorkshopCatalogTest extends TestCase
         $task = collect($this->getJson('/api/operator-calendar?from=2098-03-02&to=2098-03-08', $this->headers())->assertOk()->json('tasks'))->firstWhere('id', $step->id);
         $this->assertSame('2098-03-05', $task['starts_on']);
         $this->assertSame('2098-03-05', $task['planned_start']);
+        // Moving work past the task's overall deadline moves that deadline too, only when asked.
+        $this->postJson('/api/operator-calendar/place', ['deadline' => '2099-02-01', 'extend_order' => false] + $slot, $this->headers())->assertUnprocessable();
+        $this->postJson('/api/operator-calendar/place', ['deadline' => '2099-02-01', 'extend_order' => true] + $slot, $this->headers())->assertOk();
+        $this->assertSame('2099-02-01', substr((string) $this->in(fn () => $step->fresh()->deadline), 0, 10));
+        $this->assertSame('2099-02-01 18:00:00', (string) $this->in(fn () => Order::findOrFail($order['id'])->dates->finish_date));
+        $this->assertTrue($this->in(fn () => \App\Models\OrderLog::where('order_id', $order['id'])->where('action', 'order.deadline_changed')->exists()));
     }
 
     public function test_a_task_created_from_free_time_keeps_the_planned_start_of_its_stage(): void
