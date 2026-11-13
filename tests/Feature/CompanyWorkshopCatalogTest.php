@@ -1131,6 +1131,41 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->postJson('/api/operator-calendar/bookings', array_replace($slot, ['starts_at' => '2098-01-07 13:00', 'ends_at' => '2098-01-07 14:00']), $this->headers())->assertUnprocessable();
     }
 
+    public function test_another_account_signs_in_at_the_first_try_after_a_sign_out(): void
+    {
+        // The browser flow: a stateful origin and a cookie session that lives only
+        // in the cookies sent back, with fresh guards and session for every request
+        // as on the real server.
+        config(['session.driver' => 'cookie', 'sanctum.stateful' => ['spa.test']]);
+        $engineer = $this->account('engineer');
+        $admin = $this->account('admin');
+        $jar = [];
+        $send = function (string $method, string $uri, array $data = []) use (&$jar) {
+            $this->app['auth']->forgetGuards();
+            $this->app['auth']->setDefaultDriver('web');
+            $this->app['session']->forgetDrivers();
+            $this->app->forgetInstance('session.store');
+            $this->app['cookie']->flushQueuedCookies();
+            $this->defaultCookies = [];
+            $this->unencryptedCookies = $jar;
+            $response = $this->withCredentials()->withHeaders(['Referer' => 'http://spa.test/'])->json($method, $uri, $data);
+            foreach ($response->headers->getCookies() as $cookie) {
+                if ($cookie->isCleared()) unset($jar[$cookie->getName()]);
+                else $jar[$cookie->getName()] = $cookie->getValue();
+            }
+            return $response;
+        };
+        $send('POST', '/api/login', ['email' => $engineer->email, 'password' => 'test-password'])->assertOk();
+        $send('GET', '/api/user')->assertOk()->assertJsonPath('id', $engineer->id);
+        $send('POST', '/api/logout')->assertOk();
+        $send('POST', '/api/login', ['email' => $admin->email, 'password' => 'test-password'])->assertOk();
+        $send('GET', '/api/user')->assertOk()->assertJsonPath('id', $admin->id);
+        // The same account again still works too.
+        $send('POST', '/api/logout')->assertOk();
+        $send('POST', '/api/login', ['email' => $admin->email, 'password' => 'test-password'])->assertOk();
+        $send('GET', '/api/user')->assertOk()->assertJsonPath('id', $admin->id);
+    }
+
     public function test_task_priority_sort_happens_before_pagination_and_completed_tasks_are_last(): void
     {
         $file = $this->file($this->factories['DXF']->id, 'priority.dxf');

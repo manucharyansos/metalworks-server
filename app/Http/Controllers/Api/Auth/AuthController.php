@@ -50,6 +50,15 @@ class AuthController extends Controller
         try {
             $remember = (bool) ($validated['remember'] ?? false);
 
+            // A sign-out made before the logout fix may have left the previous
+            // account's password hash in this session; it would sign this account
+            // out on its first request. The next request stores the right one.
+            if ($request->hasSession()) {
+                foreach (array_keys($request->session()->all()) as $key) {
+                    if (str_starts_with((string) $key, 'password_hash_')) $request->session()->forget($key);
+                }
+            }
+
             if (!Auth::attempt($credentials, $remember)) {
                 RateLimiter::hit($rateLimitKey, 60);
                 return response()->json(['error' => 'Invalid credentials'], 401);
@@ -158,6 +167,11 @@ class AuthController extends Controller
         }
 
         Auth::guard('web')->logout();
+        // Sanctum's guard still remembers who sent this request. Forget them too:
+        // otherwise Sanctum stores their password hash in the fresh session, and
+        // the next account to sign in is signed out again on its first request
+        // ("Unauthenticated."), while signing in once more works.
+        $request->setUserResolver(fn () => null);
 
         if ($request->hasSession()) {
             $request->session()->invalidate();
