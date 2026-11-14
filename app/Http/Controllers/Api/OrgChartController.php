@@ -36,13 +36,14 @@ class OrgChartController extends Controller
         $this->guardPosition($request, $position);
         $data = $this->validated($request, $position);
         DB::transaction(function () use ($request, $position, $data): void {
-            $access = (int) $position->role_id !== (int) $data['role_id']
+            $access = (int) ($position->role_id ?? 0) !== (int) ($data['role_id'] ?? 0)
                 || (int) ($position->factory_id ?? 0) !== (int) ($data['factory_id'] ?? 0);
             if ((int) ($position->parent_id ?? 0) !== (int) ($data['parent_id'] ?? 0)) {
                 $data['sort_order'] = $this->nextOrder($data['parent_id'] ?? null);
             }
             $position->update($data);
-            if (!$access) return;
+            // A position that stops setting access leaves its holders' access as it is.
+            if (!$access || !$position->role_id) return;
             // Holders keep the position and get its new access level.
             foreach ($this->holders($position) as $membership) {
                 $this->guardMember($request, $membership);
@@ -83,11 +84,21 @@ class OrgChartController extends Controller
             $this->change($membership, function (array $rows) use ($position, $replace): array {
                 if (collect($rows)->contains(fn ($row) => (int) $row['position_id'] === (int) $position->id)) {
                     // Already here: moving from another position only drops that one.
-                    return $replace ? array_values(array_filter($rows, fn ($row) => (int) $row['id'] !== (int) $replace)) : $rows;
+                    return $replace && $position->role_id ? array_values(array_filter($rows, fn ($row) => (int) $row['id'] !== (int) $replace)) : $rows;
                 }
                 $index = $replace ? collect($rows)->search(fn ($row) => (int) $row['id'] === (int) $replace) : false;
                 if ($replace && $index === false) {
                     throw ValidationException::withMessages(['replace_assignment_id' => ['Աշխատակիցն այլևս չունի այդ հաստիքը։ Թարմացրեք էջը։']]);
+                }
+                // A position without its own access takes one of the employee's
+                // places as it is: their access does not change.
+                if (!$position->role_id) {
+                    if ($index === false && count($rows) === 1) $index = 0;
+                    if ($index === false) {
+                        throw ValidationException::withMessages(['replace_assignment_id' => ['Ընտրեք, թե աշխատակցի որ հաստիքը տեղափոխել այստեղ։']]);
+                    }
+                    $rows[$index]['position_id'] = (int) $position->id;
+                    return $rows;
                 }
                 $target = ['role_id' => (int) $position->role_id, 'factory_id' => $position->factory_id ? (int) $position->factory_id : null, 'position_id' => (int) $position->id];
                 // The same access held through another assignment: use that one.
@@ -221,14 +232,16 @@ class OrgChartController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:150',
             'parent_id' => ['nullable', 'integer', Rule::exists('company_positions', 'id')->where('company_id', app(CompanyContext::class)->id())],
-            'role_id' => ['required', 'integer', Rule::exists('roles', 'id')->where(fn ($q) => $q->whereIn('name', $this->allowedRoles($request)))],
+            // No access level: holders keep the access they have.
+            'role_id' => ['nullable', 'integer', Rule::exists('roles', 'id')->where(fn ($q) => $q->whereIn('name', $this->allowedRoles($request)))],
             'factory_id' => 'nullable|integer',
             'description' => 'nullable|string|max:2000',
         ]);
         $data['name'] = trim($data['name']);
         if ($data['name'] === '') throw ValidationException::withMessages(['name' => ['Նշեք հաստիքի անվանումը։']]);
-        $role = Role::findOrFail($data['role_id']);
-        $production = in_array($role->name, MembershipAssignments::OPERATORS, true);
+        $data['role_id'] = empty($data['role_id']) ? null : (int) $data['role_id'];
+        $role = $data['role_id'] ? Role::findOrFail($data['role_id']) : null;
+        $production = $role && in_array($role->name, MembershipAssignments::OPERATORS, true);
         if ($production && (empty($data['factory_id']) || !Factory::activeWorkshops()->whereKey($data['factory_id'])->exists())) {
             throw ValidationException::withMessages(['factory_id' => ['Ընտրեք այս հաստիքի արտադրամասը։']]);
         }

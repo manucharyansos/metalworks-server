@@ -105,6 +105,40 @@ class CompanyOrgChartTest extends TestCase
         $this->assertSame($laser, $this->find($chart, $sub)['parent_id']);
     }
 
+    public function test_a_position_can_leave_its_holders_access_as_it_is(): void
+    {
+        $employee = $this->account($this->a, 'assistant@example.invalid', 'engineer');
+        $this->as($this->manager);
+        $engineer = $this->position('Engineer', 'engineer');
+        // An assistant under the engineer gets no access of the position's own.
+        $chart = $this->postJson('/api/org-chart/positions', ['name' => 'Assistant', 'role_id' => null, 'factory_id' => $this->factories[0]->id, 'parent_id' => $engineer], $this->headers())->assertCreated();
+        $assistant = collect($chart->json('positions'))->firstWhere('name', 'Assistant');
+        $this->assertSame([$engineer, null, null], [$assistant['parent_id'], $assistant['role'], $assistant['factory']]);
+
+        // Placing someone there keeps the access they have.
+        $this->postJson("/api/org-chart/positions/{$assistant['id']}/members", ['user_id' => $employee->id], $this->headers())->assertOk();
+        $row = $this->rows($employee)[0];
+        $this->assertSame(['engineer', null, $assistant['id']], [$row['role']['name'], $row['factory_id'], $row['position_id']]);
+
+        // Giving the position an access level gives it to its holders; taking it away keeps theirs.
+        $this->putJson("/api/org-chart/positions/{$assistant['id']}", ['name' => 'Assistant', 'role_id' => $this->role('operator'), 'factory_id' => $this->factories[0]->id, 'parent_id' => $engineer], $this->headers())->assertOk();
+        $this->assertSame(['operator', $this->factories[0]->id], [$this->rows($employee)[0]['role']['name'], $this->rows($employee)[0]['factory_id']]);
+        $this->putJson("/api/org-chart/positions/{$assistant['id']}", ['name' => 'Assistant', 'role_id' => null, 'parent_id' => $engineer], $this->headers())->assertOk();
+        $row = $this->rows($employee)[0];
+        $this->assertSame(['operator', $this->factories[0]->id, $assistant['id']], [$row['role']['name'], $row['factory_id'], $row['position_id']]);
+
+        // With several places the manager says which one moves in.
+        $this->in($this->a, fn () => MembershipAssignments::sync($this->membership($employee), [
+            ['role_id' => $this->role('operator'), 'factory_id' => $this->factories[0]->id],
+            ['role_id' => $this->role('engineer'), 'factory_id' => null],
+        ]));
+        $helper = collect($this->postJson('/api/org-chart/positions', ['name' => 'Helper', 'parent_id' => $engineer], $this->headers())->assertCreated()->json('positions'))->firstWhere('name', 'Helper');
+        $this->postJson("/api/org-chart/positions/{$helper['id']}/members", ['user_id' => $employee->id], $this->headers())->assertUnprocessable()->assertJsonValidationErrors('replace_assignment_id');
+        $engineerRow = collect($this->rows($employee))->firstWhere('role.name', 'engineer');
+        $this->postJson("/api/org-chart/positions/{$helper['id']}/members", ['user_id' => $employee->id, 'replace_assignment_id' => $engineerRow['id']], $this->headers())->assertOk();
+        $this->assertSame($helper['id'], collect($this->rows($employee))->firstWhere('role.name', 'engineer')['position_id']);
+    }
+
     public function test_administrators_stay_with_the_platform_administrator_and_companies_stay_apart(): void
     {
         $this->as($this->manager);
