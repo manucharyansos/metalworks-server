@@ -35,6 +35,8 @@ class AdminOrderExportController extends Controller
             ->with([
                 'orderNumber',
                 'prefixCode',
+                'remoteNumber:id,pmp_id,remote_number,remote_number_name',
+                'remoteNumber.pmp:id,group,group_name',
                 'dates',
                 'factoryOrders.factory:id,name,value',
                 'factoryOrders.operator:id,name,factory_id',
@@ -59,6 +61,7 @@ class AdminOrderExportController extends Controller
                 'Task Number',
                 'Prefix',
                 'Name',
+                'Project',
                 'Task Status',
                 'Customer',
                 'Customer Email',
@@ -81,6 +84,9 @@ class AdminOrderExportController extends Controller
                         $order->orderNumber?->number,
                         $order->prefixCode?->code,
                         $order->name,
+                        // The project and item names the code (990.01) stands for.
+                        collect([$order->remoteNumber?->pmp?->group_name, $order->remoteNumber?->remote_number_name])
+                            ->map(fn ($name) => trim((string) $name))->filter()->unique()->implode(' · '),
                         $order->status,
                         $customerUser?->name,
                         $customerUser?->email,
@@ -117,6 +123,8 @@ class AdminOrderExportController extends Controller
                     ->orWhere('description', 'like', "%{$search}%")
                     ->orWhereHas('orderNumber', fn (Builder $q) => $q->where('number', 'like', "%{$search}%"))
                     ->orWhereHas('prefixCode', fn (Builder $q) => $q->where('code', 'like', "%{$search}%"))
+                    ->orWhereHas('remoteNumber', fn (Builder $q) => $q->where('remote_number_name', 'like', "%{$search}%")
+                        ->orWhereHas('pmp', fn (Builder $p) => $p->where('group_name', 'like', "%{$search}%")))
                     ->orWhereHas('client.user', function (Builder $q) use ($search) {
                         $q->where('name', 'like', "%{$search}%")
                             ->orWhere('email', 'like', "%{$search}%");

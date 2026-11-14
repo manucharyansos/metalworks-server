@@ -154,6 +154,8 @@ class AdminOperationsController extends Controller
                 ->with([
                     'orderNumber',
                     'prefixCode',
+                    'remoteNumber:id,pmp_id,remote_number,remote_number_name',
+                    'remoteNumber.pmp:id,group,group_name',
                     'dates',
                     'factoryOrders.factory:id,name,value',
                     'factoryOrders.operator:id,name,factory_id',
@@ -227,6 +229,9 @@ class AdminOperationsController extends Controller
             $query = Order::query()->with([
                 'orderNumber',
                 'prefixCode',
+                // The project and item names the order code (990.01) stands for.
+                'remoteNumber:id,pmp_id,remote_number,remote_number_name',
+                'remoteNumber.pmp:id,group,group_name',
                 'dates',
                 'factoryOrders.factory:id,name,value',
                 'factoryOrders.operator:id,name,factory_id',
@@ -246,6 +251,9 @@ class AdminOperationsController extends Controller
                         ->orWhere('description', 'like', "%{$search}%")
                         ->orWhereHas('orderNumber', fn (Builder $q) => $q->where('number', 'like', "%{$search}%"))
                         ->orWhereHas('prefixCode', fn (Builder $q) => $q->where('code', 'like', "%{$search}%"))
+                        // The lists show the project and item names, so they are searchable too.
+                        ->orWhereHas('remoteNumber', fn (Builder $q) => $q->where('remote_number_name', 'like', "%{$search}%")
+                            ->orWhereHas('pmp', fn (Builder $p) => $p->where('group_name', 'like', "%{$search}%")))
                         ->orWhereHas('client.user', function (Builder $q) use ($search) {
                             $q->where('name', 'like', "%{$search}%")
                                 ->orWhere('email', 'like', "%{$search}%");
@@ -332,6 +340,8 @@ class AdminOperationsController extends Controller
             }
 
             $orders = $query->paginate((int) ($validated['per_page'] ?? 30));
+            // created_at is only the d/m/Y day; created_time keeps the hour for the lists.
+            $orders->getCollection()->each->append('created_time');
 
             return response()->json([
                 'orders' => $orders->items(),

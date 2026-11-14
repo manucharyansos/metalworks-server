@@ -22,6 +22,9 @@ class OrderLog extends Model
         'meta' => 'array',
     ];
 
+    // created_at is only the d/m/Y day; the history shows the hour too.
+    protected $appends = ['created_time'];
+
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
@@ -36,5 +39,12 @@ class OrderLog extends Model
     {
         $dateTime = new DateTime($value);
         return $dateTime->format('d/m/Y');
+    }
+
+    /** The moment with its zone, for the history that shows the hour. */
+    public function getCreatedTimeAttribute(): ?string
+    {
+        $raw = $this->attributes['created_at'] ?? null;
+        return $raw ? $this->asDateTime($raw)->toIso8601String() : null;
     }
 }

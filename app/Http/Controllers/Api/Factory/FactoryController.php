@@ -96,6 +96,8 @@ class FactoryController extends Controller
                     'dates',
                     'orderNumber',
                     'prefixCode',
+                    'remoteNumber:id,pmp_id,remote_number,remote_number_name',
+                    'remoteNumber.pmp:id,group,group_name',
                     'creator',
                     'factoryOrders.operator:id,name',
                     'logs',
@@ -251,7 +253,7 @@ class FactoryController extends Controller
                     $order->update(['status' => 'pending', 'completed_at' => null]);
                 }
                 OrderLog::create(['order_id' => $order->id, 'user_id' => $user->id, 'action' => 'factory_order.status_changed',
-                    'message' => sprintf('Արտադրամաս «%s»․ %s → %s', $step->factory->name, $previous ?? 'Սպասում', $status ?? 'Սպասում'),
+                    'message' => sprintf('Արտադրամաս «%s»․ %s → %s', $step->factory->name, TaskNotifier::statusLabel($previous), TaskNotifier::statusLabel($status)),
                     'meta' => ['factory_id' => $factoryId, 'factory_order_id' => $step->id, 'from_status' => $previous, 'to_status' => $status]]);
                 $order->updateStatusIfAllFactoriesCompleted();
                 ProductionRoute::refreshReadiness($order, $user);

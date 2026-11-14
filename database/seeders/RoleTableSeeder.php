@@ -15,9 +15,9 @@ class RoleTableSeeder extends Seeder
             'authenticatedUser' => 'Գրանցված օգտատեր',
             'manager' => 'Մենեջեր',
             'bend' => 'Կռում',
-            'laser' => 'Լազերաին կտրում',
+            'laser' => 'Լազերային կտրում',
             'powder_catting' => 'Փոշեներկում',
-            'engineer' => 'Ինժիներ',
+            'engineer' => 'Ինժեներ',
             'operator' => 'Օպերատոր',
         ];
 

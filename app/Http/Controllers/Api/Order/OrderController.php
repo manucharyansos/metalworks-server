@@ -174,6 +174,8 @@ class OrderController extends Controller
         $order = Order::with([
             'orderNumber',
             'prefixCode',
+            'remoteNumber:id,pmp_id,remote_number,remote_number_name',
+            'remoteNumber.pmp:id,group,group_name',
             'storeLink',
             'factories',
             'dates',
@@ -191,6 +193,7 @@ class OrderController extends Controller
         ])->findOrFail($id);
 
         abort_unless(\App\Support\TaskAccess::canView($request->user(), $order), 403);
+        $order->append('created_time');
         return response()->json(\App\Support\TaskAccess::restrictOperatorRelations($order, $request->user()));
     }
 

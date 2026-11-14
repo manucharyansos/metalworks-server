@@ -1166,6 +1166,36 @@ class CompanyWorkshopCatalogTest extends TestCase
         $send('GET', '/api/user')->assertOk()->assertJsonPath('id', $admin->id);
     }
 
+    public function test_admin_screens_name_tasks_by_project_and_item_and_find_them_by_those_names(): void
+    {
+        $file = $this->file($this->factories['DXF']->id, 'names.dxf');
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+        $number = $this->in(fn () => \App\Models\OrderNumber::where('order_id', $order['id'])->value('number'));
+        $this->as($this->account('admin'));
+
+        // The list carries the names the 987.01 code stands for, and finds the task by them.
+        $list = $this->getJson('/api/admin/dashboard/orders?search=Catalog%20part', $this->headers())->assertOk()
+            ->assertJsonPath('pagination.total', 1)
+            ->assertJsonPath('orders.0.remote_number.remote_number_name', 'Catalog part')
+            ->assertJsonPath('orders.0.remote_number.pmp.group_name', 'Catalog QA');
+        $this->assertNotNull($list->json('orders.0.created_time'));
+        $this->getJson('/api/admin/dashboard/orders?search=Unrelated%20name', $this->headers())->assertOk()->assertJsonPath('pagination.total', 0);
+        $this->getJson('/api/admin/order/'.$order['id'], $this->headers())->assertOk()->assertJsonPath('remote_number.pmp.group_name', 'Catalog QA');
+        $csv = $this->get('/api/admin/dashboard/orders/export', $this->headers())->assertOk()->streamedContent();
+        $this->assertStringContainsString('Catalog QA · Catalog part', $csv);
+
+        // Production work in the activity history is named by task number and workshop.
+        $this->in(fn () => \App\Models\ActivityLog::create([
+            'user_id' => $this->engineer->id, 'category' => 'production', 'action' => 'production.status_changed',
+            'subject_type' => 'factory_order', 'subject_id' => '1',
+            'subject_label' => 'Order #'.$order['id'].' · Factory #'.$this->factories['DXF']->id,
+            'meta' => ['order_id' => $order['id'], 'factory_id' => $this->factories['DXF']->id],
+        ]));
+        $this->getJson('/api/admin/activity?action=production.status_changed', $this->headers())->assertOk()
+            ->assertJsonPath('logs.0.subject_label', '#'.$number.' · '.$this->factories['DXF']->name);
+    }
+
     public function test_task_priority_sort_happens_before_pagination_and_completed_tasks_are_last(): void
     {
         $file = $this->file($this->factories['DXF']->id, 'priority.dxf');

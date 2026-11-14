@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\ActivityLog;
+use App\Models\Factory;
+use App\Models\OrderNumber;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -93,7 +95,9 @@ class AdminAuditController extends Controller
                 ->orderByDesc('id')
                 ->paginate((int) ($validated['per_page'] ?? 40));
 
-            $items = collect($logs->items())->map(function (ActivityLog $row) {
+            $subjectLabels = $this->taskSubjectLabels(collect($logs->items()));
+
+            $items = collect($logs->items())->map(function (ActivityLog $row) use ($subjectLabels) {
                 $user = $row->user;
                 $lastName = $user?->last_name ?: $user?->worker?->last_name;
                 $displayName = trim(implode(' ', array_filter([$user?->name, $lastName])));
@@ -107,7 +111,7 @@ class AdminAuditController extends Controller
                     'route' => $row->route,
                     'subject_type' => $row->subject_type,
                     'subject_id' => $row->subject_id,
-                    'subject_label' => $row->subject_label,
+                    'subject_label' => $subjectLabels[$row->id] ?? $row->subject_label,
                     'description' => $row->description,
                     'meta' => $row->meta,
                     'created_at' => $row->created_at?->toIso8601String(),
@@ -211,6 +215,39 @@ class AdminAuditController extends Controller
                 'message' => 'Unable to load employee activity history.',
             ], 500);
         }
+    }
+
+    /**
+     * Task entries name their task by number, and production work by number and
+     * workshop: the stored labels read "990.01" or "Order #4 · Factory #2".
+     *
+     * @return array<int, string> activity log id => label
+     */
+    private function taskSubjectLabels($rows): array
+    {
+        $orderId = fn (ActivityLog $row) => match ($row->subject_type) {
+            'order' => $row->subject_id,
+            'factory_order' => $row->meta['order_id'] ?? null,
+            default => null,
+        };
+        $orderIds = $rows->map($orderId)->filter()->unique()->values();
+        $factoryIds = $rows->where('subject_type', 'factory_order')
+            ->map(fn (ActivityLog $row) => $row->meta['factory_id'] ?? null)->filter()->unique()->values();
+        if ($orderIds->isEmpty()) return [];
+
+        $numbers = OrderNumber::query()->whereIn('order_id', $orderIds)->pluck('number', 'order_id');
+        $factories = $factoryIds->isEmpty() ? collect() : Factory::query()->whereIn('id', $factoryIds)->pluck('name', 'id');
+
+        $labels = [];
+        foreach ($rows as $row) {
+            $number = $numbers[$orderId($row)] ?? null;
+            if (!$number) continue;
+            $labels[$row->id] = $row->subject_type === 'factory_order'
+                ? '#' . $number . ' · ' . ($factories[$row->meta['factory_id'] ?? null] ?? $row->subject_label)
+                : '#' . $number . ($row->subject_label ? ' · ' . $row->subject_label : '');
+        }
+
+        return $labels;
     }
 
     private function staffActivityQuery(): Builder

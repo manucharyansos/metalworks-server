@@ -162,7 +162,8 @@ final class TaskNotifier
         return (string) ($step->factory?->name ?? '');
     }
 
-    private static function statusLabel(?string $status): string
+    /** The workshop's own name for a step status, as people see it. */
+    public static function statusLabel(?string $status): string
     {
         if ($status === null || in_array($status, ['', 'pending', 'waiting'], true)) return 'Սպասում';
         return FactoryOrderStatus::where('value', $status)->value('status_label') ?: $status;
