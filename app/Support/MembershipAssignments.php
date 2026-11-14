@@ -55,10 +55,16 @@ final class MembershipAssignments
             if (Factory::activeWorkshops()->whereIn('id', $ids)->sharedLock()->get(['id'])->count() !== count($ids)) throw ValidationException::withMessages(['assignments' => ['Արտադրամասերի հասանելիությունը փոխվել է։ Թարմացրեք ընտրությունը։']]);
             $oldRoles = self::roleNames($membership);
             $primary = $assignments[0];
-            $membership->fill($primary)->saveQuietly();
+            $membership->fill(['role_id' => $primary['role_id'], 'factory_id' => $primary['factory_id']])->saveQuietly();
             $keep = [];
             foreach ($assignments as $row) {
-                $assignment = $membership->assignments()->firstOrCreate($row, ['user_id' => $membership->user_id]);
+                $match = ['role_id' => $row['role_id'], 'factory_id' => $row['factory_id']];
+                $assignment = $membership->assignments()->firstOrCreate($match, ['user_id' => $membership->user_id]);
+                // Rows from the org chart say which position they hold; the other
+                // editors leave a kept assignment in its position.
+                if (array_key_exists('position_id', $row) && (int) $assignment->position_id !== (int) $row['position_id']) {
+                    $assignment->forceFill(['position_id' => $row['position_id']])->save();
+                }
                 $keep[] = $assignment->id;
             }
             $membership->assignments()->whereNotIn('id', $keep)->delete();
@@ -87,8 +93,11 @@ final class MembershipAssignments
                 'role' => $membership->role?->only(['id', 'name', 'value']),
                 'factory' => $membership->factory_id ? Factory::find($membership->factory_id)?->only(['id', 'name']) : null, 'is_primary' => true]];
         }
-        return $membership->assignments()->with(['role', 'factory'])->orderBy('id')->get()->map(fn ($row) => [
+        $positions = Schema::hasColumn('membership_assignments', 'position_id');
+        return $membership->assignments()->with($positions ? ['role', 'factory', 'position:id,name'] : ['role', 'factory'])->orderBy('id')->get()->map(fn ($row) => [
             'id' => $row->id, 'role_id' => $row->role_id, 'factory_id' => $row->factory_id,
+            'position_id' => $positions ? $row->position_id : null,
+            'position' => $positions ? $row->position?->only(['id', 'name']) : null,
             'role' => $row->role?->only(['id', 'name', 'value']), 'factory' => $row->factory?->only(['id', 'name']),
             'is_primary' => (int) $row->role_id === (int) $membership->role_id && (int) $row->factory_id === (int) $membership->factory_id,
         ])->sortByDesc('is_primary')->values()->all();

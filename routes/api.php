@@ -89,6 +89,16 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::get('{user}', [\App\Http\Controllers\Api\StaffAssignmentController::class, 'show']);
             Route::put('{user}', [\App\Http\Controllers\Api\StaffAssignmentController::class, 'update']);
         });
+        // The org chart: managers arrange positions and the employees who hold them.
+        Route::prefix('org-chart')->middleware('admin')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\OrgChartController::class, 'index']);
+            Route::post('generate', [\App\Http\Controllers\Api\OrgChartController::class, 'generate']);
+            Route::post('positions', [\App\Http\Controllers\Api\OrgChartController::class, 'store']);
+            Route::put('positions/{position}', [\App\Http\Controllers\Api\OrgChartController::class, 'update'])->whereNumber('position');
+            Route::delete('positions/{position}', [\App\Http\Controllers\Api\OrgChartController::class, 'destroy'])->whereNumber('position');
+            Route::post('positions/{position}/members', [\App\Http\Controllers\Api\OrgChartController::class, 'place'])->whereNumber('position');
+            Route::delete('positions/{position}/members/{user}', [\App\Http\Controllers\Api\OrgChartController::class, 'remove'])->whereNumber('position')->whereNumber('user');
+        });
 
         /**
          * ─── ADMIN DASHBOARD ─────────────────────────────────
