@@ -42,7 +42,24 @@ final class TaskAccess
         if (!self::isOperator($user) || !$user->hasPermission('factory.download')) return false;
         // A file is available only through a task step in the selected workshop.
         // Routing the same drawing to another workshop explicitly adds that link.
-        return self::operatorSteps(FactoryOrder::query(), $user)->whereHas('files', fn ($q) => $q->whereKey($file->id))->exists();
+        if (self::operatorSteps(FactoryOrder::query(), $user)->whereHas('files', fn ($q) => $q->whereKey($file->id))->exists()) return true;
+        // SolidWorks and STEP models are shown, read-only, to every workshop working on the task.
+        return $file->operator_download_restricted && self::operatorSteps(FactoryOrder::query(), $user)
+            ->whereHas('order.selectedFiles', fn ($q) => $q->where('pmp_file_id', $file->id))->exists();
+    }
+
+    /** The task's SolidWorks and STEP models that are not already among the operator's own step files. */
+    public static function sharedModels($selected, $ownFileIds)
+    {
+        $selected = \Illuminate\Database\Eloquent\Collection::make($selected);
+        $selected->loadMissing('pmpFile');
+        $own = collect($ownFileIds)->map(fn ($id) => (int) $id)->all();
+        return $selected->filter(fn ($row) => $row->pmpFile && $row->pmpFile->operator_download_restricted && !in_array((int) $row->pmp_file_id, $own, true))
+            ->map(function ($row) {
+                $file = clone $row->pmpFile;
+                $file->setAttribute('task_file_revision_id', $row->task_file_revision_id);
+                return $file;
+            })->unique('id')->values();
     }
 
     public static function restrictOperatorRelations(Order $order, User $user): Order
@@ -51,6 +68,9 @@ final class TaskAccess
         $allowed = self::operatorSteps($order->factoryOrders(), $user)->pluck('factory_orders.id');
         $steps = $order->factoryOrders->whereIn('id', $allowed)->values();
         $order->setRelation('factoryOrders', $steps);
+        $own = $steps->flatMap(fn ($step) => $step->relationLoaded('files') ? $step->files->pluck('id') : $step->files()->pluck('pmp_files.id'));
+        $order->setRelation('modelFiles', $steps->isEmpty() ? collect()
+            : self::sharedModels($order->relationLoaded('selectedFiles') ? $order->selectedFiles : $order->selectedFiles()->get(), $own));
         $order->unsetRelation('factories')->unsetRelation('selectedFiles')->unsetRelation('logs');
         $order->makeHidden('reference_file_visibility');
         return $order;

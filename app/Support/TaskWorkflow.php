@@ -26,7 +26,7 @@ final class TaskWorkflow
             'workshop_settings.*.confirmation_method' => 'nullable|required_if:workshop_settings.*.confirmation_required,true|in:photo,text,photo_text',
             'workshop_settings.*.deadline' => 'nullable|date_format:Y-m-d',
             'workshop_settings.*.priority' => 'required|in:normal,high,urgent',
-        ] + ProductionRoute::rules();
+        ] + TaskPaint::rules('workshop_settings.*.') + ProductionRoute::rules();
     }
 
     public static function evidenceMethods(?string $method): array
@@ -103,10 +103,12 @@ final class TaskWorkflow
         $settings = self::settings($order->toArray());
         $shares = collect($visibility)->keyBy('file_id');
         $overrides = collect($workshopSettings)->keyBy('factory_id');
+        $workshops = Factory::whereIn('id', $ids)->get()->keyBy('id');
         $functions = WorkshopFunctions::forFiles($pmp->files->whereIn('id', array_column($selected, 'id')));
         foreach ($routeWorkshops as $factoryId) {
             $override = $overrides->get($factoryId);
-            $stepSettings = $override ? self::settings($override) + ['deadline' => $override['deadline'] ?? null, 'priority' => $override['priority']] : $settings;
+            $stepSettings = $override ? self::settings($override) + ['deadline' => $override['deadline'] ?? null, 'priority' => $override['priority']]
+                + TaskPaint::fields($override, $workshops->get($factoryId)) : $settings;
             FactoryOrder::firstOrCreate(['order_id' => $order->id, 'factory_id' => $factoryId],
                 $stepSettings + ['status' => 'pending', 'operator_id' => $operators->get($factoryId)['user_id'] ?? null]);
         }
@@ -116,7 +118,8 @@ final class TaskWorkflow
             $destinations = $file->is_reference_file ? ($shares->get($file->id)['factory_ids'] ?? []) : self::destinations($file, $routing);
             foreach ($destinations as $factoryId) {
                 $override = $overrides->get($factoryId);
-                $stepSettings = $override ? self::settings($override) + ['deadline' => $override['deadline'] ?? null, 'priority' => $override['priority']] : $settings;
+                $stepSettings = $override ? self::settings($override) + ['deadline' => $override['deadline'] ?? null, 'priority' => $override['priority']]
+                    + TaskPaint::fields($override, $workshops->get($factoryId)) : $settings;
                 $step = FactoryOrder::firstOrCreate(['order_id' => $order->id, 'factory_id' => $factoryId],
                     $stepSettings + ['status' => 'pending', 'operator_id' => $operators->get($factoryId)['user_id'] ?? null]);
                 $step->files()->syncWithoutDetaching([$file->id => [

@@ -117,8 +117,7 @@ class SecureLegacyFileController extends Controller
         string $path,
         string $originalName
     ): BinaryFileResponse|JsonResponse {
-        abort_if(\App\Support\TaskAccess::isOperator($request->user()) &&
-            (\App\Support\ProjectFilePolicy::isSolidWorksName($originalName) || \App\Support\ProjectFilePolicy::isSolidWorksName($path)), 403);
+        abort_unless(\App\Support\ProjectFilePolicy::operatorMayReceive($request, $originalName, $path), 403);
         $disk = null;
         if (Storage::disk('private')->exists($path)) {
             $disk = 'private';

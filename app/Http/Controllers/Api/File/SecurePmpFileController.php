@@ -61,7 +61,12 @@ class SecurePmpFileController extends Controller
 
     private function canAccess(Request $request, PmpFiles $file): bool
     {
-        return $request->user() && \App\Support\TaskAccess::canDownloadPmp($request->user(), $file);
+        $user = $request->user();
+        if (!$user) return false;
+        if (\App\Support\TaskAccess::canDownloadPmp($user, $file)) return true;
+        // A view-only model (SolidWorks, STEP) reaches workshop staff only through the app's viewer.
+        return !$request->boolean('download') && \App\Support\ProjectFilePolicy::isPreviewRequest($request)
+            && \App\Support\TaskAccess::canViewPmp($user, $file);
     }
 
     private function normalizePath(string $path): ?string

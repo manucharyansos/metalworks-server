@@ -22,14 +22,17 @@ final class TaskFileVersions
         $steps = $order->factoryOrders()->with('files')->when(TaskAccess::isOperator($user), fn ($q) => TaskAccess::operatorSteps($q, $user))->get();
         $files = $steps->flatMap(fn ($step) => $step->files)->unique('id');
         $selected = $order->selectedFiles()->get()->keyBy('pmp_file_id');
+        // Operators also get the task's SolidWorks and STEP models, to look at only.
+        if (TaskAccess::isOperator($user)) $files = $files->concat(TaskAccess::sharedModels($selected->values(), $files->pluck('id')));
         $revisions = TaskFileRevision::with('user:id,name')->where('order_id', $order->id)->whereIn('pmp_file_id', $files->pluck('id'))->orderByDesc('version')->get()->groupBy('pmp_file_id');
         return $files->map(function ($file) use ($selected, $revisions, $steps, $user) {
             // Operators see the exact version attached to their own workshop,
             // including an old version retained on an already finished job.
             $operatorView = TaskAccess::isOperator($user);
-            $current = $operatorView ? $file->pivot?->task_file_revision_id : $selected->get($file->id)?->task_file_revision_id;
+            $current = $operatorView && $file->pivot ? $file->pivot->task_file_revision_id : $selected->get($file->id)?->task_file_revision_id;
             return ['id' => $file->id, 'original_name' => $file->original_name, 'path' => $file->path,
-                'task_file_revision_id' => $current, 'can_download' => !$operatorView || !$file->operator_download_restricted,
+                'task_file_revision_id' => $current, 'can_view' => true,
+                'can_download' => !$operatorView || !$file->operator_download_restricted,
                 'can_update' => !$operatorView && $steps->contains(fn ($step) => self::editable($step) && $step->files->contains('id', $file->id)),
                 'versions' => $revisions->get($file->id, collect())->values()];
         })->values();

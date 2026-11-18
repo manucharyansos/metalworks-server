@@ -56,8 +56,7 @@ class SecureOrderFileController extends Controller
     {
         $user = $request->user();
         $order = $file->order;
-        if (\App\Support\TaskAccess::isOperator($user) && (\App\Support\ProjectFilePolicy::isSolidWorksName($file->original_name)
-            || \App\Support\ProjectFilePolicy::isSolidWorksName($file->path))) return false;
+        if (!\App\Support\ProjectFilePolicy::operatorMayReceive($request, $file->original_name, $file->path)) return false;
 
         if ($user->role?->name === 'admin') {
             return true;

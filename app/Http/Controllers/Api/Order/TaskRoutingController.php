@@ -45,6 +45,15 @@ class TaskRoutingController extends Controller
         return response()->json(['order' => TaskRouting::order($order), 'workload' => TaskRouting::workload()]);
     }
 
+    public function paint(Request $request, Order $order, FactoryOrder $factoryOrder)
+    {
+        TaskRouting::authorize($request->user(), $order);
+        abort_unless((int) $factoryOrder->order_id === (int) $order->id, 404);
+        $data = $request->validate(\App\Support\TaskPaint::rules());
+        \App\Support\TaskPaint::update($request->user(), $factoryOrder, $data);
+        return response()->json(['order' => TaskRouting::order($order)]);
+    }
+
     public function evidenceRequirements(Request $request, Order $order)
     {
         TaskRouting::authorize($request->user(), $order);

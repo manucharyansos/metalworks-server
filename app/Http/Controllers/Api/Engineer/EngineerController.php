@@ -442,6 +442,7 @@ class EngineerController extends Controller
                         'factory_id' => $step->factory_id, 'confirmation_required' => (bool) $step->confirmation_required,
                         'confirmation_method' => $step->confirmation_method, 'priority' => $step->priority ?: 'normal',
                         'deadline' => $step->deadline ? substr((string) $step->getRawOriginal('deadline'), 0, 10) : null,
+                        'paint_ral' => $step->paint_ral, 'primer_required' => (bool) $step->primer_required,
                     ])->values()->all();
                     $order->selectedFiles()->delete();
                     $order->factoryOrders()->each(function ($step) { $step->files()->detach(); $step->delete(); });

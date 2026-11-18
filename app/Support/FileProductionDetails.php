@@ -43,7 +43,8 @@ final class FileProductionDetails
             }
             else $step = $visible->first();
             $selected = $order->selectedFiles()->where('pmp_file_id', $file->id)->first();
-            abort_unless($step || (!$operator && $selected), 404);
+            // Workshop staff reach a model of the task (SolidWorks, STEP) without a step of their own.
+            abort_unless($step || ($selected && (!$operator || $file->operator_download_restricted)), 404);
             $pivot = $step?->files->firstWhere('id', $file->id)?->pivot;
             $workshops = $steps->map(fn ($s) => ['id' => (int) $s->factory_id, 'name' => $s->factory->name,
                 'value' => $s->factory->value, 'is_active' => (bool) $s->factory->is_active,

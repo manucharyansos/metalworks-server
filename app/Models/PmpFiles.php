@@ -48,8 +48,8 @@ class PmpFiles extends Model
     public function category(): BelongsTo { return $this->belongsTo(FileCategory::class, 'file_category_id'); }
     public function getOperatorDownloadRestrictedAttribute(): bool
     {
-        return \App\Support\ProjectFilePolicy::isSolidWorksName($this->original_name)
-            || \App\Support\ProjectFilePolicy::isSolidWorksName($this->path)
+        return \App\Support\ProjectFilePolicy::isViewOnlyName($this->original_name)
+            || \App\Support\ProjectFilePolicy::isViewOnlyName($this->path)
             || strtoupper((string) ($this->category?->code ?? $this->factory?->value)) === 'SW';
     }
 

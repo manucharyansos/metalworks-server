@@ -34,12 +34,12 @@ class FactoryOrder extends Model
         'confirmation_required', 'confirmation_method', 'evidence_text', 'evidence_photo_path',
         'engineer_confirmation_at', 'engineer_confirmation_user_id', 'completed_at',
         'depends_on_id', 'predecessor_ids', 'route_position', 'ready_at', 'return_note', 'returned_at', 'deadline', 'priority',
-        'planned_start',
+        'planned_start', 'paint_ral', 'primer_required',
     ];
 
     // Timestamps written with now() are serialized with their timezone
     // (ISO 8601), so browsers show the local time instead of raw UTC text.
-    protected $casts = ['task_scoped_operator' => 'boolean', 'confirmation_required' => 'boolean', 'predecessor_ids' => 'array', 'route_position' => 'integer',
+    protected $casts = ['task_scoped_operator' => 'boolean', 'confirmation_required' => 'boolean', 'primer_required' => 'boolean', 'predecessor_ids' => 'array', 'route_position' => 'integer',
         'completed_at' => 'datetime', 'engineer_confirmation_at' => 'datetime', 'ready_at' => 'datetime'];
     protected $hidden = ['evidence_photo_path', 'dependsOn'];
     protected $appends = ['team_version', 'awaiting_engineer_confirmation', 'has_evidence_photo', 'is_blocked', 'waiting_for'];

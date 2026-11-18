@@ -562,6 +562,150 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->get('/api/secure-files/pmp/'.$dxf->id.'?download=1', $this->headers())->assertOk();
     }
 
+    public function test_workshop_staff_view_solidworks_and_step_models_in_the_app_but_download_only_the_other_files(): void
+    {
+        $bend = $this->factories['DLD']->id;
+        $laser = $this->factories['DXF']->id;
+        $part = $this->file($this->factories['SW']->id, 'bracket.SLDPRT');
+        $drawing = $this->file($this->factories['SW']->id, 'bracket.slddrw');
+        $model = $this->file($this->factories['IQS']->id, 'bracket.step');
+        $program = $this->file($bend, 'bracket.dld');
+        $dxf = $this->file($laser, 'bracket.dxf');
+        $dwg = $this->file($laser, 'bracket.dwg');
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$part->id, $drawing->id, $model->id, $program->id, $dxf->id, $dwg->id]) + ['file_routing' => [
+            ['file_id' => $part->id, 'factory_ids' => [$bend]], ['file_id' => $drawing->id, 'factory_ids' => [$bend]],
+            ['file_id' => $model->id, 'factory_ids' => [$bend]], ['file_id' => $dxf->id, 'factory_ids' => [$laser]], ['file_id' => $dwg->id, 'factory_ids' => [$laser]],
+        ]], $this->headers())->assertCreated()->json('order');
+        // Engineers keep full access to the models.
+        $this->get('/api/secure-files/pmp/'.$model->id.'?download=1', $this->headers())->assertOk();
+
+        $this->as($this->account('operator', $bend));
+        $preview = $this->headers() + ['X-File-Preview' => '1'];
+        $body = fn ($response) => file_get_contents($response->baseResponse->getFile()->getPathname());
+        $steps = $this->getJson('/api/factories/factory/'.$bend, $this->headers())->assertOk()->json('orders.0.factory_orders.0.files');
+        $restricted = collect($steps)->mapWithKeys(fn ($file) => [$file['original_name'] => $file['operator_download_restricted']])->all();
+        $this->assertEquals(['bracket.SLDPRT' => true, 'bracket.slddrw' => true, 'bracket.step' => true, 'bracket.dld' => false], $restricted);
+        foreach ([$part, $drawing, $model] as $file) {
+            $url = '/api/secure-files/pmp/'.$file->id;
+            $this->assertSame('private bytes', $body($this->get($url, $preview)->assertOk()));
+            $this->get($url.'?download=1', $preview)->assertForbidden();
+            $this->get($url, $this->headers())->assertForbidden();
+            $this->getJson($url.'/details?order_id='.$order['id'], $this->headers())->assertOk();
+        }
+        $this->get('/api/secure-files/pmp/'.$program->id.'?download=1', $this->headers())->assertOk();
+        // A file sent to another workshop stays closed, even to the viewer.
+        $this->get('/api/secure-files/pmp/'.$dxf->id, $preview)->assertForbidden();
+
+        $this->as($this->account('operator', $laser));
+        foreach ([$dxf, $dwg] as $file) $this->get('/api/secure-files/pmp/'.$file->id.'?download=1', $this->headers())->assertOk();
+        // The laser works on the same task, so it may look at the model too, but not download it.
+        $this->get('/api/secure-files/pmp/'.$model->id, $preview)->assertOk();
+        $this->get('/api/secure-files/pmp/'.$model->id.'?download=1', $preview)->assertForbidden();
+        $this->get('/api/secure-files/pmp/'.$program->id, $preview)->assertForbidden();
+
+        // A new version of a model stays view-only as well.
+        $this->as($this->engineer);
+        $this->post('/api/tasks/'.$order['id'].'/files/'.$model->id.'/versions', ['file' => UploadedFile::fake()->createWithContent('bracket.step', 'second model'),
+            'note' => 'v2', 'previous_revision_id' => ''], $this->headers())->assertSuccessful();
+        $revision = $this->in(fn () => \App\Models\TaskFileRevision::where('pmp_file_id', $model->id)->latest('id')->value('id'));
+        $this->as($this->account('operator', $bend));
+        $this->assertSame('second model', $body($this->get('/api/secure-files/task-revisions/'.$revision, $preview)->assertOk()));
+        $this->get('/api/secure-files/task-revisions/'.$revision.'?download=1', $preview)->assertForbidden();
+        $this->get('/api/secure-files/task-revisions/'.$revision, $this->headers())->assertForbidden();
+    }
+
+    public function test_powder_coating_jobs_carry_the_ral_colour_and_primer_request(): void
+    {
+        $powder = $this->factories['POWDER']->id;
+        $laser = $this->factories['DXF']->id;
+        $sheet = $this->file($laser, 'panel.dxf');
+        $operator = $this->account('operator', $powder);
+        $this->as($this->engineer);
+        $settings = fn (int $factory, array $extra = []) => ['factory_id' => $factory, 'confirmation_required' => false, 'priority' => 'normal'] + $extra;
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$sheet->id]) + [
+            'file_routing' => [['file_id' => $sheet->id, 'factory_ids' => [$laser, $powder]]],
+            'workshop_settings' => [$settings($powder, ['paint_ral' => ' ral9005 ', 'primer_required' => true]), $settings($laser, ['paint_ral' => '7016'])],
+        ], $this->headers())->assertCreated()->json('order');
+        $steps = $this->in(fn () => FactoryOrder::where('order_id', $order['id'])->get()->keyBy('factory_id'));
+        $this->assertSame('RAL 9005', $steps[$powder]->paint_ral);
+        $this->assertTrue($steps[$powder]->primer_required);
+        // Only the powder-coating job keeps a colour.
+        $this->assertNull($steps[$laser]->paint_ral);
+        $this->assertFalse((bool) $steps[$laser]->primer_required);
+
+        $this->as($operator);
+        $this->getJson('/api/factories/factory/'.$powder, $this->headers())->assertOk()
+            ->assertJsonPath('orders.0.factory_orders.0.paint_ral', 'RAL 9005')->assertJsonPath('orders.0.factory_orders.0.primer_required', true);
+        $this->putJson('/api/tasks/'.$order['id'].'/workshops/'.$steps[$powder]->id.'/paint', ['paint_ral' => 'RAL 7016'], $this->headers())->assertForbidden();
+
+        $this->as($this->engineer);
+        $this->putJson('/api/tasks/'.$order['id'].'/workshops/'.$steps[$powder]->id.'/paint', ['paint_ral' => '7016', 'primer_required' => false], $this->headers())
+            ->assertOk()->assertJsonFragment(['paint_ral' => 'RAL 7016', 'primer_required' => false]);
+        $this->assertSame(1, $this->in(fn () => \App\Models\OrderLog::where('order_id', $order['id'])->where('action', 'factory_order.paint_changed')->count()));
+        $this->putJson('/api/tasks/'.$order['id'].'/workshops/'.$steps[$laser]->id.'/paint', ['paint_ral' => '7016'], $this->headers())
+            ->assertUnprocessable()->assertJsonValidationErrors('paint_ral');
+        $this->putJson('/api/tasks/'.$order['id'].'/workshops/'.$steps[$powder]->id.'/paint', ['paint_ral' => str_repeat('9', 41)], $this->headers())->assertUnprocessable();
+    }
+
+    public function test_metalworks_file_sections_take_dwg_for_the_lasers_and_keep_models_together(): void
+    {
+        (require database_path('migrations/2026_11_17_120000_add_paint_settings_and_view_only_models.php'))->up();
+        $formats = fn (string $code, ?Company $company = null) => app(CompanyContext::class)->run($company ?? $this->company,
+            fn () => FileCategory::where('code', $code)->firstOrFail()->extensions()->pluck('extension')->all());
+        $this->assertContains('dwg', $formats('DXF'));
+        $this->assertEmpty(array_intersect(['step', 'stp'], $formats('IQS')));
+        $this->assertContains('dld', $formats('DLD'));
+        $this->assertEqualsCanonicalizing(['sldprt', 'sldasm', 'slddrw', 'step', 'stp'], array_intersect($formats('SW'), ['sldprt', 'sldasm', 'slddrw', 'step', 'stp']));
+        $cad = $this->in(fn () => FileCategory::where('code', 'SW')->firstOrFail());
+        // A STEP model uploaded now lands next to the SolidWorks files and stays view-only for workshops.
+        $this->as($this->engineer);
+        $step = $this->post('/api/engineers/uploadPmpFile', ['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id,
+            'file_category_id' => $cad->id, 'file' => UploadedFile::fake()->createWithContent('frame.step', 'ISO-10303-21;')], $this->headers())->assertCreated()->json('file');
+        $this->assertTrue($step['operator_download_restricted']);
+        // The other company's catalog is left alone.
+        $this->assertNotContains('dwg', $formats('DXF', $this->other));
+    }
+
+    public function test_every_workshop_of_a_task_can_look_at_its_models_without_downloading_them(): void
+    {
+        $laser = $this->factories['DXF']->id;
+        $powder = $this->factories['POWDER']->id;
+        $sheet = $this->file($laser, 'cover.dxf');
+        $model = $this->file($this->factories['SW']->id, 'cover.sldasm');
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$sheet->id, $model->id]) + ['file_routing' => [
+            ['file_id' => $sheet->id, 'factory_ids' => [$laser, $powder]], ['file_id' => $model->id, 'factory_ids' => [$laser]],
+        ]], $this->headers())->assertCreated()->json('order');
+        $other = $this->postJson('/api/engineers/engineer', $this->payload([$this->file($laser, 'other.dxf')->id]), $this->headers())->assertCreated()->json('order');
+        $preview = $this->headers() + ['X-File-Preview' => '1'];
+
+        // Powder coating gets no model of its own, yet sees the task's model to look at.
+        $this->as($this->account('operator', $powder));
+        $listed = $this->getJson('/api/factories/factory/'.$powder, $this->headers())->assertOk()->json('orders.0');
+        $this->assertSame([$model->id], array_column($listed['model_files'], 'id'));
+        $this->assertTrue($listed['model_files'][0]['operator_download_restricted']);
+        $this->get('/api/secure-files/pmp/'.$model->id, $preview)->assertOk();
+        $this->get('/api/secure-files/pmp/'.$model->id.'?download=1', $preview)->assertForbidden();
+        $this->getJson('/api/secure-files/pmp/'.$model->id.'/details?order_id='.$order['id'], $this->headers())->assertOk()->assertJsonPath('details.factory_order_id', null);
+        $versions = collect($this->getJson('/api/tasks/'.$order['id'].'/file-versions', $this->headers())->assertOk()->json('files'))->keyBy('id');
+        $this->assertTrue($versions[$model->id]['can_view']);
+        $this->assertFalse($versions[$model->id]['can_download']);
+        $this->assertTrue($versions[$sheet->id]['can_download']);
+        // …but not the models of a task it has no work in.
+        $this->getJson('/api/secure-files/pmp/'.$model->id.'/details?order_id='.$other['id'], $this->headers())->assertForbidden();
+
+        // The laser has the model among its own files, so it is not listed twice.
+        $this->as($this->account('operator', $laser));
+        $this->assertSame([], $this->getJson('/api/factories/factory/'.$laser, $this->headers())->assertOk()->json('orders.0.model_files'));
+        $this->get('/api/secure-files/pmp/'.$model->id, $preview)->assertOk();
+        $this->get('/api/secure-files/pmp/'.$model->id.'?download=1', $this->headers())->assertForbidden();
+
+        // A workshop without work in the task sees nothing.
+        $this->as($this->account('operator', $this->factories['DLD']->id));
+        $this->get('/api/secure-files/pmp/'.$model->id, $preview)->assertForbidden();
+    }
+
     private function file(int $factory, string $name): PmpFiles { return $this->in(function () use ($factory, $name) { $path = 'companies/'.$this->company->id.'/qa/'.$name; Storage::disk('private')->put($path, 'private bytes'); return PmpFiles::create(['pmp_id' => $this->pmp->id, 'remote_number_id' => $this->remote->id, 'factory_id' => $factory, 'original_name' => $name, 'path' => $path]); }); }
     public function test_legacy_non_workshop_steps_do_not_block_real_production_completion(): void
     {
