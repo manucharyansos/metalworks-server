@@ -1433,6 +1433,42 @@ class CompanyWorkshopCatalogTest extends TestCase
         $this->assertSame([$unrelated['id']], array_column($board->json('orders'), 'id'));
     }
 
+    public function test_a_helper_who_left_production_drops_out_instead_of_blocking_the_team(): void
+    {
+        $laser = $this->factories['DXF'];
+        $first = $this->account('operator', $laser->id);
+        $second = $this->account('operator', $laser->id);
+        $helper = $this->account('operator');
+        $file = $this->file($laser->id, 'crew.dxf');
+        $this->as($this->engineer);
+        $order = $this->postJson('/api/engineers/engineer', $this->payload([$file->id]), $this->headers())->assertCreated()->json('order');
+        $step = $this->in(fn () => Order::findOrFail($order['id'])->factoryOrders()->forWorkshops()->firstOrFail());
+        $url = '/api/tasks/'.$order['id'].'/workshops/'.$step->id.'/team';
+        $this->putJson($url, ['operator_id' => $first->id, 'helper_ids' => [$helper->id], 'team_version' => $step->team_version], $this->headers())->assertOk();
+
+        // The helper moves into engineering (an engineer position in the org chart, say).
+        $this->in(function () use ($helper) {
+            $membership = CompanyMembership::where('user_id', $helper->id)->firstOrFail();
+            \App\Models\MembershipAssignment::create(['membership_id' => $membership->id, 'user_id' => $helper->id,
+                'role_id' => Role::where('name', 'engineer')->value('id'), 'factory_id' => null]);
+        });
+        $workers = array_column($this->getJson('/api/task-workload', $this->headers())->assertOk()->json('workers'), 'id');
+        $this->assertNotContains($helper->id, $workers);
+
+        // The team editor still carries the stored helper; the save goes through and drops them.
+        $step = $this->in(fn () => $step->fresh());
+        $this->putJson($url, ['operator_id' => $second->id, 'helper_ids' => [$helper->id], 'team_version' => $step->team_version], $this->headers())->assertOk();
+        $step = $this->in(fn () => $step->fresh()->load('helpers'));
+        $this->assertSame($second->id, (int) $step->operator_id);
+        $this->assertSame([], $step->helpers->pluck('id')->all());
+
+        // Bringing in someone who is not production staff is still refused, by name.
+        $refused = $this->putJson($url, ['operator_id' => $second->id, 'helper_ids' => [$this->engineer->id], 'team_version' => $step->team_version], $this->headers())
+            ->assertUnprocessable()->json('errors.operator_id.0');
+        $this->assertStringContainsString('«engineer»', $refused);
+        $this->putJson($url, ['operator_id' => $helper->id, 'helper_ids' => [], 'team_version' => $step->team_version], $this->headers())->assertUnprocessable();
+    }
+
     private function in(callable $callback): mixed { return app(CompanyContext::class)->run($this->company, $callback); }
     private function account(string $role, ?int $factory = null): User { return $this->in(function () use ($role, $factory) { $user = User::create(['name' => $role, 'email' => $role.'-'.uniqid().'@example.invalid', 'password' => 'test-password', 'role_id' => Role::where('name', $role)->value('id'), 'factory_id' => $factory]); $m = CompanyMembership::where('user_id', $user->id)->first(); $m->permissions()->sync(Permission::whereIn('slug', ['orders.view', 'orders.create', 'orders.update', 'factory.view', 'factory.download', 'factory.order_update', 'pmp.view', 'pmp_files.view', 'pmp_files.upload'])->pluck('id')->mapWithKeys(fn ($id) => [$id => ['allowed' => true]])->all()); return $user; }); }
     private function as(User $user): void { app(CompanyContext::class)->set(null); $user->unsetRelation('role')->unsetRelation('factory'); Sanctum::actingAs($user); }
