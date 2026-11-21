@@ -297,7 +297,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
                 ->middleware('permission:pmp.update');
 
             Route::delete('pmps/{pmp}', [PmpController::class, 'destroy'])
-                ->middleware('permission:pmp.update');
+                ->middleware(['permission:pmp.update', 'permission:pmp_files.delete']);
 
             Route::post('pmps/{id}/remote-number', [PmpController::class, 'remoteNumber'])
                 ->middleware('permission:pmp.create');
@@ -315,6 +315,13 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
                 ->middleware('permission:pmp.view');
             Route::get('pmps/remote-number/{id}', [PmpController::class, 'showByRemoteNumber'])
                 ->middleware('permission:pmp.view');
+            Route::put('pmps/remote-number/{id}', [PmpController::class, 'renameSubgroup'])
+                ->whereNumber('id')->middleware('permission:pmp.update');
+            // Deleting a subgroup also deletes its files, so both rights are needed.
+            Route::get('pmps/remote-number/{id}/deletion', [PmpController::class, 'subgroupDeletion'])
+                ->whereNumber('id')->middleware(['permission:pmp.update', 'permission:pmp_files.delete']);
+            Route::delete('pmps/remote-number/{id}', [PmpController::class, 'destroySubgroup'])
+                ->whereNumber('id')->middleware(['permission:pmp.update', 'permission:pmp_files.delete']);
 
             Route::get('pmpFiles', [PmpFilesController::class, 'index'])
                 ->middleware('permission:pmp_files.view');

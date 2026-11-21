@@ -6,11 +6,13 @@ use App\Http\Controllers\Controller;
 use App\Models\Factory;
 use App\Models\Pmp;
 use App\Models\RemoteNumber;
+use App\Support\ProjectRemoval;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class PmpController extends Controller
 {
@@ -153,9 +155,54 @@ class PmpController extends Controller
 
     public function destroy($id): JsonResponse
     {
-        $pmp = Pmp::findOrFail($id);
-        $pmp->delete();
+        // A plain delete cascaded into tasks' file lists and left the files on disk.
+        ProjectRemoval::deleteGroup(Pmp::findOrFail($id));
         return response()->json(['message' => 'Project deleted successfully']);
+    }
+
+    /** Renames the opened subgroup and its group; the codes stay, since stored files are filed under them. */
+    public function renameSubgroup(Request $request, string $id): JsonResponse
+    {
+        $remote = RemoteNumber::findOrFail($id);
+        $request->merge([
+            'group_name' => trim((string) $request->input('group_name')),
+            'remote_number_name' => trim((string) $request->input('remote_number_name')),
+        ]);
+        $data = $request->validate([
+            'group_name' => 'required|string|max:255',
+            'remote_number_name' => 'required|string|max:255',
+        ]);
+
+        DB::transaction(function () use ($remote, $data) {
+            $pmp = Pmp::whereKey($remote->pmp_id)->lockForUpdate()->firstOrFail();
+            $remote = RemoteNumber::whereKey($remote->id)->lockForUpdate()->firstOrFail();
+            // Names are picked by typing them, so two groups (or two subgroups of one
+            // group) cannot share one. An unchanged name is never re-checked.
+            if ($pmp->group_name !== $data['group_name']) {
+                $taken = Pmp::whereKeyNot($pmp->id)->where('group_name', $data['group_name'])->value('group');
+                if ($taken !== null) throw ValidationException::withMessages(['group_name' => [sprintf('«%s» անունով խումբ արդեն կա (%s)։', $data['group_name'], $taken)]]);
+                $pmp->update(['group_name' => $data['group_name']]);
+            }
+            if ($remote->remote_number_name !== $data['remote_number_name']) {
+                $taken = RemoteNumber::where('pmp_id', $pmp->id)->whereKeyNot($remote->id)->where('remote_number_name', $data['remote_number_name'])->value('remote_number');
+                if ($taken !== null) throw ValidationException::withMessages(['remote_number_name' => [sprintf('Այս խմբում «%s» անունով ենթախումբ արդեն կա (%s)։', $data['remote_number_name'], $taken)]]);
+                $remote->update(['remote_number_name' => $data['remote_number_name']]);
+            }
+        }, 3);
+
+        return $this->showByRemoteNumber($id);
+    }
+
+    /** What deleting the subgroup would remove, or which tasks keep it. */
+    public function subgroupDeletion(string $id): JsonResponse
+    {
+        return response()->json(ProjectRemoval::preview(RemoteNumber::findOrFail($id)));
+    }
+
+    public function destroySubgroup(string $id): JsonResponse
+    {
+        $result = ProjectRemoval::deleteSubgroup(RemoteNumber::findOrFail($id));
+        return response()->json(['message' => 'Ենթախումբը ջնջված է։'] + $result);
     }
 
     public function checkGroup(Request $request): JsonResponse
