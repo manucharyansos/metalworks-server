@@ -47,6 +47,33 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::post('{registrationRequest}/notify', [$controller, 'notify'])->middleware('throttle:6,1');
         });
 
+        // Customer order requests: the customer's own side, then the company's inbox.
+        Route::prefix('customer/quotes')->group(function () {
+            $controller = \App\Http\Controllers\Api\Quote\CustomerQuoteController::class;
+            Route::get('options', [$controller, 'options']);
+            Route::get('/', [$controller, 'index']);
+            Route::post('draft/items', [$controller, 'storeItem'])->middleware('throttle:60,1');
+            Route::patch('draft/items/{item}', [$controller, 'updateItem'])->whereNumber('item');
+            Route::delete('draft/items/{item}', [$controller, 'destroyItem'])->whereNumber('item');
+            Route::post('draft/submit', [$controller, 'submit'])->middleware('throttle:10,1');
+            Route::get('{quote}', [$controller, 'show'])->whereNumber('quote');
+            Route::post('{quote}/cancel', [$controller, 'cancel'])->whereNumber('quote');
+            Route::post('{quote}/decision', [$controller, 'decide'])->whereNumber('quote');
+            Route::get('{quote}/items/{item}/file', [$controller, 'file'])->whereNumber('quote')->whereNumber('item');
+        });
+        Route::prefix('pricing')->middleware('admin')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Api\Quote\PricingController::class, 'show']);
+            Route::put('/', [\App\Http\Controllers\Api\Quote\PricingController::class, 'update']);
+        });
+        Route::prefix('quote-requests')->middleware('admin')->group(function () {
+            $controller = \App\Http\Controllers\Api\Quote\QuoteInboxController::class;
+            Route::get('/', [$controller, 'index']);
+            Route::get('{quote}', [$controller, 'show'])->whereNumber('quote');
+            Route::post('{quote}/answer', [$controller, 'answer'])->whereNumber('quote');
+            Route::post('{quote}/reject', [$controller, 'reject'])->whereNumber('quote');
+            Route::get('{quote}/items/{item}/file', [$controller, 'file'])->whereNumber('quote')->whereNumber('item');
+        });
+
         Route::get('file-categories', [\App\Http\Controllers\Api\FileCategoryController::class, 'index'])->middleware('permission:pmp_files.view');
         Route::post('workshops/{workshop}/functions', [\App\Http\Controllers\Api\WorkshopFunctionController::class, 'store'])
             ->whereNumber('workshop')->middleware('permission:pmp_files.upload');
