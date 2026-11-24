@@ -54,6 +54,34 @@ class DxfMeasureTest extends TestCase
         $this->assertEqualsWithDelta(25.4 * 25.4, $inch['area_mm2'], 0.1);
     }
 
+    public function test_an_r12_polyline_keeps_its_bulges_and_a_bend_line_stays_a_bend(): void
+    {
+        // The form the customer's template builder writes: POLYLINE, VERTEX, SEQEND.
+        $m = DxfMeasure::text($this->dxf([
+            $this->polyline([[10, 0, 0], [110, 0, 1], [110, 20, 0], [10, 20, 1]]),
+            $this->circle(10, 10, 4),
+            $this->line(60, 0, 60, 20, 'BEND'),
+        ]));
+        $this->assertEqualsWithDelta(200 + 2 * M_PI * 10 + 2 * M_PI * 4, $m['cut_length_mm'], 0.2);
+        $this->assertSame(2, $m['pierces']);
+        $this->assertSame(1, $m['bends']);
+        $this->assertSame([120.0, 20.0], [$m['width_mm'], $m['height_mm']]);
+        $this->assertEqualsWithDelta(100 * 20 + M_PI * 100 - M_PI * 16, $m['area_mm2'], 1);
+    }
+
+    public function test_a_sheet_with_thousands_of_holes_is_measured_quickly(): void
+    {
+        $holes = [];
+        for ($i = 0; $i < 50; $i++) {
+            for ($j = 0; $j < 50; $j++) $holes[] = $this->circle(10 + $i * 20, 10 + $j * 20, 4);
+        }
+        $started = microtime(true);
+        $m = DxfMeasure::text($this->dxf([$this->lwpolyline([[0, 0], [1000, 0], [1000, 1000], [0, 1000]], true), ...$holes]));
+        $this->assertLessThan(10, microtime(true) - $started);
+        $this->assertSame(2501, $m['pierces']);
+        $this->assertEqualsWithDelta(1000000 - 2500 * M_PI * 16, $m['area_mm2'], 1250);
+    }
+
     public function test_files_that_cannot_be_measured_are_refused(): void
     {
         foreach (['not a drawing', "AutoCAD Binary DXF\r\n\x1a\x00", $this->dxf(["0\nTEXT\n8\n0\n10\n0\n20\n0\n40\n5\n1\nHello\n"])] as $text) {
@@ -81,6 +109,13 @@ class DxfMeasureTest extends TestCase
     private function circle(float $x, float $y, float $r): string
     {
         return "0\nCIRCLE\n8\n0\n10\n{$x}\n20\n{$y}\n40\n{$r}\n";
+    }
+
+    private function polyline(array $vertices): string
+    {
+        $text = "0\nPOLYLINE\n8\n0\n66\n1\n10\n0\n20\n0\n30\n0\n70\n1\n";
+        foreach ($vertices as $v) $text .= "0\nVERTEX\n8\n0\n10\n{$v[0]}\n20\n{$v[1]}\n30\n0\n".(!empty($v[2]) ? "42\n{$v[2]}\n" : '');
+        return $text."0\nSEQEND\n8\n0\n";
     }
 
     private function lwpolyline(array $vertices, bool $closed): string

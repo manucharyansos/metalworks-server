@@ -448,19 +448,31 @@ final class DxfMeasure
         $shapes = [];
         foreach ($loops as $points) {
             $area = 0.0;
+            $minX = $minY = INF;
+            $maxX = $maxY = -INF;
             for ($i = 0, $n = count($points); $i < $n; $i++) {
                 [$x1, $y1] = $points[$i];
                 [$x2, $y2] = $points[($i + 1) % $n];
                 $area += $x1 * $y2 - $x2 * $y1;
+                if ($x1 < $minX) $minX = $x1;
+                if ($y1 < $minY) $minY = $y1;
+                if ($x1 > $maxX) $maxX = $x1;
+                if ($y1 > $maxY) $maxY = $y1;
             }
-            $shapes[] = ['points' => $points, 'area' => abs($area) / 2];
+            $shapes[] = ['points' => $points, 'box' => [$minX, $minY, $maxX, $maxY], 'area' => abs($area) / 2];
         }
         usort($shapes, fn ($a, $b) => $b['area'] <=> $a['area']);
         $total = 0.0;
         foreach ($shapes as $i => $shape) {
             $depth = 0;
             [$x, $y] = $shape['points'][0];
-            for ($j = 0; $j < $i; $j++) if (self::inside($x, $y, $shapes[$j]['points'])) $depth++;
+            for ($j = 0; $j < $i; $j++) {
+                // Only a contour whose box holds the point can hold it: a sheet
+                // with thousands of holes stays quick.
+                [$x0, $y0, $x1, $y1] = $shapes[$j]['box'];
+                if ($x < $x0 || $x > $x1 || $y < $y0 || $y > $y1) continue;
+                if (self::inside($x, $y, $shapes[$j]['points'])) $depth++;
+            }
             $total += $depth % 2 === 0 ? $shape['area'] : -$shape['area'];
         }
         return round(max(0.0, $total), 1);
