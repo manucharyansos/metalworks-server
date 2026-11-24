@@ -13,8 +13,9 @@ use Illuminate\Support\Collection;
  *   painting = max(both sides × price per m², minimum per part), plus primer
  * The quantity discount applies to the line; the request adds the setup fee and
  * is raised to the minimum order. What the list cannot price (no flat drawing,
- * welding, rolling, tube cutting, a material outside the list) stays open for
- * the manager, who confirms the final price either way.
+ * an outline that does not close, welding, rolling, tube cutting, a material
+ * outside the list) stays open for the manager, who confirms the final price
+ * either way.
  */
 final class QuotePricing
 {
@@ -33,7 +34,13 @@ final class QuotePricing
         $reasons = [];
         if (!$settings->enabled) $reasons[] = 'disabled';
         $metrics = $item->metrics ?? [];
-        if (($metrics['status'] ?? null) !== 'ok') $reasons[] = 'drawing';
+        if (($metrics['status'] ?? null) !== 'ok') {
+            $reasons[] = 'drawing';
+        } elseif (($metrics['open_contours'] ?? 0) > 0) {
+            // An outline that never closes is a drawing error or lines that are
+            // not a part: its length is no price, so the manager looks at it.
+            $reasons[] = 'open';
+        }
         $thickness = $item->pricing_thickness_id ? PricingThickness::with('material')->find($item->pricing_thickness_id) : null;
         if (!$thickness || !$thickness->is_active || !$thickness->material?->is_active) $reasons[] = 'material';
         $bend = $paint = false;

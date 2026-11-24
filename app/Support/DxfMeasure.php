@@ -4,8 +4,9 @@ namespace App\Support;
 
 /**
  * Measures a flat (laser) DXF for pricing: the cut length, how many separate
- * contours start a cut (pierces), the bend lines, the bounding size and the net
- * area (outer contours minus holes). Everything is returned in millimetres.
+ * contours start a cut (pierces), how many of them never close (a drawing
+ * error, or lines that are not a part), the bend lines, the bounding size and
+ * the net area (outer contours minus holes). Everything is returned in millimetres.
  *
  * Curves are sampled and placed through INSERT transforms, so arcs, bulged
  * polylines, ellipses, splines and blocks all count. Lines on a bend layer are
@@ -24,7 +25,7 @@ final class DxfMeasure
     private float $scale = 1.0;
     private int $points = 0;
 
-    /** @return array{cut_length_mm: float, pierces: int, bends: int, width_mm: float, height_mm: float, area_mm2: ?float} */
+    /** @return array{cut_length_mm: float, pierces: int, bends: int, open_contours: int, width_mm: float, height_mm: float, area_mm2: ?float} */
     public static function file(string $path): array
     {
         $size = @filesize($path);
@@ -62,12 +63,13 @@ final class DxfMeasure
             for ($i = 1, $n = count($points); $i < $n; $i++) $length += hypot($points[$i][0] - $points[$i - 1][0], $points[$i][1] - $points[$i - 1][1]);
             foreach ($points as [$x, $y]) { $minX = min($minX, $x); $minY = min($minY, $y); $maxX = max($maxX, $x); $maxY = max($maxY, $y); }
         }
-        [$pierces, $loops] = self::contours($paths);
+        [$pierces, $loops, $unclosed] = self::contours($paths);
 
         return [
             'cut_length_mm' => round($length, 1),
             'pierces' => $pierces,
             'bends' => $bends,
+            'open_contours' => $unclosed,
             'width_mm' => round($maxX - $minX, 1),
             'height_mm' => round($maxY - $minY, 1),
             'area_mm2' => self::netArea($loops),
@@ -407,12 +409,23 @@ final class DxfMeasure
         }
         $groups = [];
         foreach ($open as [$index, $a, $b]) $groups[$find($a)][] = [$index, $a, $b];
+        $unclosed = 0;
         foreach ($groups as $members) {
             $pierces++;
             $loop = self::walk($members, $paths);
             if ($loop) $loops[] = $loop;
+            // An end that no other piece meets leaves the cut open; where pieces
+            // meet in pairs (even a figure of eight) the outline is closed.
+            $degree = [];
+            foreach ($members as [, $a, $b]) {
+                $degree[$a] = ($degree[$a] ?? 0) + 1;
+                $degree[$b] = ($degree[$b] ?? 0) + 1;
+            }
+            foreach ($degree as $count) {
+                if ($count % 2) { $unclosed++; break; }
+            }
         }
-        return [$pierces, $loops];
+        return [$pierces, $loops, $unclosed];
     }
 
     /** Joins a chain into one outline when each end meets exactly one other piece. */

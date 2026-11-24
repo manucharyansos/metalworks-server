@@ -29,6 +29,7 @@ class DxfMeasureTest extends TestCase
         $this->assertEqualsWithDelta(300, $m['cut_length_mm'], 0.01);
         $this->assertSame(1, $m['pierces']);
         $this->assertSame(1, $m['bends']);
+        $this->assertSame(0, $m['open_contours']);
         $this->assertEqualsWithDelta(5000, $m['area_mm2'], 0.01);
     }
 
@@ -52,6 +53,31 @@ class DxfMeasureTest extends TestCase
         $inch = DxfMeasure::text($this->dxf([$this->lwpolyline([[0, 0], [1, 0], [1, 1], [0, 1]], true)], 1));
         $this->assertEqualsWithDelta(4 * 25.4, $inch['cut_length_mm'], 0.01);
         $this->assertEqualsWithDelta(25.4 * 25.4, $inch['area_mm2'], 0.1);
+    }
+
+    public function test_outlines_that_do_not_close_are_counted(): void
+    {
+        // Three sides of a frame, a loose line and a closed hole: two open outlines.
+        $m = DxfMeasure::text($this->dxf([
+            $this->line(0, 0, 100, 0), $this->line(100, 0, 100, 50), $this->line(100, 50, 0, 50),
+            $this->line(0, 70, 100, 70),
+            $this->circle(50, 25, 5),
+        ]));
+        $this->assertSame(2, $m['open_contours']);
+        $this->assertSame(3, $m['pierces']);
+
+        // Two squares that touch at a corner are closed, though four ends meet there.
+        $square = fn (float $x, float $y) => [
+            $this->line($x, $y, $x + 10, $y), $this->line($x + 10, $y, $x + 10, $y + 10),
+            $this->line($x + 10, $y + 10, $x, $y + 10), $this->line($x, $y + 10, $x, $y),
+        ];
+        $this->assertSame(0, DxfMeasure::text($this->dxf([...$square(0, 0), ...$square(10, 10)]))['open_contours']);
+
+        // A gap wider than the join tolerance leaves an outline open.
+        $gap = DxfMeasure::text($this->dxf([
+            $this->line(0, 0, 100, 0), $this->line(100, 0, 100, 50), $this->line(100, 50, 0, 50), $this->line(0, 50, 0, 0.2),
+        ]));
+        $this->assertSame(1, $gap['open_contours']);
     }
 
     public function test_an_r12_polyline_keeps_its_bulges_and_a_bend_line_stays_a_bend(): void

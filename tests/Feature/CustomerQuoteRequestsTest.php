@@ -176,14 +176,7 @@ class CustomerQuoteRequestsTest extends TestCase
 
     public function test_a_flat_drawing_gets_an_instant_estimate_that_is_kept_when_sent(): void
     {
-        $this->as($this->manager);
-        $prices = $this->putJson('/api/pricing', [
-            'settings' => ['enabled' => true, 'bend_price' => 500, 'paint_price_m2' => 3000, 'primer_price_m2' => 1000, 'paint_min_part' => 500,
-                'setup_fee' => 2000, 'min_order' => 5000, 'waste_percent' => 10, 'discounts' => [['min_qty' => 10, 'percent' => 10]],
-                'vat_included' => true, 'customer_note' => 'Includes VAT'],
-            'materials' => [['name' => 'St37', 'density' => 7850, 'price_per_kg' => 600, 'is_active' => true,
-                'thicknesses' => [['thickness' => 2, 'cut_price_per_m' => 400, 'pierce_price' => 50, 'is_active' => true]]]],
-        ], $this->headers())->assertOk()->json();
+        $prices = $this->priceList();
         $thickness = $prices['materials'][0]['thicknesses'][0]['id'];
 
         $this->as($this->customer);
@@ -229,6 +222,33 @@ class CustomerQuoteRequestsTest extends TestCase
         $this->assertSame(1000, $staff['items'][0]['pricing']['breakdown']['bending']);
         $this->as($this->account('engineer'));
         $this->getJson('/api/pricing', $this->headers())->assertForbidden();
+    }
+
+    public function test_a_drawing_whose_outline_does_not_close_is_left_to_the_manager(): void
+    {
+        $thickness = $this->priceList()['materials'][0]['thicknesses'][0]['id'];
+        $this->as($this->customer);
+        // A line and a hole, no outline around them.
+        $lines = "0\nSECTION\n2\nENTITIES\n0\nLINE\n8\n0\n10\n0\n20\n0\n11\n100\n21\n0\n"
+            ."0\nCIRCLE\n8\n0\n10\n50\n20\n20\n40\n10\n0\nENDSEC\n0\nEOF\n";
+        $item = $this->postJson('/api/customer/quotes/draft/items', [
+            'file' => UploadedFile::fake()->createWithContent('sketch.dxf', $lines), 'pricing_thickness_id' => $thickness,
+        ], $this->headers())->assertCreated()->json('draft.items.0');
+        $this->assertSame(['ok', 1, 2], [$item['metrics']['status'], $item['metrics']['open_contours'], $item['metrics']['pierces']]);
+        $this->assertSame(['status' => 'on_request', 'reasons' => ['open']], $item['pricing']);
+    }
+
+    // The company's price list, switched on: St37 in 2 mm.
+    private function priceList(): array
+    {
+        $this->as($this->manager);
+        return $this->putJson('/api/pricing', [
+            'settings' => ['enabled' => true, 'bend_price' => 500, 'paint_price_m2' => 3000, 'primer_price_m2' => 1000, 'paint_min_part' => 500,
+                'setup_fee' => 2000, 'min_order' => 5000, 'waste_percent' => 10, 'discounts' => [['min_qty' => 10, 'percent' => 10]],
+                'vat_included' => true, 'customer_note' => 'Includes VAT'],
+            'materials' => [['name' => 'St37', 'density' => 7850, 'price_per_kg' => 600, 'is_active' => true,
+                'thicknesses' => [['thickness' => 2, 'cut_price_per_m' => 400, 'pierce_price' => 50, 'is_active' => true]]]],
+        ], $this->headers())->assertOk()->json();
     }
 
     private function sentQuote(): QuoteRequest
