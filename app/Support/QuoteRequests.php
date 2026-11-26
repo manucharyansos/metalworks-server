@@ -154,6 +154,40 @@ final class QuoteRequests
         }
     }
 
+    public static function addAssembly(User $customer, string $key, array $parts, array $files): QuoteRequest
+    {
+        $written = [];
+        $disk = Storage::disk('private');
+        try {
+            return DB::transaction(function () use ($customer, $key, $parts, $files, &$written, $disk) {
+                self::lockCustomer($customer);
+                $previous = QuoteRequestItem::where('assembly_key', $key)
+                    ->whereHas('quote', fn ($q) => $q->where('customer_id', $customer->id))->first();
+                if ($previous) {
+                    abort_unless($previous->quote->status === 'draft', 409);
+                    return $previous->quote;
+                }
+                $draft = self::draft($customer);
+                if (($draft?->items()->count() ?? 0) + count($parts) > self::MAX_ITEMS)
+                    throw ValidationException::withMessages(['parts' => ['Հավաքը գերազանցում է հայտի դետալների սահմանաչափը։']]);
+
+                foreach ($parts as $i => $part) {
+                    $item = self::addItem($customer, $files[$i], $part['fields']);
+                    $written[] = $item->path;
+                    $geometry = $item->path.'.json';
+                    $written[] = $geometry;
+                    if (!$disk->put($geometry, json_encode($part['geometry'], JSON_THROW_ON_ERROR)))
+                        throw new \RuntimeException('Assembly geometry storage failed');
+                    $item->update(['assembly_key' => $key, 'assembly_position' => $i]);
+                }
+                return $item->quote()->firstOrFail();
+            });
+        } catch (\Throwable $error) {
+            if ($written) $disk->delete($written);
+            throw $error;
+        }
+    }
+
     public static function updateItem(User $customer, QuoteRequestItem $item, array $data): QuoteRequestItem
     {
         return DB::transaction(function () use ($customer, $item, $data) {
@@ -171,7 +205,7 @@ final class QuoteRequests
             $locked->delete();
             return $path;
         }, 3);
-        Storage::disk('private')->delete($path);
+        Storage::disk('private')->delete([$path, $path.'.json']);
     }
 
     public static function submit(User $customer, array $data): QuoteRequest
@@ -256,7 +290,7 @@ final class QuoteRequests
             'responded_at' => $quote->responded_at?->toIso8601String(), 'decided_at' => $quote->decided_at?->toIso8601String(),
             'estimate' => $live ? array_diff_key($live, ['items' => true]) : $quote->estimate,
             'items' => $quote->items->map(fn (QuoteRequestItem $item) => [
-                'id' => $item->id, 'original_name' => $item->original_name, 'size' => $item->size,
+                'id' => $item->id, 'assembly_key' => $item->assembly_key, 'assembly_position' => $item->assembly_position, 'original_name' => $item->original_name, 'size' => $item->size,
                 'workshop_ids' => array_values(array_map('intval', $item->workshop_ids ?? [])),
                 'workshops' => array_values(array_filter(array_map(fn ($id) => $workshops[(int) $id] ?? null, $item->workshop_ids ?? []))),
                 'pricing_thickness_id' => $item->pricing_thickness_id,

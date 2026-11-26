@@ -59,7 +59,7 @@ class QuoteInboxController extends Controller
 
     public function file(Request $request, string $quote, string $item)
     {
-        return QuoteFileResponse::make($this->sent($quote), $item, $request->boolean('download'));
+        return QuoteFileResponse::make($this->sent($quote), $item, $request->boolean('download'), $request->boolean('geometry'));
     }
 
     // A draft is the customer's own until it is sent.
