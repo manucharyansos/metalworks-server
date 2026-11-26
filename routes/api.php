@@ -53,6 +53,7 @@ Route::middleware([EnsureFrontendRequestsAreStateful::class, 'setlocale'])->grou
             Route::get('options', [$controller, 'options']);
             Route::get('/', [$controller, 'index']);
             Route::post('draft/items', [$controller, 'storeItem'])->middleware('throttle:60,1');
+            Route::post('draft/assemblies', [$controller, 'storeAssembly'])->middleware('throttle:20,1');
             Route::patch('draft/items/{item}', [$controller, 'updateItem'])->whereNumber('item');
             Route::delete('draft/items/{item}', [$controller, 'destroyItem'])->whereNumber('item');
             Route::post('draft/submit', [$controller, 'submit'])->middleware('throttle:10,1');

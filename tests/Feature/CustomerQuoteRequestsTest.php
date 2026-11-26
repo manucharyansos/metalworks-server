@@ -90,6 +90,36 @@ class CustomerQuoteRequestsTest extends TestCase
         $this->assertMatchesRegularExpression('/^Q-\d{4}-0002$/', $second);
     }
 
+    public function test_assembly_members_are_atomic_and_a_retry_keeps_their_quantities(): void
+    {
+        $this->as($this->customer);
+        $key = (string) \Illuminate\Support\Str::uuid();
+        $geometry = ['view' => ['part' => ['outline' => ['type' => 'circle', 'r' => 10, 'cx' => 10, 'cy' => 10], 'holes' => []], 'thickness' => 2],
+            'mode' => 'free', 'placement' => ['type' => 'free', 'matrix' => [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]]];
+        $send = function (int $secondWorkshop) use ($key, $geometry) {
+            $fields = ['quantity' => 2, 'workshop_ids' => [$this->id('DXF')]];
+            return $this->postJson('/api/customer/quotes/draft/assemblies', [
+                'key' => $key,
+                'files' => [UploadedFile::fake()->create('plate.dxf', 1), UploadedFile::fake()->create('plate.dxf', 1)],
+                'parts' => json_encode([
+                    ['fields' => $fields, 'geometry' => $geometry],
+                    ['fields' => ['quantity' => 3, 'workshop_ids' => [$secondWorkshop]], 'geometry' => $geometry],
+                ]),
+            ], $this->headers());
+        };
+        $send($this->id('SW'))->assertUnprocessable();
+        $this->assertDatabaseCount('quote_request_items', 0);
+        $this->assertSame([], Storage::disk('private')->allFiles());
+        $draft = $send($this->id('DXF'))->assertCreated()->assertJsonCount(2, 'draft.items')
+            ->assertJsonPath('draft.items.0.quantity', 2)->assertJsonPath('draft.items.1.quantity', 3)->json('draft');
+        $send($this->id('DXF'))->assertCreated()->assertJsonCount(2, 'draft.items');
+        $this->assertCount(4, Storage::disk('private')->allFiles());
+        foreach ($draft['items'] as $item) {
+            $this->assertSame($key, $item['assembly_key']);
+            $this->get('/api/customer/quotes/'.$draft['id'].'/items/'.$item['id'].'/file?geometry=1', $this->headers())->assertOk();
+        }
+    }
+
     public function test_the_company_answers_with_a_price_and_the_customer_accepts_it(): void
     {
         $quote = $this->sentQuote();

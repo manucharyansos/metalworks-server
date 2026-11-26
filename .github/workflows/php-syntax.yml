@@ -144,5 +144,7 @@ jobs:
         run: composer install --no-interaction --prefer-dist --no-progress --no-scripts
       - name: Discover packages with proc_open disabled
         run: php -d disable_functions=proc_open artisan package:discover --no-interaction
+      - name: Verify customer quote requests and assembly transactions on InnoDB
+        run: vendor/bin/phpunit --filter=CustomerQuoteRequestsTest
       - name: Verify interrupted migrations and registration approvals on InnoDB
         run: vendor/bin/phpunit --filter='CompanyMigrationTest|RegistrationRequestsTest|CompanyRegistrationFollowupTest|CompanyStaffAssignmentsTest|CompanyTaskWorkflowTest|CompanyTaskRoutingTest|TaskApprovalCycleTest|TaskCreationWorkersTest|CompanyWorkshopCatalogTest'

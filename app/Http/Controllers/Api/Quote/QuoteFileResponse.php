@@ -8,13 +8,17 @@ use Illuminate\Support\Facades\Storage;
 /** Streams one uploaded part of a request; the storage path never leaves the server. */
 final class QuoteFileResponse
 {
-    public static function make(QuoteRequest $quote, string $item, bool $download)
+    public static function make(QuoteRequest $quote, string $item, bool $download, bool $geometry = false)
     {
         abort_unless(ctype_digit($item), 404);
         $file = $quote->items()->whereKey((int) $item)->firstOrFail();
         $disk = Storage::disk('private');
         abort_unless($disk->exists($file->path), 404, 'Ֆայլը չի գտնվել։');
         $headers = ['Cache-Control' => 'private, no-store', 'X-Content-Type-Options' => 'nosniff'];
+        if ($geometry) {
+            abort_unless($file->assembly_key && $disk->exists($file->path.'.json'), 404);
+            return $disk->response($file->path.'.json', 'part.json', $headers + ['Content-Type' => 'application/json']);
+        }
         return $download
             ? $disk->download($file->path, $file->original_name, $headers)
             : $disk->response($file->path, $file->original_name, $headers);

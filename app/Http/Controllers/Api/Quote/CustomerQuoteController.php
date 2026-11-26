@@ -42,6 +42,32 @@ class CustomerQuoteController extends Controller
         return response()->json(['draft' => QuoteRequests::present($item->quote()->firstOrFail()), 'item_id' => $item->id], 201);
     }
 
+    public function storeAssembly(Request $request): JsonResponse
+    {
+        $customer = QuoteRequests::customer($request);
+        $request->validate(['key' => 'required|uuid', 'parts' => 'required|string|max:6000000',
+            'files' => 'required|array|min:1|max:'.QuoteRequests::MAX_ITEMS, 'files.*' => 'required|file|max:'.QuoteRequests::MAX_FILE_KB]);
+        $files = $request->file('files');
+        $parts = json_decode($request->input('parts'), true);
+        $rules = ['parts' => 'required|array|size:'.count($files),
+            'parts.*.fields' => 'required|array', 'parts.*.geometry' => 'required|array',
+            'parts.*.geometry.view' => 'required|array', 'parts.*.geometry.view.part.outline' => 'required|array',
+            'parts.*.geometry.view.part.holes' => 'present|array',
+            'parts.*.geometry.view.thickness' => 'required|numeric|min:0.1|max:300',
+            'parts.*.geometry.placement.type' => 'required|in:free',
+            'parts.*.geometry.placement.matrix' => 'required|array|size:16',
+            'parts.*.geometry.placement.matrix.*' => 'required|numeric',
+            'parts.*.geometry.mode' => 'required|in:free'];
+        validator(['parts' => $parts], $rules)->validate();
+        abort_unless(array_keys($files) === range(0, count($files) - 1) && array_keys($files) === array_keys($parts), 422);
+        foreach ($files as $i => $file) {
+            abort_unless(strtolower($file->getClientOriginalExtension()) === 'dxf', 422);
+            $parts[$i]['fields'] = validator($parts[$i]['fields'], QuoteRequests::itemRules())->validate();
+        }
+        $draft = QuoteRequests::addAssembly($customer, $request->input('key'), $parts, $files);
+        return response()->json(['draft' => QuoteRequests::present($draft)], 201);
+    }
+
     public function updateItem(Request $request, string $item): JsonResponse
     {
         $customer = QuoteRequests::customer($request);
@@ -82,7 +108,7 @@ class CustomerQuoteController extends Controller
     public function file(Request $request, string $quote, string $item)
     {
         $quote = $this->own(QuoteRequests::customer($request), $quote);
-        return QuoteFileResponse::make($quote, $item, $request->boolean('download'));
+        return QuoteFileResponse::make($quote, $item, $request->boolean('download'), $request->boolean('geometry'));
     }
 
     private function own(User $customer, string $id): QuoteRequest

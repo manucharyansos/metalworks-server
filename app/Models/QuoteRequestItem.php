@@ -12,7 +12,7 @@ class QuoteRequestItem extends Model
 
     protected $fillable = [
         'quote_request_id', 'path', 'original_name', 'size', 'workshop_ids', 'pricing_thickness_id', 'material', 'thickness',
-        'quantity', 'bends', 'paint_ral', 'primer_required', 'note', 'metrics', 'pricing',
+        'assembly_key', 'assembly_position', 'quantity', 'bends', 'paint_ral', 'primer_required', 'note', 'metrics', 'pricing',
     ];
 
     protected $casts = [
