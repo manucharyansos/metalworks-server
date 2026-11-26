@@ -2,7 +2,7 @@
 
 namespace App\Support;
 
-use App\Models\{CompanyMembership, Factory, PricingMaterial, PricingSetting, PricingThickness, QuoteRequest, QuoteRequestItem, TaskNotification, User};
+use App\Models\{CompanyMembership, Factory, Material, MaterialCategory, MaterialGroup, PricingMaterial, PricingSetting, PricingThickness, QuoteRequest, QuoteRequestItem, TaskNotification, User};
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\{DB, Log, Storage};
@@ -57,7 +57,32 @@ final class QuoteRequests
                         'thicknesses' => $material->thicknesses->map(fn (PricingThickness $t) => ['id' => $t->id, 'thickness' => $t->thickness])->values()])
                     ->values(),
             ],
+            'catalog' => self::catalog(),
         ];
+    }
+
+    /**
+     * The company's Materials section, for the template builder: each material
+     * with the thicknesses and sheet sizes it is stocked in. Names and sizes
+     * only: customers see this, so internal notes on a sheet stay out.
+     */
+    private static function catalog(): array
+    {
+        $groups = MaterialGroup::pluck('name', 'id');
+        return MaterialCategory::with(['materials' => fn ($q) => $q->where('thickness', '>', 0)->orderBy('thickness')->orderBy('id')])
+            ->orderBy('name')->get()
+            ->filter(fn (MaterialCategory $category) => $category->materials->isNotEmpty())
+            ->map(fn (MaterialCategory $category) => [
+                'id' => $category->id,
+                'name' => $category->name,
+                'group' => $groups[$category->material_group_id] ?? null,
+                'sheets' => $category->materials->map(fn (Material $material) => [
+                    'id' => $material->id,
+                    'thickness' => (float) $material->thickness,
+                    'width' => $material->width ? (float) $material->width : null,
+                    'length' => $material->length ? (float) $material->length : null,
+                ])->values()->all(),
+            ])->values()->all();
     }
 
     public static function itemRules(): array

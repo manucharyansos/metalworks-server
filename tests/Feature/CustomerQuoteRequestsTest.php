@@ -2,7 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\{Client, Company, CompanyMembership, Factory, Permission, QuoteRequest, Role, TaskNotification, User};
+use App\Models\{Client, Company, CompanyMembership, Factory, Material, MaterialCategory, MaterialGroup, Permission, QuoteRequest, Role, TaskNotification, User};
 use App\Support\CompanyContext;
 use Database\Seeders\{FactorySeeder, FactoryFileExtensionSeeder, FactoryOrderStatusSeeder, RoleTableSeeder};
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -236,6 +236,33 @@ class CustomerQuoteRequestsTest extends TestCase
         ], $this->headers())->assertCreated()->json('draft.items.0');
         $this->assertSame(['ok', 1, 2], [$item['metrics']['status'], $item['metrics']['open_contours'], $item['metrics']['pierces']]);
         $this->assertSame(['status' => 'on_request', 'reasons' => ['open']], $item['pricing']);
+    }
+
+    public function test_the_builder_offers_the_companys_materials(): void
+    {
+        $this->in(function () {
+            $group = MaterialGroup::create(['name' => 'Թիթեղ']);
+            $steel = MaterialCategory::create(['name' => 'Սև պողպատ', 'material_group_id' => $group->id]);
+            Material::create(['material_category_id' => $steel->id, 'thickness' => 3, 'width' => 1250, 'length' => 2500, 'description' => 'St37 3 մմ']);
+            Material::create(['material_category_id' => $steel->id, 'thickness' => 2, 'width' => 1500, 'length' => 3000]);
+            // A category with no sheet of any thickness has nothing to cut from.
+            MaterialCategory::create(['name' => 'Դատարկ', 'material_group_id' => $group->id]);
+        });
+        app(CompanyContext::class)->run($this->other, function () {
+            $group = MaterialGroup::create(['name' => 'Other']);
+            $foreign = MaterialCategory::create(['name' => 'Foreign steel', 'material_group_id' => $group->id]);
+            Material::create(['material_category_id' => $foreign->id, 'thickness' => 5]);
+        });
+        $this->as($this->customer);
+        $catalog = $this->getJson('/api/customer/quotes/options', $this->headers())->assertOk()->json('catalog');
+        $this->assertSame(['Սև պողպատ'], array_column($catalog, 'name'));
+        $this->assertSame('Թիթեղ', $catalog[0]['group']);
+        $this->assertEquals([[2, 1500, 3000], [3, 1250, 2500]], array_map(
+            fn ($sheet) => [$sheet['thickness'], $sheet['width'], $sheet['length']],
+            $catalog[0]['sheets']
+        ));
+        // Customers see sizes only, never the company's own notes on a sheet.
+        $this->assertArrayNotHasKey('description', $catalog[0]['sheets'][1]);
     }
 
     // The company's price list, switched on: St37 in 2 mm.
