@@ -149,6 +149,17 @@ class User extends Authenticatable
     public function workRoleNames(): array { return \App\Support\MembershipAssignments::roleNames(app(CompanyContext::class)->membership($this->id)); }
     public function getCurrentMembershipIdAttribute(): ?int { return app(CompanyContext::class)->membership($this->id)?->id; }
 
+    /** Full company access supplies the functions of the selected employee position. */
+    public function hasManagerAssignmentInCurrentCompany(): bool
+    {
+        $context = app(CompanyContext::class);
+        if (!$context->id() || $context->isCustomer()) return false;
+
+        $membership = $context->membership($this->id);
+        return $membership?->is_active && Schema::hasTable('membership_assignments') && $membership->assignments()
+            ->whereHas('role', fn ($role) => $role->where('name', 'manager'))->exists();
+    }
+
     /**
      * Admin and manager are privileged roles and intentionally have access to
      * every business function. Other employee roles rely on individual
@@ -170,6 +181,8 @@ class User extends Authenticatable
         if (!PermissionScope::allows($roleName, $slug)) {
             return false;
         }
+
+        if ($this->hasManagerAssignmentInCurrentCompany()) return true;
 
         if (!$this->supportsPermissionAssignments()) {
             return false;
