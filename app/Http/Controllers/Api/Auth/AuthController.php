@@ -196,6 +196,9 @@ class AuthController extends Controller
         $context = app(\App\Support\CompanyContext::class);
         if ($context->id() && in_array($role, ['admin', 'manager'], true)) {
             $permissions = Permission::query()->orderBy('slug')->pluck('slug');
+        } elseif ($context->id() && $user->hasManagerAssignmentInCurrentCompany()) {
+            $permissions = Permission::whereIn('slug', \App\Support\PermissionScope::forRole($role)['permissions'])
+                ->orderBy('slug')->pluck('slug');
         } elseif ($context->id()) {
             $permissions = $user->permissions()->wherePivot('allowed', true)->pluck('slug')
                 ->filter(fn ($slug) => \App\Support\PermissionScope::allows($role, $slug))->values();
@@ -222,6 +225,7 @@ class AuthController extends Controller
             'factory' => $user->factory ? [
                 'id' => $user->factory->id,
                 'name' => $user->factory->name,
+                'value' => $user->factory->value,
             ] : null,
             'permissions' => $permissions,
             'assignments' => $assignments,

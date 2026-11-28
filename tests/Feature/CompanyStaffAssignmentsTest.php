@@ -79,6 +79,25 @@ class CompanyStaffAssignmentsTest extends TestCase
         $this->putJson('/api/staff-assignments/'.$user->id, ['assignments' => [$this->position('bend', $this->factories[1]->id)]], $this->headers())->assertOk()->assertJsonCount(1, 'assignments');
     }
 
+    public function test_manager_opens_assigned_workshop_with_only_its_permissions(): void
+    {
+        $factory = $this->factories[0];
+        $this->as($this->admin);
+        $this->putJson('/api/staff-assignments/'.$this->manager->id, [
+            'assignments' => [$this->position('manager'), $this->position('operator', $factory->id)],
+        ], $this->headers())->assertOk();
+        $assignment = $this->membership($this->manager)->assignments()->where('factory_id', $factory->id)->firstOrFail();
+        $this->as($this->manager);
+        $headers = $this->headers($assignment->id);
+        $identity = $this->getJson('/api/user', $headers)->assertOk()->assertJsonPath('role.name', 'operator')
+            ->assertJsonPath('factory.value', $factory->value);
+        $this->assertContains('factory.view', $identity->json('permissions'));
+        $this->assertNotContains('workers.update', $identity->json('permissions'));
+        $this->getJson('/api/factories/factory/'.$factory->id, $headers)->assertOk();
+        $this->getJson('/api/factories/factory/'.$this->factories[1]->id, $headers)->assertForbidden();
+        $this->getJson('/api/user', $this->headers())->assertOk()->assertJsonPath('role.name', 'manager');
+    }
+
     public function test_invalid_assignment_lists_do_not_create_accounts_or_approve_requests(): void
     {
         $this->submitEmployee();
